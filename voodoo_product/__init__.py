@@ -2,5 +2,6 @@
 
 from .api import create_product_router, install_product_platform
 from .config import ProductConfig
+from .version import __version__
 
-__all__ = ["ProductConfig", "create_product_router", "install_product_platform"]
+__all__ = ["ProductConfig", "__version__", "create_product_router", "install_product_platform"]

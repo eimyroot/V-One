@@ -56,6 +56,14 @@ external JavaScript event listeners, so the CSP does not require `unsafe-inline`
 Production operators must allowlist both the external hostname and any separate internal healthcheck
 hostname or address.
 
+The manual release-candidate workflow validates its version against the source tree, reruns the full
+verification suite, builds and smoke-tests the hardened product image, and emits checksums for both
+the source archive and CycloneDX SBOM. These checksums provide integrity, not signer identity. GitHub
+artifact attestations for private repositories require GitHub Enterprise Cloud; this private,
+user-owned repository must prove that eligibility (or move to an eligible organization) before
+`actions/attest@v4` can be made a mandatory fail-closed gate. Until then, no signed-SBOM or provenance
+claim is made.
+
 ## Required security gates before enterprise release
 
 - external penetration test,

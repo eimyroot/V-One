@@ -31,7 +31,8 @@ This RC is suitable for controlled pilots and commercial demonstrations. It is n
 2. PostgreSQL high-availability backend,
 3. external production effect adapters,
 4. tenant-level cryptographic key separation,
-5. signed SBOM and independent penetration test,
+5. signed SBOM, verified artifact provenance and independent penetration test (the RC builder
+   currently emits checksum-verified but unsigned artifacts),
 6. billing, licensing enforcement and customer support operations,
 7. legal package: final EULA, DPA, SLA and privacy documentation.
 

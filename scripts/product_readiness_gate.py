@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 REQUIRED = [
     "voodoo_product/api.py",
     "voodoo_product/db.py",
@@ -21,6 +23,7 @@ REQUIRED = [
     "voodoo_product/service.py",
     "voodoo_product/statements.py",
     "voodoo_product/security.py",
+    "voodoo_product/version.py",
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
     "tests/system/test_database_migrations.py",
@@ -30,6 +33,9 @@ REQUIRED = [
     "tests/system/test_statement_catalog.py",
     "tests/system/test_observability.py",
     "tests/system/test_product_platform_rc1.py",
+    "tests/system/test_release_supply_chain.py",
+    "scripts/smoke_product_image.sh",
+    "scripts/validate_release_candidate.py",
     ".env.product.example",
     "Dockerfile.product",
     "docker-compose.product.yml",
@@ -42,6 +48,12 @@ REQUIRED = [
     "docs/product/PERSISTENCE_BOUNDARY.md",
     "docs/product/STATEMENT_CATALOG.md",
 ]
+
+
+def product_version() -> str:
+    from voodoo_product.version import __version__
+
+    return __version__
 
 
 def run(command: list[str]) -> dict[str, object]:
@@ -100,7 +112,7 @@ def main() -> int:
     passed = all(bool(value.get("ok")) for value in checks.values() if isinstance(value, dict))
     report = {
         "product": "VOODOO One",
-        "version": "0.9.0-rc2-dev",
+        "version": product_version(),
         "passed": passed,
         "checks": checks,
     }

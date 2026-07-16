@@ -15,36 +15,61 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
-    if: inputs.confirmation == 'BUILD_RC'
+    if: inputs.confirmation == 'BUILD_RC' && github.ref == 'refs/heads/main'
     environment: release-candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      VOODOO_ALLOW_PRODUCTION_EFFECTS: "false"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Validate release candidate version
+        env:
+          RC_VERSION: ${{ inputs.version }}
+        run: python scripts/validate_release_candidate.py "$RC_VERSION"
       - name: Verify release candidate
         run: |
           python -m ruff check .
+          python -m compileall -q voodoo_product scripts tests
+          node --check voodoo_product/static/app.js
           python -m pytest -q
           python scripts/product_readiness_gate.py
           python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes
-      - name: Build source archive and checksums
+      - name: Build product image
+        env:
+          RC_VERSION: ${{ inputs.version }}
+        run: docker build --tag "voodoo-one:rc-${RC_VERSION}" --file Dockerfile.product .
+      - name: Smoke test product image
+        shell: bash
+        env:
+          RC_VERSION: ${{ inputs.version }}
+        run: bash scripts/smoke_product_image.sh "voodoo-one:rc-${RC_VERSION}" "rc-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Build source archive, SBOM and checksums
         env:
           RC_VERSION: ${{ inputs.version }}
         run: |
           mkdir -p dist
           git archive --format=tar.gz --prefix="v-one-${RC_VERSION}/" -o "dist/v-one-${RC_VERSION}.tar.gz" HEAD
-          sha256sum "dist/v-one-${RC_VERSION}.tar.gz" > "dist/SHA256SUMS.txt"
           python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes -f cyclonedx-json -o dist/sbom.cdx.json
-      - uses: actions/upload-artifact@v7
+          cd dist
+          sha256sum "v-one-${RC_VERSION}.tar.gz" sbom.cdx.json > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: v-one-${{ inputs.version }}
           path: dist/

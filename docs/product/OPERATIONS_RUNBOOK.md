@@ -77,6 +77,32 @@ set +a
 .venv/bin/python scripts/product_readiness_gate.py
 ```
 
+## Release-candidate build
+
+The `release-candidate` workflow runs only for `main`, accepts only the release candidate encoded in
+the source tree and requires the exact `BUILD_RC` confirmation. It does not deploy, publish an image
+or enable production effects. From any authenticated GitHub CLI working directory, dispatch the
+current candidate with:
+
+```bash
+gh workflow run release-candidate.yml --repo nulleimy/V-One --ref main \
+  -f version=0.9.0-rc2 -f confirmation=BUILD_RC
+```
+
+After the gated run succeeds, download and verify its archive and CycloneDX SBOM in a new temporary
+directory. Replace `RUN_ID` with the successful workflow run ID:
+
+```bash
+mkdir -p /tmp/v-one-rc-verify
+cd /tmp/v-one-rc-verify
+gh run download RUN_ID --repo nulleimy/V-One --name v-one-0.9.0-rc2 --dir .
+sha256sum --check SHA256SUMS.txt
+```
+
+The checksum proves internal bundle integrity after download; it is not an authenticity signature.
+Do not promote this candidate as an enterprise release until signed SBOM and build-provenance
+attestations are generated and independently verified.
+
 ## Database migrations
 
 SQLite migrations run automatically and atomically before the application starts accepting traffic.

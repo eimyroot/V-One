@@ -27,3 +27,5 @@
 - Added strict CSP-compatible console actions and explicit no-store/browser security headers.
 - Made concurrent execution retries atomically bind one idempotency key to one execution.
 - Replaced ambiguous timestamp/ID receipt ordering with a migrated monotonic database sequence.
+- Bound RC artifact names to the source version, pinned workflow actions by commit, smoke-tested the
+  release image, and checksummed the archive and SBOM without claiming unavailable provenance.
