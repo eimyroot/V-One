@@ -461,6 +461,43 @@ def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     assert database.schema_version() == 6
 
 
+def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: Path) -> None:
+    database = SQLiteProductDatabase(tmp_path / "product.sqlite3")
+    database.initialize()
+    with database.connect() as connection:
+        connection.execute("DROP TRIGGER trg_executions_environment_insert")
+
+    with pytest.raises(DatabaseMigrationError, match="missing triggers"):
+        database.initialize()
+
+
+def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
+    migrations = copy_migrations(tmp_path)
+    (migrations / "0007_broken.sql").write_text(
+        "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
+        encoding="utf-8",
+    )
+    path = tmp_path / "product.sqlite3"
+    database = SQLiteProductDatabase(path, migration_directory=migrations)
+
+    with pytest.raises(DatabaseMigrationError, match="migration execution failed"):
+        database.initialize()
+
+    connection = sqlite3.connect(path)
+    try:
+        tables = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        user_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    finally:
+        connection.close()
+    assert tables == set()
+    assert user_version == 0
+
+
 def test_missing_migration_sequence_is_rejected(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
     (migrations / "0002_auth_rate_limits.sql").unlink()
@@ -470,6 +507,17 @@ def test_missing_migration_sequence_is_rejected(tmp_path: Path) -> None:
             tmp_path / "product.sqlite3",
             migration_directory=migrations,
         ).initialize()
+
+
+def test_user_version_and_history_drift_is_rejected(tmp_path: Path) -> None:
+    database = SQLiteProductDatabase(tmp_path / "product.sqlite3")
+    database.initialize()
+    with database.connect() as connection:
+        connection.execute("PRAGMA user_version = 0")
+        connection.commit()
+
+    with pytest.raises(DatabaseMigrationError, match="does not match migration history"):
+        database.initialize()
 
 
 def test_concurrent_initialization_serializes_cleanly(tmp_path: Path) -> None:
@@ -502,6 +550,39 @@ def test_unreleased_postgresql_backend_fails_before_service_start(tmp_path: Path
     with pytest.raises(DatabaseBackendError, match="PostgreSQL backend is not released"):
         install_product_platform(app, config=config, repository_root=tmp_path)
     assert not config.database_path.exists()
+
+
+def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> None:
+    config = ProductConfig(
+        environment="test",
+        database_path=tmp_path / "product.sqlite3",
+        sandbox_root=tmp_path / "sandboxes",
+        session_signing_secret="s" * 64,
+        bootstrap_token="b" * 48,
+    )
+    app = FastAPI()
+    install_product_platform(app, config=config, repository_root=tmp_path)
+
+    client = TestClient(app)
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["database_backend"] == "sqlite"
+    assert response.json()["schema_version"] == 6
+    assert response.json()["production_effects"] == "DISABLED"
+
+    service = app.state.voodoo_product_service
+    with service.db.connect() as connection:
+        connection.execute("PRAGMA user_version = 0")
+        connection.commit()
+
+    unavailable = client.get("/api/v1/health")
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {
+        "status": "UNAVAILABLE",
+        "database": "UNAVAILABLE",
+        "database_backend": "sqlite",
+    }
 
 
 def test_health_reports_database_unavailable_as_http_503(tmp_path: Path) -> None:
