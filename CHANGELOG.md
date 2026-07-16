@@ -23,3 +23,5 @@
 - Closed bounded database connections deterministically and hardened concurrent SQLite WAL startup.
 - Centralized all application SQL in an immutable, classified statement catalog with no dynamic service SQL.
 - Added fail-closed per-dialect statement selection while keeping PostgreSQL and production effects disabled.
+- Added exact trusted-host enforcement and production-only HSTS at the HTTP boundary.
+- Added strict CSP-compatible console actions and explicit no-store/browser security headers.

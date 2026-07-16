@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import ProductConfig
+from .http_security import SecurityHeadersMiddleware
 from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
@@ -442,9 +444,19 @@ def install_product_platform(
         )
 
     app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=list(resolved_config.trusted_hosts),
+        www_redirect=False,
+    )
+
+    app.add_middleware(
         StructuredRequestLoggingMiddleware,
         logger=product_logger,
         environment=resolved_config.environment,
+    )
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enable_hsts=resolved_config.environment == "production",
     )
 
     static_dir = Path(__file__).with_name("static")
