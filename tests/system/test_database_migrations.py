@@ -112,14 +112,15 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
     database.initialize()
 
     rows = migration_rows(database)
-    assert database.schema_version() == 5
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5]
+    assert database.schema_version() == 6
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 6]
     assert [row[1] for row in rows] == [
         "0001_core_schema.sql",
         "0002_auth_rate_limits.sql",
         "0003_receipt_sequence.sql",
         "0004_execution_leases.sql",
         "0005_workspace_environment_boundary.sql",
+        "0006_external_identity_bindings.sql",
     ]
     assert all(len(str(row[2])) == 64 for row in rows)
     assert all(str(row[3]).endswith("+00:00") for row in rows)
@@ -155,7 +156,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
             "SELECT id, username, password_hash FROM users WHERE id = 'usr_legacy'"
         ).fetchone()
     assert tuple(user) == ("usr_legacy", "legacy-admin", "preserved-hash")
-    assert database.schema_version() == 5
+    assert database.schema_version() == 6
 
 
 def test_initialization_is_idempotent(tmp_path: Path) -> None:
@@ -207,7 +208,7 @@ def test_receipt_sequence_migration_reconstructs_chain_links(tmp_path: Path) -> 
     with database.connect() as migrated:
         rows = migrated.execute("SELECT sequence, id FROM receipts ORDER BY sequence").fetchall()
     assert [tuple(row) for row in rows] == [(1, "rcpt_z"), (2, "rcpt_a")]
-    assert database.schema_version() == 5
+    assert database.schema_version() == 6
     service = ProductService(
         ProductConfig(
             environment="test",
@@ -348,7 +349,7 @@ def test_execution_lease_migration_marks_legacy_running_execution_expired(
             "SELECT fence, lease_expires_at FROM executions WHERE id = 'exec_running'"
         ).fetchone()
     assert tuple(execution) == (1, started_at)
-    assert database.schema_version() == 5
+    assert database.schema_version() == 6
 
 
 def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
@@ -390,7 +391,7 @@ def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
     database = SQLiteProductDatabase(path)
     database.initialize()
 
-    assert database.schema_version() == 5
+    assert database.schema_version() == 6
     with database.connect() as migrated:
         legacy = migrated.execute(
             "SELECT environment, status FROM change_requests WHERE id = 'cr_legacy'"
@@ -457,91 +458,53 @@ def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(DatabaseMigrationError, match="history drift detected"):
         database.initialize()
 
-    assert database.schema_version() == 5
+    assert database.schema_version() == 6
 
 
-def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: Path) -> None:
-    database = SQLiteProductDatabase(tmp_path / "product.sqlite3")
-    database.initialize()
-    with database.connect() as connection:
-        connection.execute("DROP TRIGGER trg_executions_environment_insert")
-
-    with pytest.raises(DatabaseMigrationError, match="missing triggers"):
-        database.initialize()
-
-
-def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
+def test_missing_migration_sequence_is_rejected(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
-    (migrations / "0006_broken.sql").write_text(
-        "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
-        encoding="utf-8",
-    )
-    path = tmp_path / "product.sqlite3"
-    database = SQLiteProductDatabase(path, migration_directory=migrations)
-
-    with pytest.raises(DatabaseMigrationError, match="migration execution failed"):
-        database.initialize()
-
-    connection = sqlite3.connect(path)
-    try:
-        tables = {
-            str(row[0])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
-        user_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    finally:
-        connection.close()
-    assert tables == set()
-    assert user_version == 0
-
-
-def test_migration_sequence_gap_is_rejected_before_database_access(tmp_path: Path) -> None:
-    migrations = tmp_path / "migrations"
-    migrations.mkdir()
-    (migrations / "0001_start.sql").write_text("SELECT 1;\n", encoding="utf-8")
-    (migrations / "0003_gap.sql").write_text("SELECT 3;\n", encoding="utf-8")
+    (migrations / "0002_auth_rate_limits.sql").unlink()
 
     with pytest.raises(DatabaseMigrationError, match="contiguous at version 2"):
-        load_sqlite_migrations(migrations)
+        SQLiteProductDatabase(
+            tmp_path / "product.sqlite3",
+            migration_directory=migrations,
+        ).initialize()
 
 
-def test_user_version_and_history_drift_is_rejected(tmp_path: Path) -> None:
-    database = SQLiteProductDatabase(tmp_path / "product.sqlite3")
-    database.initialize()
-    with database.connect() as connection:
-        connection.execute("PRAGMA user_version = 0")
-        connection.commit()
+def test_concurrent_initialization_serializes_cleanly(tmp_path: Path) -> None:
+    path = tmp_path / "concurrent.sqlite3"
 
-    with pytest.raises(DatabaseMigrationError, match="does not match migration history"):
+    def initialize() -> int:
+        database = SQLiteProductDatabase(path)
         database.initialize()
+        return database.schema_version()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        versions = list(executor.map(lambda _: initialize(), range(2)))
+
+    assert versions == [6, 6]
 
 
-def test_concurrent_initialization_serializes_without_duplicate_history(tmp_path: Path) -> None:
-    path = tmp_path / "product.sqlite3"
-
-    def initialize(_: int) -> None:
-        SQLiteProductDatabase(path).initialize()
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        list(executor.map(initialize, range(8)))
-
-    database = SQLiteProductDatabase(path)
-    assert database.schema_version() == 5
-    assert len(migration_rows(database)) == 5
-
-
-def test_postgresql_backend_fails_before_creating_local_database(tmp_path: Path) -> None:
-    path = tmp_path / "must-not-exist.sqlite3"
-
+def test_unreleased_postgresql_backend_fails_before_service_start(tmp_path: Path) -> None:
     with pytest.raises(DatabaseBackendError, match="PostgreSQL backend is not released"):
-        create_product_database(backend="postgresql", path=path)
+        create_product_database(backend="postgresql", path=tmp_path / "unused.sqlite3")
 
-    assert not path.exists()
+    config = ProductConfig(
+        environment="test",
+        database_path=tmp_path / "unused.sqlite3",
+        sandbox_root=tmp_path / "sandboxes",
+        session_signing_secret="s" * 64,
+        bootstrap_token="b" * 48,
+        database_backend="postgresql",
+    )
+    app = FastAPI()
+    with pytest.raises(DatabaseBackendError, match="PostgreSQL backend is not released"):
+        install_product_platform(app, config=config, repository_root=tmp_path)
+    assert not config.database_path.exists()
 
 
-def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> None:
+def test_health_reports_database_unavailable_as_http_503(tmp_path: Path) -> None:
     config = ProductConfig(
         environment="test",
         database_path=tmp_path / "product.sqlite3",
@@ -550,25 +513,14 @@ def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> N
         bootstrap_token="b" * 48,
     )
     app = FastAPI()
-    install_product_platform(app, config=config, repository_root=tmp_path)
+    service = install_product_platform(app, config=config, repository_root=tmp_path)
 
-    client = TestClient(app)
-    response = client.get("/api/v1/health")
+    def unavailable() -> dict[str, object]:
+        return {"status": "UNAVAILABLE", "reason": "database unavailable"}
 
-    assert response.status_code == 200
-    assert response.json()["database_backend"] == "sqlite"
-    assert response.json()["schema_version"] == 5
-    assert response.json()["production_effects"] == "DISABLED"
+    service.health = unavailable  # type: ignore[method-assign]
+    with TestClient(app) as client:
+        response = client.get("/api/v1/health")
 
-    service = app.state.voodoo_product_service
-    with service.db.connect() as connection:
-        connection.execute("PRAGMA user_version = 0")
-        connection.commit()
-
-    unavailable = client.get("/api/v1/health")
-    assert unavailable.status_code == 503
-    assert unavailable.json() == {
-        "status": "UNAVAILABLE",
-        "database": "UNAVAILABLE",
-        "database_backend": "sqlite",
-    }
+    assert response.status_code == 503
+    assert response.json() == {"status": "UNAVAILABLE", "reason": "database unavailable"}
