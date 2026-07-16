@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from voodoo_product.config import ProductConfig
 from voodoo_product.db import SQLiteProductDatabase
 from voodoo_product.persistence import DatabaseStatement, DatabaseStatementError
+from voodoo_product.service import ProductService
 from voodoo_product.statements import ALL_STATEMENTS, HEALTH_CHECK, STATEMENTS_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +62,52 @@ def test_sqlite_adapter_executes_catalog_statements(tmp_path: Path) -> None:
     assert row is not None
     assert row[0] == 1
     assert database.write_serialization == "global"
+
+
+def test_approval_catalog_variants_preserve_pending_filter(tmp_path: Path) -> None:
+    service = ProductService(
+        ProductConfig(
+            environment="test",
+            database_path=tmp_path / "product.sqlite3",
+            sandbox_root=tmp_path / "sandboxes",
+            session_signing_secret="s" * 64,
+            bootstrap_token="b" * 48,
+        )
+    )
+    bootstrap = service.bootstrap_admin(
+        username="admin",
+        password="VeryStrongAdminPassword1!",
+        token="b" * 48,
+    )
+    pending = service.create_change_request(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        title="Pending",
+        description="",
+        risk="R1",
+        environment="local",
+        adapter="echo",
+        payload={},
+    )
+    service.submit_change_request(actor_id=bootstrap["user_id"], request_id=pending["id"])
+    draft = service.create_change_request(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        title="Draft",
+        description="",
+        risk="R1",
+        environment="local",
+        adapter="echo",
+        payload={},
+    )
+
+    assert {row["request_id"] for row in service.list_approvals()} == {
+        pending["id"],
+        draft["id"],
+    }
+    assert [row["request_id"] for row in service.list_approvals(pending_only=True)] == [
+        pending["id"]
+    ]
 
 
 def _is_catalog_reference(node: ast.expr) -> bool:
