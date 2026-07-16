@@ -119,10 +119,14 @@ def _validate_exact_text(label: str, value: str, *, maximum: int) -> None:
         raise ValueError(f"{label} is invalid")
 
 
-def validate_external_identity_reference(*, provider: str, issuer: str, subject: str) -> None:
+def validate_external_identity_provider(*, provider: str, issuer: str) -> None:
     if provider != OIDC_PROVIDER:
         raise ValueError("external identity provider is unsupported")
     _validate_https_url("external identity issuer", issuer)
+
+
+def validate_external_identity_reference(*, provider: str, issuer: str, subject: str) -> None:
+    validate_external_identity_provider(provider=provider, issuer=issuer)
     _validate_exact_text("external identity subject", subject, maximum=512)
 
 
