@@ -22,6 +22,10 @@ class ProductConfig:
     session_signing_secret: str
     bootstrap_token: str
     token_ttl_seconds: int = 3_600
+    auth_max_failures: int = 5
+    auth_source_max_failures: int = 20
+    auth_window_seconds: int = 300
+    auth_lockout_seconds: int = 900
     production_effects_enabled: bool = False
     cors_origins: tuple[str, ...] = ()
 
@@ -34,6 +38,14 @@ class ProductConfig:
             raise ValueError("bootstrap token must contain at least 24 bytes")
         if not 300 <= self.token_ttl_seconds <= 86_400:
             raise ValueError("token TTL must be between 300 and 86400 seconds")
+        if not 2 <= self.auth_max_failures <= 20:
+            raise ValueError("auth max failures must be between 2 and 20")
+        if not self.auth_max_failures <= self.auth_source_max_failures <= 200:
+            raise ValueError("auth source max failures must be between account limit and 200")
+        if not 10 <= self.auth_window_seconds <= 3_600:
+            raise ValueError("auth window must be between 10 and 3600 seconds")
+        if not 10 <= self.auth_lockout_seconds <= 86_400:
+            raise ValueError("auth lockout must be between 10 and 86400 seconds")
         if self.production_effects_enabled and self.environment != "production":
             raise ValueError("production effects require VOODOO_ENV=production")
         for origin in self.cors_origins:
@@ -85,6 +97,10 @@ class ProductConfig:
             session_signing_secret=signing_secret,
             bootstrap_token=bootstrap_token,
             token_ttl_seconds=int(os.getenv("VOODOO_TOKEN_TTL_SECONDS", "3600")),
+            auth_max_failures=int(os.getenv("VOODOO_AUTH_MAX_FAILURES", "5")),
+            auth_source_max_failures=int(os.getenv("VOODOO_AUTH_SOURCE_MAX_FAILURES", "20")),
+            auth_window_seconds=int(os.getenv("VOODOO_AUTH_WINDOW_SECONDS", "300")),
+            auth_lockout_seconds=int(os.getenv("VOODOO_AUTH_LOCKOUT_SECONDS", "900")),
             production_effects_enabled=_bool_env("VOODOO_ALLOW_PRODUCTION_EFFECTS", False),
             cors_origins=origins,
         )
