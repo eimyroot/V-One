@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `5`, verify evidence integrity again, and only then
+one new instance, require health schema version `6`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -62,6 +62,12 @@ Database triggers reject new or retargeted change requests whose environment dif
 workspace, prevent environment reclassification after governance begins, and reject execution rows
 for any historical mismatch. Existing historical rows are preserved rather than silently rewritten;
 the service blocks their submit, review and execution paths.
+
+Migration `0006_external_identity_bindings.sql` adds immutable external-principal bindings and exact
+external-group role mappings. Uniqueness constraints prevent one issuer subject from moving between
+users and prevent one internal user from acquiring multiple subjects for the same provider/issuer.
+Database triggers require an active administrator creator, require an active bound user, and reject
+all updates and deletes. No network OIDC flow is enabled by this migration.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
