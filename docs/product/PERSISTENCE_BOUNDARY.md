@@ -31,6 +31,14 @@ the already-bound execution even when the original request has moved from `APPRO
 `COMPLETED`. A key bound to another request still fails closed. This ordering is part of the adapter
 contract and is covered by a deterministic concurrent regression test.
 
+Execution adapters run outside the database transaction, so every durable start carries an expiry
+timestamp and monotonic fence. Completion is a compare-and-set update on `RUNNING` plus that fence.
+Manual recovery requires emergency stop and an expired lease, records the outcome as
+`INTERRUPTED/INDETERMINATE`, and increments the fence in the same transaction as request failure,
+receipt creation and audit creation. A late worker therefore cannot commit a terminal status or a
+second receipt. Recovery never retries the adapter; a new governed request is required after the
+operator investigates possible side effects.
+
 Receipt order is owned by the database `sequence`, never by wall-clock timestamps or random IDs.
 Sequence assignment, receipt insertion and chain-head selection remain inside the globally serialized
 transaction. Verification requires contiguous sequence values as well as matching previous and

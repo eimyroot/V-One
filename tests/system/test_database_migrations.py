@@ -41,11 +41,11 @@ def migration_rows(database: SQLiteProductDatabase) -> list[tuple[object, ...]]:
     return [tuple(row) for row in rows]
 
 
-def create_schema_v2(path: Path) -> None:
+def create_schema_version(path: Path, version: int) -> None:
     connection = sqlite3.connect(path)
     try:
         connection.execute(MIGRATION_TABLE_SQL)
-        for migration in load_sqlite_migrations()[:2]:
+        for migration in load_sqlite_migrations()[:version]:
             for statement in iter_sqlite_statements(migration.sql):
                 connection.execute(statement)
             connection.execute(
@@ -59,6 +59,10 @@ def create_schema_v2(path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+def create_schema_v2(path: Path) -> None:
+    create_schema_version(path, 2)
 
 
 def insert_completed_execution(
@@ -107,12 +111,13 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
     database.initialize()
 
     rows = migration_rows(database)
-    assert database.schema_version() == 3
-    assert [row[0] for row in rows] == [1, 2, 3]
+    assert database.schema_version() == 4
+    assert [row[0] for row in rows] == [1, 2, 3, 4]
     assert [row[1] for row in rows] == [
         "0001_core_schema.sql",
         "0002_auth_rate_limits.sql",
         "0003_receipt_sequence.sql",
+        "0004_execution_leases.sql",
     ]
     assert all(len(str(row[2])) == 64 for row in rows)
     assert all(str(row[3]).endswith("+00:00") for row in rows)
@@ -127,7 +132,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
     path = tmp_path / "legacy.sqlite3"
     connection = sqlite3.connect(path)
     try:
-        for migration in load_sqlite_migrations():
+        for migration in load_sqlite_migrations()[:1]:
             connection.executescript(migration.sql)
         connection.execute(
             """
@@ -148,7 +153,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
             "SELECT id, username, password_hash FROM users WHERE id = 'usr_legacy'"
         ).fetchone()
     assert tuple(user) == ("usr_legacy", "legacy-admin", "preserved-hash")
-    assert database.schema_version() == 3
+    assert database.schema_version() == 4
 
 
 def test_initialization_is_idempotent(tmp_path: Path) -> None:
@@ -200,7 +205,7 @@ def test_receipt_sequence_migration_reconstructs_chain_links(tmp_path: Path) -> 
     with database.connect() as migrated:
         rows = migrated.execute("SELECT sequence, id FROM receipts ORDER BY sequence").fetchall()
     assert [tuple(row) for row in rows] == [(1, "rcpt_z"), (2, "rcpt_a")]
-    assert database.schema_version() == 3
+    assert database.schema_version() == 4
     service = ProductService(
         ProductConfig(
             environment="test",
@@ -289,6 +294,61 @@ def test_receipt_sequence_migration_rejects_disconnected_history(tmp_path: Path)
     assert user_version == 2
 
 
+def test_execution_lease_migration_marks_legacy_running_execution_expired(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "schema-v3.sqlite3"
+    create_schema_version(path, 3)
+    started_at = "2026-07-16T12:00:00.000+00:00"
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            """
+            INSERT INTO users(id, username, password_hash, role, active, created_at)
+            VALUES ('usr_admin', 'admin', 'unused', 'administrator', 1, ?)
+            """,
+            (started_at,),
+        )
+        connection.execute(
+            """
+            INSERT INTO workspaces(id, name, environment, created_at)
+            VALUES ('wrk_main', 'Main', 'local', ?)
+            """,
+            (started_at,),
+        )
+        connection.execute(
+            """
+            INSERT INTO change_requests(
+                id, workspace_id, title, description, risk, environment, adapter,
+                payload_json, status, requested_by, created_at, updated_at
+            ) VALUES ('cr_running', 'wrk_main', 'Interrupted', '', 'R1', 'local',
+                      'echo', '{}', 'RUNNING', 'usr_admin', ?, ?)
+            """,
+            (started_at, started_at),
+        )
+        connection.execute(
+            """
+            INSERT INTO executions(
+                id, request_id, status, adapter, output_json, started_at
+            ) VALUES ('exec_running', 'cr_running', 'RUNNING', 'echo', '{}', ?)
+            """,
+            (started_at,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    database = SQLiteProductDatabase(path)
+    database.initialize()
+
+    with database.connect() as migrated:
+        execution = migrated.execute(
+            "SELECT fence, lease_expires_at FROM executions WHERE id = 'exec_running'"
+        ).fetchone()
+    assert tuple(execution) == (1, started_at)
+    assert database.schema_version() == 4
+
+
 def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
     database = SQLiteProductDatabase(
@@ -305,12 +365,12 @@ def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(DatabaseMigrationError, match="history drift detected"):
         database.initialize()
 
-    assert database.schema_version() == 3
+    assert database.schema_version() == 4
 
 
 def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
-    (migrations / "0004_broken.sql").write_text(
+    (migrations / "0005_broken.sql").write_text(
         "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
         encoding="utf-8",
     )
@@ -366,8 +426,8 @@ def test_concurrent_initialization_serializes_without_duplicate_history(tmp_path
         list(executor.map(initialize, range(8)))
 
     database = SQLiteProductDatabase(path)
-    assert database.schema_version() == 3
-    assert len(migration_rows(database)) == 3
+    assert database.schema_version() == 4
+    assert len(migration_rows(database)) == 4
 
 
 def test_postgresql_backend_fails_before_creating_local_database(tmp_path: Path) -> None:
@@ -395,7 +455,7 @@ def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> N
 
     assert response.status_code == 200
     assert response.json()["database_backend"] == "sqlite"
-    assert response.json()["schema_version"] == 3
+    assert response.json()["schema_version"] == 4
     assert response.json()["production_effects"] == "DISABLED"
 
     service = app.state.voodoo_product_service

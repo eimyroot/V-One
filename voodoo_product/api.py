@@ -65,6 +65,10 @@ class EmergencyStopRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=2000)
 
 
+class ExecutionRecoveryRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=2000)
+
+
 def _translate_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PermissionError):
         return HTTPException(status_code=403, detail=str(exc))
@@ -368,6 +372,21 @@ def create_product_router(
     ) -> dict[str, Any]:
         try:
             return service.get_execution(execution_id)
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+
+    @router.post("/executions/{execution_id}/recover")
+    def recover_execution(
+        execution_id: str,
+        body: ExecutionRecoveryRequest,
+        principal: Principal = Depends(require_permission("execution.recover")),
+    ) -> dict[str, Any]:
+        try:
+            return service.recover_execution(
+                actor_id=principal.user_id,
+                execution_id=execution_id,
+                reason=body.reason,
+            )
         except Exception as exc:
             raise _translate_error(exc) from exc
 

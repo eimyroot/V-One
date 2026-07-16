@@ -48,6 +48,8 @@ class ProductConfig:
     auth_source_max_failures: int = 20
     auth_window_seconds: int = 300
     auth_lockout_seconds: int = 900
+    execution_timeout_seconds: int = 120
+    execution_lease_seconds: int = 180
     log_level: str = "INFO"
     production_effects_enabled: bool = False
     cors_origins: tuple[str, ...] = ()
@@ -72,6 +74,14 @@ class ProductConfig:
             raise ValueError("auth window must be between 10 and 3600 seconds")
         if not 10 <= self.auth_lockout_seconds <= 86_400:
             raise ValueError("auth lockout must be between 10 and 86400 seconds")
+        if not 10 <= self.execution_timeout_seconds <= 3_600:
+            raise ValueError("execution timeout must be between 10 and 3600 seconds")
+        if not (
+            self.execution_timeout_seconds + 30
+            <= self.execution_lease_seconds
+            <= self.execution_timeout_seconds + 3_600
+        ):
+            raise ValueError("execution lease must exceed timeout by 30 to 3600 seconds")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("log level is invalid")
         if self.production_effects_enabled and self.environment != "production":
@@ -141,6 +151,8 @@ class ProductConfig:
             auth_source_max_failures=int(os.getenv("VOODOO_AUTH_SOURCE_MAX_FAILURES", "20")),
             auth_window_seconds=int(os.getenv("VOODOO_AUTH_WINDOW_SECONDS", "300")),
             auth_lockout_seconds=int(os.getenv("VOODOO_AUTH_LOCKOUT_SECONDS", "900")),
+            execution_timeout_seconds=int(os.getenv("VOODOO_EXECUTION_TIMEOUT_SECONDS", "120")),
+            execution_lease_seconds=int(os.getenv("VOODOO_EXECUTION_LEASE_SECONDS", "180")),
             log_level=os.getenv("VOODOO_LOG_LEVEL", "INFO").strip().upper(),
             production_effects_enabled=_bool_env("VOODOO_ALLOW_PRODUCTION_EFFECTS", False),
             cors_origins=origins,

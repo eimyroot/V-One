@@ -14,7 +14,13 @@ ROLE_PERMISSIONS = {
     "developer": frozenset({"read", "change.write"}),
     "operator": frozenset({"read", "approval.review", "execution.run"}),
     "security_reviewer": frozenset(
-        {"read", "approval.review", "evidence.read", "emergency.control"}
+        {
+            "read",
+            "approval.review",
+            "evidence.read",
+            "emergency.control",
+            "execution.recover",
+        }
     ),
     "auditor": frozenset({"read", "evidence.read"}),
     "administrator": frozenset({"*"}),
