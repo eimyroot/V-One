@@ -4,10 +4,22 @@ import contextlib
 import hashlib
 import re
 import sqlite3
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import TracebackType
+
+from .persistence import (
+    DatabaseBackendError,
+    DatabaseConnection,
+    DatabaseIntegrityError,
+    DatabaseMigrationError,
+    DatabaseOperationError,
+    ProductDatabaseAdapter,
+    QueryParameters,
+)
 
 MIGRATION_PATTERN = re.compile(r"^(?P<version>[0-9]{4})_[a-z0-9_]+\.sql$")
 DEFAULT_MIGRATION_DIRECTORY = Path(__file__).with_name("migrations") / "sqlite"
@@ -87,14 +99,8 @@ REQUIRED_INDEXES = {
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
 }
-
-
-class DatabaseMigrationError(RuntimeError):
-    pass
-
-
-class DatabaseBackendError(RuntimeError):
-    pass
+SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
+SQLITE_BUSY_TIMEOUT_MS = 5_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +154,81 @@ def iter_sqlite_statements(script: str) -> Iterator[str]:
         raise DatabaseMigrationError("SQLite migration contains an incomplete statement")
 
 
+class SQLiteConnection:
+    def __init__(self, connection: sqlite3.Connection):
+        self._connection = connection
+        self._closed = False
+
+    def execute(
+        self,
+        sql: str,
+        parameters: QueryParameters = (),
+        /,
+    ) -> sqlite3.Cursor:
+        self._require_open()
+        try:
+            return self._connection.execute(sql, parameters)
+        except sqlite3.IntegrityError as exc:
+            raise DatabaseIntegrityError("database integrity constraint failed") from exc
+        except sqlite3.Error as exc:
+            raise DatabaseOperationError("database operation failed") from exc
+
+    def commit(self) -> None:
+        self._require_open()
+        try:
+            self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            raise DatabaseIntegrityError("database integrity constraint failed") from exc
+        except sqlite3.Error as exc:
+            raise DatabaseOperationError("database commit failed") from exc
+
+    def rollback(self) -> None:
+        self._require_open()
+        try:
+            self._connection.rollback()
+        except sqlite3.Error as exc:
+            raise DatabaseOperationError("database rollback failed") from exc
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            self._connection.close()
+        except sqlite3.Error as exc:
+            raise DatabaseOperationError("database connection close failed") from exc
+        finally:
+            self._closed = True
+
+    def __enter__(self) -> SQLiteConnection:
+        self._require_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        del exc_value, traceback
+        if exc_type is None:
+            try:
+                self.commit()
+            finally:
+                self.close()
+        else:
+            try:
+                self.rollback()
+            except DatabaseOperationError:
+                pass
+            finally:
+                self.close()
+        return False
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise DatabaseOperationError("database connection is closed")
+
+
 class SQLiteProductDatabase:
     backend_name = "sqlite"
 
@@ -156,18 +237,47 @@ class SQLiteProductDatabase:
         self.migration_directory = Path(migration_directory)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA synchronous = FULL")
-        connection.execute("PRAGMA busy_timeout = 5000")
-        return connection
+    def _connect_raw(self) -> sqlite3.Connection:
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+            connection.row_factory = sqlite3.Row
+            connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+            connection.execute("PRAGMA foreign_keys = ON")
+            self._enable_wal(connection)
+            connection.execute("PRAGMA synchronous = FULL")
+            return connection
+        except sqlite3.Error as exc:
+            if connection is not None:
+                with contextlib.suppress(sqlite3.Error):
+                    connection.close()
+            raise DatabaseOperationError("database connection failed") from exc
+
+    @staticmethod
+    def _enable_wal(connection: sqlite3.Connection) -> None:
+        deadline = time.monotonic() + SQLITE_JOURNAL_MODE_RETRY_SECONDS
+        delay = 0.01
+        while True:
+            try:
+                current = connection.execute("PRAGMA journal_mode").fetchone()
+                if current is not None and str(current[0]).lower() == "wal":
+                    return
+                mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()
+                if mode is None or str(mode[0]).lower() != "wal":
+                    raise sqlite3.OperationalError("WAL journal mode was not activated")
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 0.25)
+
+    def connect(self) -> SQLiteConnection:
+        return SQLiteConnection(self._connect_raw())
 
     def initialize(self) -> None:
         migrations = load_sqlite_migrations(self.migration_directory)
-        connection = self.connect()
+        connection = self._connect_raw()
         try:
             connection.execute("BEGIN EXCLUSIVE")
             migration_table_existed = self._table_exists(connection, "schema_migrations")
@@ -216,6 +326,9 @@ class SQLiteProductDatabase:
 
             self._validate_schema(connection)
             connection.commit()
+        except sqlite3.Error as exc:
+            connection.rollback()
+            raise DatabaseMigrationError("SQLite migration execution failed") from exc
         except Exception:
             connection.rollback()
             raise
@@ -236,7 +349,7 @@ class SQLiteProductDatabase:
             return recorded_version
 
     @contextlib.contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self) -> Iterator[DatabaseConnection]:
         connection = self.connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -288,7 +401,7 @@ class SQLiteProductDatabase:
 ProductDatabase = SQLiteProductDatabase
 
 
-def create_product_database(*, backend: str, path: Path) -> SQLiteProductDatabase:
+def create_product_database(*, backend: str, path: Path) -> ProductDatabaseAdapter:
     if backend == "sqlite":
         return SQLiteProductDatabase(path)
     if backend == "postgresql":

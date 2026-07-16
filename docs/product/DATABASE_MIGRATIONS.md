@@ -57,3 +57,7 @@ PostgreSQL requires a dedicated adapter, dialect-neutral service boundaries, tra
 locking, connection-pool lifecycle management, retry classification, backup/restore procedures and
 integration tests against the supported PostgreSQL version. Tenant isolation and high-availability
 testing remain enterprise-release gates. Until those controls pass, PostgreSQL startup stays blocked.
+
+The backend-independent connection and error contract is documented in
+`docs/product/PERSISTENCE_BOUNDARY.md`. It isolates the current SQLite adapter but deliberately does
+not translate or claim portability for application SQL.
