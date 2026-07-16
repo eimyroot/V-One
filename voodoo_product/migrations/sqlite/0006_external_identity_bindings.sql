@@ -36,6 +36,18 @@ ON external_identity_bindings(user_id, provider, issuer);
 CREATE INDEX idx_external_role_mapping_role
 ON external_role_mappings(internal_role, provider, issuer);
 
+CREATE TRIGGER trg_external_identity_binding_admin_creator
+BEFORE INSERT ON external_identity_bindings
+FOR EACH ROW
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM users
+    WHERE id = NEW.created_by AND active = 1 AND role = 'administrator'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'external identity binding requires an active administrator');
+END;
+
 CREATE TRIGGER trg_external_identity_binding_active_user
 BEFORE INSERT ON external_identity_bindings
 FOR EACH ROW
@@ -58,6 +70,18 @@ BEFORE DELETE ON external_identity_bindings
 FOR EACH ROW
 BEGIN
     SELECT RAISE(ABORT, 'external identity binding is immutable');
+END;
+
+CREATE TRIGGER trg_external_role_mapping_admin_creator
+BEFORE INSERT ON external_role_mappings
+FOR EACH ROW
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM users
+    WHERE id = NEW.created_by AND active = 1 AND role = 'administrator'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'external role mapping requires an active administrator');
 END;
 
 CREATE TRIGGER trg_external_role_mapping_immutable_update
