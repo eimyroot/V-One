@@ -14,6 +14,7 @@ details in logs. Repository security advisories must be used once enabled by the
 
 - deny by default and least privilege,
 - no requester self-approval,
+- request environment must match its authoritative workspace environment,
 - two distinct approvers for production requests,
 - no shell execution from user input,
 - filesystem effects confined to a governed sandbox,

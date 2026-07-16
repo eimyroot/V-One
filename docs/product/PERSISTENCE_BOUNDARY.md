@@ -45,6 +45,12 @@ transaction. Verification requires contiguous sequence values as well as matchin
 computed hashes. Migration v3 reconstructs earlier ordering from the stored hash links and fails the
 whole migration when the history is disconnected or branched.
 
+Workspace environment is the authoritative execution boundary. Service queries join each governed
+request to its workspace before submit, review or execution. Schema-v5 triggers independently reject
+new mismatches, environment retargeting after submission and execution of a preserved historical
+mismatch. A future database adapter must enforce the same invariant transactionally; trusting only a
+caller-supplied request environment is prohibited.
+
 Each adapter declares its write-serialization contract. SQLite currently declares `global`: every
 write transaction is serialized across the database. A future adapter must preserve this behavior
 until separate concurrency proofs exist for audit-chain heads, receipt-chain heads, approval state,

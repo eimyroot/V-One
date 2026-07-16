@@ -19,6 +19,7 @@ REQUIRED = [
     "voodoo_product/migrations/sqlite/0002_auth_rate_limits.sql",
     "voodoo_product/migrations/sqlite/0003_receipt_sequence.sql",
     "voodoo_product/migrations/sqlite/0004_execution_leases.sql",
+    "voodoo_product/migrations/sqlite/0005_workspace_environment_boundary.sql",
     "voodoo_product/observability.py",
     "voodoo_product/persistence.py",
     "voodoo_product/service.py",

@@ -20,6 +20,7 @@
 - live account and role validation on every authenticated request,
 - permission-based RBAC,
 - separation of requester and approver,
+- workspace-authoritative environment classification enforced by service checks and database triggers,
 - two distinct approvers for production requests,
 - production effects disabled by default,
 - allowlisted adapters only,
@@ -57,6 +58,12 @@ The HTTP boundary rejects unlisted `Host` values before routing. Console actions
 external JavaScript event listeners, so the CSP does not require `unsafe-inline` or `unsafe-eval`.
 Production operators must allowlist both the external hostname and any separate internal healthcheck
 hostname or address.
+
+The environment stored on a workspace is authoritative. A change request must match it exactly; the
+console derives the value instead of accepting a second operator choice. The service revalidates the
+join before submit, review and execution, while SQLite triggers prevent direct-write bypass and block
+execution of preserved legacy mismatches. This prevents a production workspace from being relabeled
+`local` to bypass dual approval or the production-effects gate.
 
 An execution start commits a lease before the adapter runs. Normal completion succeeds only while
 the execution remains `RUNNING` with its original fence. After the lease expires, a security reviewer

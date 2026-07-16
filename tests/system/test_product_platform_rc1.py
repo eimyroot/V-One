@@ -66,6 +66,7 @@ def test_golden_path_creates_execution_and_verified_receipt(tmp_path: Path) -> N
     developer = login(client, "developer")
     operator = login(client, "operator")
     workspace = client.get("/api/v1/workspaces", headers=headers(admin)).json()[0]
+    assert workspace["environment"] == "local"
 
     created = client.post(
         "/api/v1/change-requests",
@@ -141,7 +142,13 @@ def test_production_requires_two_approvers_and_remains_disabled(tmp_path: Path) 
     developer = login(client, "developer")
     operator1 = login(client, "operator1")
     operator2 = login(client, "operator2")
-    workspace = client.get("/api/v1/workspaces", headers=headers(admin)).json()[0]
+    workspace_response = client.post(
+        "/api/v1/workspaces",
+        headers=headers(admin),
+        json={"name": "Production target", "environment": "production"},
+    )
+    assert workspace_response.status_code == 201, workspace_response.text
+    workspace = workspace_response.json()
     request = client.post(
         "/api/v1/change-requests",
         headers=headers(developer),
@@ -172,6 +179,37 @@ def test_production_requires_two_approvers_and_remains_disabled(tmp_path: Path) 
     )
     assert execution.status_code == 403
     assert "production effects remain disabled" in execution.text
+
+
+def test_change_request_environment_must_match_workspace(tmp_path: Path) -> None:
+    client = build_client(tmp_path)
+    admin = bootstrap(client)
+    workspace_response = client.post(
+        "/api/v1/workspaces",
+        headers=headers(admin),
+        json={"name": "Protected production", "environment": "production"},
+    )
+    assert workspace_response.status_code == 201, workspace_response.text
+    workspace = workspace_response.json()
+
+    response = client.post(
+        "/api/v1/change-requests",
+        headers=headers(admin),
+        json={
+            "workspace_id": workspace["id"],
+            "title": "Environment downgrade",
+            "risk": "R3",
+            "environment": "local",
+            "adapter": "echo",
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "change request environment must match workspace environment"
+    )
+    assert client.get("/api/v1/change-requests", headers=headers(admin)).json() == []
 
 
 def test_path_traversal_fails_closed(tmp_path: Path) -> None:
@@ -251,8 +289,12 @@ def test_console_and_openapi_are_available(tmp_path: Path) -> None:
     console = client.get("/console")
     assert console.status_code == 200
     assert "VOODOO One" in console.text
+    assert 'id="change-environment" readonly' in console.text
     css = client.get("/console/assets/styles.css")
     assert css.status_code == 200
+    javascript = client.get("/console/assets/app.js")
+    assert javascript.status_code == 200
+    assert "syncChangeEnvironment" in javascript.text
     schema = client.get("/openapi.json")
     assert schema.status_code == 200
     assert "/api/v1/change-requests" in schema.json()["paths"]

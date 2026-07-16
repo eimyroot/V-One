@@ -31,3 +31,5 @@
   release image, and checksummed the archive and SBOM without claiming unavailable provenance.
 - Added schema-v4 execution leases and monotonic fencing so an explicitly recovered, indeterminate
   execution cannot later overwrite evidence or be retried under its bound idempotency key.
+- Added schema-v5 workspace-environment invariants in the service and database so a production target
+  cannot be relabeled to bypass dual approval or the production-effects gate.

@@ -35,9 +35,9 @@ LIST_WORKSPACES = _read(
     "workspaces.list",
     "SELECT id, name, environment, created_at FROM workspaces ORDER BY name",
 )
-SELECT_WORKSPACE_ID = _read(
-    "workspaces.select_id",
-    "SELECT id FROM workspaces WHERE id = ?",
+SELECT_WORKSPACE_CONTEXT = _read(
+    "workspaces.select_context",
+    "SELECT id, environment FROM workspaces WHERE id = ?",
 )
 
 SELECT_AUTH_RATE_LIMIT = _read(
@@ -101,7 +101,12 @@ GET_CHANGE_REQUEST = _read(
 )
 SELECT_CHANGE_REQUEST_STATUS = _read(
     "change_requests.select_status",
-    "SELECT status FROM change_requests WHERE id = ?",
+    """
+    SELECT cr.status, cr.environment, w.environment AS workspace_environment
+    FROM change_requests cr
+    JOIN workspaces w ON w.id = cr.workspace_id
+    WHERE cr.id = ?
+    """,
 )
 MARK_CHANGE_REQUEST_SUBMITTED = _write(
     "change_requests.mark_submitted",
@@ -109,7 +114,13 @@ MARK_CHANGE_REQUEST_SUBMITTED = _write(
 )
 SELECT_CHANGE_REQUEST_APPROVAL_CONTEXT = _read(
     "change_requests.select_approval_context",
-    "SELECT status, environment, requested_by FROM change_requests WHERE id = ?",
+    """
+    SELECT cr.status, cr.environment, cr.requested_by,
+           w.environment AS workspace_environment
+    FROM change_requests cr
+    JOIN workspaces w ON w.id = cr.workspace_id
+    WHERE cr.id = ?
+    """,
 )
 UPDATE_CHANGE_REQUEST_STATUS = _write(
     "change_requests.update_status",
@@ -117,7 +128,12 @@ UPDATE_CHANGE_REQUEST_STATUS = _write(
 )
 SELECT_CHANGE_REQUEST_FOR_EXECUTION = _read(
     "change_requests.select_for_execution",
-    "SELECT * FROM change_requests WHERE id = ?",
+    """
+    SELECT cr.*, w.environment AS workspace_environment
+    FROM change_requests cr
+    JOIN workspaces w ON w.id = cr.workspace_id
+    WHERE cr.id = ?
+    """,
 )
 MARK_CHANGE_REQUEST_RUNNING = _write(
     "change_requests.mark_running",
@@ -311,7 +327,7 @@ ALL_STATEMENTS = (
     SELECT_ACTIVE_USER,
     INSERT_WORKSPACE,
     LIST_WORKSPACES,
-    SELECT_WORKSPACE_ID,
+    SELECT_WORKSPACE_CONTEXT,
     SELECT_AUTH_RATE_LIMIT,
     DELETE_AUTH_RATE_LIMIT,
     DELETE_EXPIRED_AUTH_RATE_LIMITS,

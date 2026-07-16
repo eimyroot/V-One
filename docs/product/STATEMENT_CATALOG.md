@@ -8,7 +8,7 @@ and business flow, while the catalog owns dialect text and read/write classifica
 schema-validation and adapter-internal SQL remain owned by `voodoo_product/db.py` and migration files.
 
 The catalog is explicit rather than generated. Names are stable lowercase identifiers, startup
-rejects duplicate names, and tests lock the current inventory at 44 statements and all 48 service
+rejects duplicate names, and tests lock the current inventory at 46 statements and all 51 service
 execution sites. Dynamic SQL construction in the service is prohibited. Optional query behavior must
 select between complete catalog entries, as the pending/all approval views do.
 
