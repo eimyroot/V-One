@@ -35,6 +35,26 @@ jobs:
         run: python -m pytest tests/system/test_database_migrations.py -q
       - name: External identity binding gate
         run: python -m pytest tests/system/test_external_identity_binding.py -q
+      - name: Authentication and HTTP gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_auth_rate_limiting.py
+          tests/system/test_http_security.py
+          tests/system/test_identity_provider.py
+          tests/system/test_token_security.py
+      - name: Execution and persistence gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_execution_idempotency.py
+          tests/system/test_execution_recovery.py
+          tests/system/test_persistence_boundary.py
+          tests/system/test_statement_catalog.py
+      - name: Product and release gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_observability.py
+          tests/system/test_product_platform_rc1.py
+          tests/system/test_release_supply_chain.py
       - name: Test
         run: python -m pytest -q
       - name: Product readiness gate
