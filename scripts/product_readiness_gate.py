@@ -23,6 +23,7 @@ REQUIRED = [
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
     "tests/system/test_database_migrations.py",
+    "tests/system/test_execution_idempotency.py",
     "tests/system/test_http_security.py",
     "tests/system/test_persistence_boundary.py",
     "tests/system/test_statement_catalog.py",

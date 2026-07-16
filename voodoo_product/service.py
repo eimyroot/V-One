@@ -472,50 +472,57 @@ class ProductService:
         idempotency_key: str | None,
         repository_root: Path,
     ) -> dict[str, Any]:
-        if idempotency_key:
-            with self.db.connect() as read_connection:
-                existing = read_connection.execute(
+        existing_execution_id: str | None = None
+        request_row: DatabaseRow | None = None
+        with self.db.transaction() as connection:
+            if idempotency_key:
+                existing = connection.execute(
                     sql.SELECT_EXECUTION_BY_IDEMPOTENCY_KEY,
                     (idempotency_key,),
                 ).fetchone()
-            if existing is not None:
-                if str(existing["request_id"]) != request_id:
-                    raise RuntimeError("idempotency key is bound to another request")
-                return self.get_execution(str(existing["id"]))
+                if existing is not None:
+                    if str(existing["request_id"]) != request_id:
+                        raise RuntimeError("idempotency key is bound to another request")
+                    existing_execution_id = str(existing["id"])
 
-        with self.db.transaction() as connection:
-            if self._emergency_stop(connection):
-                raise PermissionError("emergency stop is active")
-            request_row = connection.execute(
-                sql.SELECT_CHANGE_REQUEST_FOR_EXECUTION, (request_id,)
-            ).fetchone()
-            if request_row is None:
-                raise LookupError("change request not found")
-            if request_row["status"] != "APPROVED":
-                raise PermissionError("change request is not approved")
-            if (
-                request_row["environment"] == "production"
-                and not self.config.production_effects_enabled
-            ):
-                raise PermissionError("production effects remain disabled")
-            execution_id = new_id("exec")
-            now = utc_now()
-            connection.execute(
-                sql.INSERT_EXECUTION,
-                (execution_id, request_id, request_row["adapter"], idempotency_key, now),
-            )
-            connection.execute(
-                sql.MARK_CHANGE_REQUEST_RUNNING,
-                (now, request_id),
-            )
-            self._append_audit(
-                connection,
-                actor_id=actor_id,
-                action="execution.start",
-                target_type="execution",
-                target_id=execution_id,
-                payload={"request_id": request_id, "adapter": request_row["adapter"]},
-            )
+            if existing_execution_id is None:
+                if self._emergency_stop(connection):
+                    raise PermissionError("emergency stop is active")
+                request_row = connection.execute(
+                    sql.SELECT_CHANGE_REQUEST_FOR_EXECUTION, (request_id,)
+                ).fetchone()
+                if request_row is None:
+                    raise LookupError("change request not found")
+                if request_row["status"] != "APPROVED":
+                    raise PermissionError("change request is not approved")
+                if (
+                    request_row["environment"] == "production"
+                    and not self.config.production_effects_enabled
+                ):
+                    raise PermissionError("production effects remain disabled")
+                execution_id = new_id("exec")
+                now = utc_now()
+                connection.execute(
+                    sql.INSERT_EXECUTION,
+                    (execution_id, request_id, request_row["adapter"], idempotency_key, now),
+                )
+                connection.execute(
+                    sql.MARK_CHANGE_REQUEST_RUNNING,
+                    (now, request_id),
+                )
+                self._append_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action="execution.start",
+                    target_type="execution",
+                    target_id=execution_id,
+                    payload={"request_id": request_id, "adapter": request_row["adapter"]},
+                )
+
+        if existing_execution_id is not None:
+            return self.get_execution(existing_execution_id)
+        if request_row is None:
+            raise RuntimeError("execution start transaction did not produce a request")
 
         try:
             output = execute_adapter(

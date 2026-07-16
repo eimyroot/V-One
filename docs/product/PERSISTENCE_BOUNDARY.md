@@ -25,6 +25,12 @@ and rolls back on every exception. The SQLite adapter retains `BEGIN IMMEDIATE`,
 synchronous writes, foreign-key enforcement and a bounded busy timeout. Initial WAL activation uses a
 bounded retry for the SQLite-specific concurrent-start lock condition.
 
+Execution idempotency lookup and creation run inside that same serialized write transaction. The
+idempotency binding is evaluated before request-state and emergency-stop checks, so a retry returns
+the already-bound execution even when the original request has moved from `APPROVED` to `RUNNING` or
+`COMPLETED`. A key bound to another request still fails closed. This ordering is part of the adapter
+contract and is covered by a deterministic concurrent regression test.
+
 Each adapter declares its write-serialization contract. SQLite currently declares `global`: every
 write transaction is serialized across the database. A future adapter must preserve this behavior
 until separate concurrency proofs exist for audit-chain heads, receipt-chain heads, approval state,

@@ -25,3 +25,4 @@
 - Added fail-closed per-dialect statement selection while keeping PostgreSQL and production effects disabled.
 - Added exact trusted-host enforcement and production-only HSTS at the HTTP boundary.
 - Added strict CSP-compatible console actions and explicit no-store/browser security headers.
+- Made concurrent execution retries atomically bind one idempotency key to one execution.
