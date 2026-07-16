@@ -96,6 +96,24 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "blocked_until",
         "updated_at",
     },
+    "external_identity_bindings": {
+        "id",
+        "provider",
+        "issuer",
+        "subject",
+        "user_id",
+        "created_by",
+        "created_at",
+    },
+    "external_role_mappings": {
+        "id",
+        "provider",
+        "issuer",
+        "external_group",
+        "internal_role",
+        "created_by",
+        "created_at",
+    },
     "schema_migrations": {"version", "name", "checksum", "applied_at"},
 }
 REQUIRED_INDEXES = {
@@ -104,6 +122,8 @@ REQUIRED_INDEXES = {
     "idx_executions_recovery",
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
+    "idx_external_identity_user",
+    "idx_external_role_mapping_role",
 }
 REQUIRED_TRIGGERS = {
     "trg_change_requests_environment_insert",
@@ -113,6 +133,11 @@ REQUIRED_TRIGGERS = {
     "trg_workspaces_environment_update_valid",
     "trg_workspaces_environment_immutable",
     "trg_executions_environment_insert",
+    "trg_external_identity_binding_active_user",
+    "trg_external_identity_binding_immutable_update",
+    "trg_external_identity_binding_immutable_delete",
+    "trg_external_role_mapping_immutable_update",
+    "trg_external_role_mapping_immutable_delete",
 }
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000
