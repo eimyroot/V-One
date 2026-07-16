@@ -43,6 +43,13 @@ class ProductConfig:
     session_signing_secret: str
     bootstrap_token: str
     database_backend: str = "sqlite"
+    identity_provider: str = "local"
+    oidc_issuer: str = ""
+    oidc_audience: str = ""
+    oidc_jwks_url: str = ""
+    oidc_subject_claim: str = "sub"
+    oidc_username_claim: str = "preferred_username"
+    oidc_groups_claim: str = "groups"
     token_ttl_seconds: int = 3_600
     auth_max_failures: int = 5
     auth_source_max_failures: int = 20
@@ -60,6 +67,13 @@ class ProductConfig:
             raise ValueError("VOODOO_ENV is invalid")
         if self.database_backend not in {"sqlite", "postgresql"}:
             raise ValueError("VOODOO_DATABASE_BACKEND is invalid")
+        if self.identity_provider not in {"local", "oidc"}:
+            raise ValueError("VOODOO_IDENTITY_PROVIDER is invalid")
+        oidc_endpoint_values = (self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url)
+        if self.identity_provider == "local" and any(oidc_endpoint_values):
+            raise ValueError("OIDC settings require VOODOO_IDENTITY_PROVIDER=oidc")
+        if self.identity_provider == "oidc" and not all(oidc_endpoint_values):
+            raise ValueError("OIDC provider requires issuer, audience and JWKS URL")
         if len(self.session_signing_secret.encode("utf-8")) < 32:
             raise ValueError("session signing secret must contain at least 32 bytes")
         if len(self.bootstrap_token.encode("utf-8")) < 24:
@@ -146,6 +160,15 @@ class ProductConfig:
             session_signing_secret=signing_secret,
             bootstrap_token=bootstrap_token,
             database_backend=os.getenv("VOODOO_DATABASE_BACKEND", "sqlite").strip().lower(),
+            identity_provider=os.getenv("VOODOO_IDENTITY_PROVIDER", "local").strip().lower(),
+            oidc_issuer=os.getenv("VOODOO_OIDC_ISSUER", "").strip(),
+            oidc_audience=os.getenv("VOODOO_OIDC_AUDIENCE", "").strip(),
+            oidc_jwks_url=os.getenv("VOODOO_OIDC_JWKS_URL", "").strip(),
+            oidc_subject_claim=os.getenv("VOODOO_OIDC_SUBJECT_CLAIM", "sub").strip(),
+            oidc_username_claim=os.getenv(
+                "VOODOO_OIDC_USERNAME_CLAIM", "preferred_username"
+            ).strip(),
+            oidc_groups_claim=os.getenv("VOODOO_OIDC_GROUPS_CLAIM", "groups").strip(),
             token_ttl_seconds=int(os.getenv("VOODOO_TOKEN_TTL_SECONDS", "3600")),
             auth_max_failures=int(os.getenv("VOODOO_AUTH_MAX_FAILURES", "5")),
             auth_source_max_failures=int(os.getenv("VOODOO_AUTH_SOURCE_MAX_FAILURES", "20")),
