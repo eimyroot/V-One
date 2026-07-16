@@ -19,6 +19,7 @@ details in logs. Repository security advisories must be used once enabled by the
 - no shell execution from user input,
 - filesystem effects confined to a governed sandbox,
 - secrets supplied at runtime and never committed,
+- session tokens use an explicit v2 issuer/audience context and a purpose-derived signing key,
 - production effects disabled unless explicitly released,
 - application SQL selected only from the reviewed statement catalog,
 - unavailable database dialects fail closed without SQL fallback,
