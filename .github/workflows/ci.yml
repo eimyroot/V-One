@@ -34,7 +34,10 @@ jobs:
       - name: Migration regression gate
         run: python -m pytest tests/system/test_database_migrations.py -q
       - name: External identity binding gate
-        run: python -m pytest tests/system/test_external_identity_binding.py -q
+        run: >-
+          python -m pytest -q
+          tests/system/test_external_identity_binding.py
+          tests/system/test_governed_external_identity_service.py
       - name: Authentication and HTTP gate
         run: >-
           python -m pytest -q
