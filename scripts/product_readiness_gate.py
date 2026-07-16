@@ -15,6 +15,7 @@ REQUIRED = [
     "voodoo_product/http_security.py",
     "voodoo_product/migrations/sqlite/0001_core_schema.sql",
     "voodoo_product/migrations/sqlite/0002_auth_rate_limits.sql",
+    "voodoo_product/migrations/sqlite/0003_receipt_sequence.sql",
     "voodoo_product/observability.py",
     "voodoo_product/persistence.py",
     "voodoo_product/service.py",

@@ -26,3 +26,4 @@
 - Added exact trusted-host enforcement and production-only HSTS at the HTTP boundary.
 - Added strict CSP-compatible console actions and explicit no-store/browser security headers.
 - Made concurrent execution retries atomically bind one idempotency key to one execution.
+- Replaced ambiguous timestamp/ID receipt ordering with a migrated monotonic database sequence.

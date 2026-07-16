@@ -42,9 +42,15 @@ legacy schema.
 
 ## Upgrade and rollback
 
-Before upgrade, stop all writers and back up the main database, `-wal` and `-shm` files as one set.
-Keep production effects disabled. Start one new instance, require health schema version `2`, verify
-evidence integrity, and only then scale out.
+Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
+back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
+one new instance, require health schema version `3`, verify evidence integrity again, and only then
+scale out.
+
+Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
+sequence. It reconstructs existing order from the recorded `previous_hash → receipt_hash` links in
+the same exclusive migration transaction. A missing root, disconnected history, or branch prevents
+the guard row from satisfying its constraint and rolls back the complete migration.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.

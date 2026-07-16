@@ -48,3 +48,7 @@ transaction-scoped advisory lock—because audit and receipt chain heads are rea
 the same transaction. Approval transitions, idempotency and rate-limit counters rely on the same
 serialization today. Any narrower locking model requires separate race tests, invariants and rollback
 evidence before release.
+
+Receipt list, verification and head statements order exclusively by the database-assigned monotonic
+`sequence`. Timestamp and random identifier ordering is prohibited because multiple receipts can
+legitimately share a millisecond.
