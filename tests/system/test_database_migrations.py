@@ -217,6 +217,40 @@ def test_receipt_sequence_migration_reconstructs_chain_links(tmp_path: Path) -> 
         "head": second_hash,
     }
 
+    operator = service.create_user(
+        actor_id="usr_admin",
+        username="operator",
+        password="VeryStrongOperatorPassword1!",
+        role="operator",
+    )
+    request = service.create_change_request(
+        actor_id="usr_admin",
+        workspace_id="wrk_main",
+        title="Post-migration receipt",
+        description="",
+        risk="R1",
+        environment="local",
+        adapter="echo",
+        payload={"migrated": True},
+    )
+    service.submit_change_request(actor_id="usr_admin", request_id=request["id"])
+    service.approve_change_request(
+        actor_id=operator["id"],
+        request_id=request["id"],
+        decision="APPROVED",
+        reason="verify post-migration append",
+    )
+    service.execute_change_request(
+        actor_id=operator["id"],
+        request_id=request["id"],
+        idempotency_key="post-migration-receipt",
+        repository_root=tmp_path,
+    )
+
+    receipts = service.list_receipts()
+    assert receipts[0]["sequence"] == 3
+    assert service.verify_receipt_chain()["valid"] is True
+
 
 def test_receipt_sequence_migration_rejects_disconnected_history(tmp_path: Path) -> None:
     path = tmp_path / "disconnected-schema-v2.sqlite3"
