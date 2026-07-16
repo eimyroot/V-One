@@ -9,6 +9,7 @@
 - Hardened sandbox writes against symlink traversal and partial writes.
 - Added change-payload, artifact, token-header and idempotency-key bounds.
 - Reduced the default session lifetime from eight hours to one hour.
+- Replaced legacy v1 bearer tokens with context-bound v2 tokens signed by a purpose-derived key.
 - Separated constant-time liveness from explicit evidence-chain verification.
 - Expanded system/security coverage from 10 to 14 tests.
 - Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.
