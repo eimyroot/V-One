@@ -1,4 +1,4 @@
-# VOODOO One RC1 — Operations Runbook
+# VOODOO One 0.9.0-rc2-dev — Operations Runbook
 
 ## Start
 
@@ -6,7 +6,7 @@
 set -a
 . ./.env.product.local
 set +a
-.venv/bin/python -m uvicorn api_gateway.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Health

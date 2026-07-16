@@ -1,4 +1,4 @@
-# VOODOO One RC1 — Security Overview
+# VOODOO One 0.9.0-rc2-dev — Security Overview
 
 ## Controls implemented
 

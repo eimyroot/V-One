@@ -27,4 +27,5 @@ VOODOO One gives organizations a controlled path from an AI agent request to a p
 
 ### Delivery model
 
-The RC1 package is suitable for a controlled pilot. Production connectors and enterprise identity are enabled only through a separate customer-specific security gate.
+The current development baseline can enter a controlled pilot only after customer-specific
+acceptance. Production connectors and enterprise identity remain separate security gates.

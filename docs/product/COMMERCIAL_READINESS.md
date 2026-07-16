@@ -1,8 +1,9 @@
-# VOODOO One 0.9.0-rc1 — Commercial Readiness Contract
+# VOODOO One 0.9.0-rc2-dev — Commercial Readiness Contract
 
 ## Product claim
 
-VOODOO One RC1 is a governed AI-operations control plane implementing the canonical flow:
+VOODOO One RC2 development baseline is a governed AI-operations control plane implementing the
+canonical flow:
 
 `change request → review → execution → evidence`
 
