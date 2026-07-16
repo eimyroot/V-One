@@ -8,7 +8,9 @@ from urllib.parse import urlsplit
 from .config import ProductConfig
 from .security import Principal, issue_token, verify_token
 
+OIDC_PROVIDER = "oidc"
 _CLAIM_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
+_CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class IdentityService(Protocol):
@@ -70,6 +72,29 @@ class OIDCProviderContract:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ExternalIdentityClaims:
+    provider: str
+    issuer: str
+    subject: str
+    groups: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        validate_external_identity_reference(
+            provider=self.provider,
+            issuer=self.issuer,
+            subject=self.subject,
+        )
+        if not isinstance(self.groups, tuple):
+            raise ValueError("external identity groups must be an immutable tuple")
+        if not 1 <= len(self.groups) <= 64:
+            raise ValueError("external identity must contain between 1 and 64 groups")
+        for group in self.groups:
+            validate_external_group(group)
+        if len(set(self.groups)) != len(self.groups):
+            raise ValueError("external identity groups must be unique")
+
+
 def _validate_https_url(label: str, value: str) -> None:
     parsed = urlsplit(value)
     if (
@@ -82,6 +107,27 @@ def _validate_https_url(label: str, value: str) -> None:
         or parsed.fragment
     ):
         raise ValueError(f"{label} must be an absolute HTTPS URL without credentials or fragments")
+
+
+def _validate_exact_text(label: str, value: str, *, maximum: int) -> None:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= maximum
+        or value != value.strip()
+        or _CONTROL_CHARACTER_PATTERN.search(value)
+    ):
+        raise ValueError(f"{label} is invalid")
+
+
+def validate_external_identity_reference(*, provider: str, issuer: str, subject: str) -> None:
+    if provider != OIDC_PROVIDER:
+        raise ValueError("external identity provider is unsupported")
+    _validate_https_url("external identity issuer", issuer)
+    _validate_exact_text("external identity subject", subject, maximum=512)
+
+
+def validate_external_group(group: str) -> None:
+    _validate_exact_text("external identity group", group, maximum=256)
 
 
 def validate_identity_provider_startup(config: ProductConfig) -> None:
