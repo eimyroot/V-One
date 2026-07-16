@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,13 +12,13 @@ from pydantic import BaseModel, Field
 
 from .config import ProductConfig
 from .security import Principal, issue_token, verify_token
-from .service import ProductService
+from .service import AuthRateLimitExceeded, ProductService
 
 
 class BootstrapRequest(BaseModel):
     username: str = Field(min_length=3, max_length=80)
     password: str = Field(min_length=12, max_length=256)
-    bootstrap_token: str = Field(min_length=24)
+    bootstrap_token: str = Field(min_length=24, max_length=256)
 
 
 class LoginRequest(BaseModel):
@@ -69,6 +69,20 @@ def _translate_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail="internal product platform error")
 
 
+def _client_source(request: Request) -> str:
+    if request.client is None:
+        return "unavailable"
+    return request.client.host.strip().casefold()[:255] or "unavailable"
+
+
+def _rate_limit_error(exc: AuthRateLimitExceeded) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="authentication temporarily rate limited",
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
 def create_product_router(
     *,
     config: ProductConfig,
@@ -115,13 +129,20 @@ def create_product_router(
         return {"required": not service.has_users()}
 
     @router.post("/auth/bootstrap", status_code=status.HTTP_201_CREATED)
-    def bootstrap(body: BootstrapRequest) -> dict[str, Any]:
+    def bootstrap(body: BootstrapRequest, request: Request) -> dict[str, Any]:
+        source = _client_source(request)
         try:
-            result = service.bootstrap_admin(
-                username=body.username,
-                password=body.password,
-                token=body.bootstrap_token,
-            )
+            service.enforce_bootstrap_rate_limit(source=source)
+            try:
+                result = service.bootstrap_admin(
+                    username=body.username,
+                    password=body.password,
+                    token=body.bootstrap_token,
+                )
+            except PermissionError:
+                service.record_bootstrap_failure(source=source)
+                raise
+            service.clear_bootstrap_rate_limit(source=source)
             token = issue_token(
                 secret=config.session_signing_secret,
                 user_id=result["user_id"],
@@ -130,13 +151,22 @@ def create_product_router(
                 ttl_seconds=config.token_ttl_seconds,
             )
             return {"token": token, **result}
+        except AuthRateLimitExceeded as exc:
+            raise _rate_limit_error(exc) from exc
         except Exception as exc:
             raise _translate_error(exc) from exc
 
     @router.post("/auth/login")
-    def login(body: LoginRequest) -> dict[str, Any]:
+    def login(body: LoginRequest, request: Request) -> dict[str, Any]:
+        source = _client_source(request)
         try:
-            user = service.authenticate(username=body.username, password=body.password)
+            service.enforce_login_rate_limit(username=body.username, source=source)
+            try:
+                user = service.authenticate(username=body.username, password=body.password)
+            except PermissionError as exc:
+                service.record_login_failure(username=body.username, source=source)
+                raise HTTPException(status_code=401, detail="invalid credentials") from exc
+            service.clear_login_rate_limit(username=body.username, source=source)
             token = issue_token(
                 secret=config.session_signing_secret,
                 user_id=user["id"],
@@ -145,6 +175,10 @@ def create_product_router(
                 ttl_seconds=config.token_ttl_seconds,
             )
             return {"token": token, "user": user}
+        except AuthRateLimitExceeded as exc:
+            raise _rate_limit_error(exc) from exc
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _translate_error(exc) from exc
 

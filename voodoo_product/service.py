@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 import sqlite3
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,12 @@ VALID_RISKS = {"R0", "R1", "R2", "R3", "R4"}
 VALID_ENVIRONMENTS = {"local", "development", "staging", "production"}
 VALID_ADAPTERS = {"echo", "write_artifact", "run_validation"}
 MAX_CHANGE_PAYLOAD_BYTES = 65_536
+
+
+class AuthRateLimitExceeded(Exception):
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, retry_after)
+        super().__init__("authentication temporarily rate limited")
 
 
 def utc_now() -> str:
@@ -53,6 +61,9 @@ class ProductService:
         self.db = ProductDatabase(config.database_path)
         self.db.initialize()
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
+        self._dummy_password_hash = hash_password(
+            f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
+        )
 
     def has_users(self) -> bool:
         with self.db.connect() as connection:
@@ -87,17 +98,146 @@ class ProductService:
             )
             return {"user_id": user_id, "workspace_id": workspace_id, "role": "administrator"}
 
+    def enforce_login_rate_limit(self, *, username: str, source: str) -> None:
+        self._enforce_auth_rate_limits(self._login_rate_limit_keys(username, source))
+
+    def record_login_failure(self, *, username: str, source: str) -> None:
+        self._record_auth_failure(self._login_rate_limit_keys(username, source))
+
+    def clear_login_rate_limit(self, *, username: str, source: str) -> None:
+        self._clear_auth_rate_limits(self._login_rate_limit_keys(username, source))
+
+    def enforce_bootstrap_rate_limit(self, *, source: str) -> None:
+        self._enforce_auth_rate_limits(self._bootstrap_rate_limit_keys(source))
+
+    def record_bootstrap_failure(self, *, source: str) -> None:
+        self._record_auth_failure(self._bootstrap_rate_limit_keys(source))
+
+    def clear_bootstrap_rate_limit(self, *, source: str) -> None:
+        self._clear_auth_rate_limits(self._bootstrap_rate_limit_keys(source))
+
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
         with self.db.connect() as connection:
             row = connection.execute(
                 "SELECT id, username, password_hash, role, active FROM users WHERE username = ?",
                 (username.strip(),),
             ).fetchone()
-        if row is None or not int(row["active"]):
-            raise PermissionError("invalid credentials")
-        if not verify_password(password, str(row["password_hash"])):
+        encoded_password = (
+            str(row["password_hash"]) if row is not None else self._dummy_password_hash
+        )
+        password_valid = verify_password(password, encoded_password)
+        if row is None or not int(row["active"]) or not password_valid:
             raise PermissionError("invalid credentials")
         return {"id": row["id"], "username": row["username"], "role": row["role"]}
+
+    def _login_rate_limit_keys(
+        self, username: str, source: str
+    ) -> tuple[tuple[str, str, int], ...]:
+        return (
+            ("login.account", username, self.config.auth_max_failures),
+            ("login.source", source, self.config.auth_source_max_failures),
+        )
+
+    def _bootstrap_rate_limit_keys(self, source: str) -> tuple[tuple[str, str, int], ...]:
+        return (("bootstrap.source", source, self.config.auth_max_failures),)
+
+    def _auth_rate_limit_key(self, *, scope: str, value: str) -> str:
+        normalized = value.strip().casefold()
+        return hmac.new(
+            self.config.session_signing_secret.encode("utf-8"),
+            f"{scope}\0{normalized}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+    def _enforce_auth_rate_limits(self, entries: tuple[tuple[str, str, int], ...]) -> None:
+        now = int(time.time())
+        retry_after = 0
+        with self.db.transaction() as connection:
+            for scope, value, _ in entries:
+                key_hash = self._auth_rate_limit_key(scope=scope, value=value)
+                row = connection.execute(
+                    """
+                    SELECT failure_count, window_started_at, blocked_until
+                    FROM auth_rate_limits WHERE scope = ? AND key_hash = ?
+                    """,
+                    (scope, key_hash),
+                ).fetchone()
+                if row is None:
+                    continue
+                blocked_until = int(row["blocked_until"])
+                if blocked_until > now:
+                    retry_after = max(retry_after, blocked_until - now)
+                    continue
+                window_expired = now - int(row["window_started_at"]) >= (
+                    self.config.auth_window_seconds
+                )
+                if blocked_until > 0 or window_expired:
+                    connection.execute(
+                        "DELETE FROM auth_rate_limits WHERE scope = ? AND key_hash = ?",
+                        (scope, key_hash),
+                    )
+        if retry_after:
+            raise AuthRateLimitExceeded(retry_after)
+
+    def _record_auth_failure(self, entries: tuple[tuple[str, str, int], ...]) -> None:
+        now = int(time.time())
+        retry_after = 0
+        retention = max(self.config.auth_window_seconds, self.config.auth_lockout_seconds) * 2
+        with self.db.transaction() as connection:
+            connection.execute(
+                "DELETE FROM auth_rate_limits WHERE updated_at < ?",
+                (now - retention,),
+            )
+            for scope, value, maximum in entries:
+                key_hash = self._auth_rate_limit_key(scope=scope, value=value)
+                row = connection.execute(
+                    """
+                    SELECT failure_count, window_started_at, blocked_until
+                    FROM auth_rate_limits WHERE scope = ? AND key_hash = ?
+                    """,
+                    (scope, key_hash),
+                ).fetchone()
+                if row is not None and int(row["blocked_until"]) > now:
+                    retry_after = max(retry_after, int(row["blocked_until"]) - now)
+                    continue
+                if (
+                    row is None
+                    or int(row["blocked_until"]) > 0
+                    or now - int(row["window_started_at"]) >= self.config.auth_window_seconds
+                ):
+                    failure_count = 1
+                    window_started_at = now
+                else:
+                    failure_count = int(row["failure_count"]) + 1
+                    window_started_at = int(row["window_started_at"])
+                blocked_until = (
+                    now + self.config.auth_lockout_seconds if failure_count >= maximum else 0
+                )
+                connection.execute(
+                    """
+                    INSERT INTO auth_rate_limits(
+                        scope, key_hash, failure_count, window_started_at, blocked_until, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(scope, key_hash) DO UPDATE SET
+                        failure_count = excluded.failure_count,
+                        window_started_at = excluded.window_started_at,
+                        blocked_until = excluded.blocked_until,
+                        updated_at = excluded.updated_at
+                    """,
+                    (scope, key_hash, failure_count, window_started_at, blocked_until, now),
+                )
+                if blocked_until > now:
+                    retry_after = max(retry_after, blocked_until - now)
+        if retry_after:
+            raise AuthRateLimitExceeded(retry_after)
+
+    def _clear_auth_rate_limits(self, entries: tuple[tuple[str, str, int], ...]) -> None:
+        with self.db.transaction() as connection:
+            for scope, value, _ in entries:
+                connection.execute(
+                    "DELETE FROM auth_rate_limits WHERE scope = ? AND key_hash = ?",
+                    (scope, self._auth_rate_limit_key(scope=scope, value=value)),
+                )
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         with self.db.connect() as connection:

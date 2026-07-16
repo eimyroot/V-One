@@ -6,6 +6,8 @@
 - generated local secrets stored outside Git,
 - `scrypt` password hashing with per-user salt,
 - HMAC-signed expiring sessions,
+- HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
+- generic authentication failures with `Retry-After` on temporary lockout,
 - live account and role validation on every authenticated request,
 - permission-based RBAC,
 - separation of requester and approver,
@@ -23,6 +25,11 @@
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the
 container health probe.
+
+The application derives the authentication source from the ASGI server's client address and does
+not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
+trusted proxy at the ASGI server boundary; arbitrary client-supplied forwarding headers must not be
+trusted.
 
 ## Required security gates before enterprise release
 

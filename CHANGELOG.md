@@ -11,3 +11,5 @@
 - Reduced the default session lifetime from eight hours to one hour.
 - Separated constant-time liveness from explicit evidence-chain verification.
 - Expanded system/security coverage from 10 to 14 tests.
+- Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.
+- Reduced account-enumeration timing differences by verifying unknown users against a dummy password hash.
