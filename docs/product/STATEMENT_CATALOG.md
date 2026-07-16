@@ -49,6 +49,12 @@ the same transaction. Approval transitions, idempotency and rate-limit counters 
 serialization today. Any narrower locking model requires separate race tests, invariants and rollback
 evidence before release.
 
+Execution completion and recovery are separate classified writes. Completion uses the durable fence
+as a compare-and-set predicate. Recovery selects the execution context and increments that fence in
+the same globally serialized transaction that marks the request failed and appends evidence. A
+backend dialect must preserve this affected-row/`RETURNING` contract; silently accepting a stale
+completion is prohibited.
+
 Receipt list, verification and head statements order exclusively by the database-assigned monotonic
 `sequence`. Timestamp and random identifier ordering is prohibited because multiple receipts can
 legitimately share a millisecond.

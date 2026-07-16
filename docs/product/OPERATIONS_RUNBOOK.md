@@ -106,7 +106,7 @@ attestations are generated and independently verified.
 ## Database migrations
 
 SQLite migrations run automatically and atomically before the application starts accepting traffic.
-The health response must report `database_backend: sqlite` and `schema_version: 3`. Never edit an
+The health response must report `database_backend: sqlite` and `schema_version: 4`. Never edit an
 applied migration: its SHA-256 checksum is part of the database history and drift blocks startup.
 Database unavailability or migration-history drift returns HTTP `503`, which makes the container
 healthcheck fail instead of reporting a false-positive HTTP success.
@@ -120,7 +120,7 @@ For an upgrade:
 4. Copy the database, `-wal` and `-shm` files as one consistent backup set.
 5. Deploy the new immutable application artifact while keeping production effects disabled.
 6. Start exactly one instance and wait for migration completion.
-7. Verify `/api/v1/health` reports `HEALTHY`, `sqlite`, schema version `3`, and production effects
+7. Verify `/api/v1/health` reports `HEALTHY`, `sqlite`, schema version `4`, and production effects
    `DISABLED`.
 8. Run the authenticated `/api/v1/evidence/verify` operation again, then start the remaining
    instances.
@@ -151,6 +151,35 @@ The secret file must be encrypted and access-controlled.
 4. Start the process.
 5. Verify `/api/v1/health`.
 6. Verify `/api/v1/evidence/verify` as an auditor.
+
+## Interrupted execution recovery
+
+Never retry an expired `RUNNING` execution automatically: its adapter may already have produced a
+side effect. First investigate the worker and target system. Then activate emergency stop and use a
+current security-reviewer or administrator token from the operator workstation.
+
+The default adapter timeout is 120 seconds and the lease is 180 seconds. Keep
+`VOODOO_EXECUTION_LEASE_SECONDS` at least 30 seconds above
+`VOODOO_EXECUTION_TIMEOUT_SECONDS`, and configure the orchestrator termination grace above the
+execution timeout. The supplied Compose deployment waits 150 seconds before a forced stop.
+
+After confirming those preconditions, run:
+
+```bash
+export VOODOO_URL=http://127.0.0.1:8000
+export EXECUTION_ID=exec_REPLACE_ME
+curl --fail-with-body --silent --show-error \
+  --request POST "$VOODOO_URL/api/v1/executions/$EXECUTION_ID/recover" \
+  --header "Authorization: Bearer $VOODOO_RECOVERY_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"reason":"worker terminated after durable execution start; outcome investigated"}'
+```
+
+The endpoint rejects an active lease, inactive emergency stop, non-running execution or unauthorized
+role. A successful recovery returns `INTERRUPTED`, records `INDETERMINATE` evidence and permanently
+fences the late worker. Verify both evidence chains and inspect the target system before clearing
+emergency stop. If the operation must be attempted again, create and approve a new change request
+with a new idempotency key; never edit the recovered row.
 
 ## Emergency stop
 

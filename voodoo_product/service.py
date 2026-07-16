@@ -5,7 +5,7 @@ import hmac
 import json
 import secrets
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,27 @@ class AuthRateLimitExceeded(Exception):
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds")
+
+
+def timestamp_after(value: str, seconds: int) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            raise ValueError("timestamp has no timezone")
+    except ValueError as exc:
+        raise RuntimeError("execution timestamp is invalid") from exc
+    return (parsed + timedelta(seconds=seconds)).astimezone(UTC).isoformat(timespec="milliseconds")
+
+
+def timestamp_expired(value: str, *, now: str) -> bool:
+    try:
+        expires_at = datetime.fromisoformat(value)
+        current = datetime.fromisoformat(now)
+        if expires_at.tzinfo is None or current.tzinfo is None:
+            raise ValueError("timestamp has no timezone")
+    except ValueError as exc:
+        raise RuntimeError("execution lease timestamp is invalid") from exc
+    return expires_at <= current
 
 
 def new_id(prefix: str) -> str:
@@ -501,10 +522,19 @@ class ProductService:
                 ):
                     raise PermissionError("production effects remain disabled")
                 execution_id = new_id("exec")
+                execution_fence = 1
                 now = utc_now()
+                lease_expires_at = timestamp_after(now, self.config.execution_lease_seconds)
                 connection.execute(
                     sql.INSERT_EXECUTION,
-                    (execution_id, request_id, request_row["adapter"], idempotency_key, now),
+                    (
+                        execution_id,
+                        request_id,
+                        request_row["adapter"],
+                        idempotency_key,
+                        now,
+                        lease_expires_at,
+                    ),
                 )
                 connection.execute(
                     sql.MARK_CHANGE_REQUEST_RUNNING,
@@ -532,6 +562,7 @@ class ProductService:
                     workspace_id=str(request_row["workspace_id"]),
                     repository_root=repository_root.resolve(),
                     sandbox_root=self.config.sandbox_root,
+                    timeout_seconds=self.config.execution_timeout_seconds,
                 ),
             )
             if output.get("success") is False:
@@ -545,14 +576,104 @@ class ProductService:
 
         with self.db.transaction() as connection:
             completed_at = utc_now()
-            connection.execute(
+            completed = connection.execute(
                 sql.COMPLETE_EXECUTION,
-                (status, canonical_json(output), error, completed_at, execution_id),
-            )
-            request_status = "COMPLETED" if status == "SUCCEEDED" else "FAILED"
+                (
+                    status,
+                    canonical_json(output),
+                    error,
+                    completed_at,
+                    execution_id,
+                    execution_fence,
+                ),
+            ).fetchone()
+            if completed is not None:
+                request_status = "COMPLETED" if status == "SUCCEEDED" else "FAILED"
+                connection.execute(
+                    sql.MARK_CHANGE_REQUEST_COMPLETED,
+                    (request_status, completed_at, request_id),
+                )
+                receipt = self._append_receipt(
+                    connection,
+                    execution_id=execution_id,
+                    payload={
+                        "execution_id": execution_id,
+                        "request_id": request_id,
+                        "workspace_id": request_row["workspace_id"],
+                        "actor_id": actor_id,
+                        "adapter": request_row["adapter"],
+                        "risk": request_row["risk"],
+                        "environment": request_row["environment"],
+                        "status": status,
+                        "output_digest": hashlib.sha256(
+                            canonical_json(output).encode("utf-8")
+                        ).hexdigest(),
+                        "completed_at": completed_at,
+                    },
+                )
+                self._append_audit(
+                    connection,
+                    actor_id=actor_id,
+                    action=f"execution.{status.lower()}",
+                    target_type="execution",
+                    target_id=execution_id,
+                    payload={
+                        "request_id": request_id,
+                        "receipt_id": receipt["id"],
+                        "error": error,
+                    },
+                )
+        return self.get_execution(execution_id)
+
+    def recover_execution(
+        self,
+        *,
+        actor_id: str,
+        execution_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        normalized_reason = reason.strip()
+        if not 3 <= len(normalized_reason) <= 2_000:
+            raise ValueError("recovery reason must contain 3 to 2000 characters")
+
+        with self.db.transaction() as connection:
+            if not self._emergency_stop(connection):
+                raise PermissionError("emergency stop must be active for execution recovery")
+            execution = connection.execute(
+                sql.SELECT_EXECUTION_FOR_RECOVERY,
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                raise LookupError("execution not found")
+            if execution["status"] != "RUNNING":
+                raise RuntimeError("execution is not running")
+
+            now = utc_now()
+            raw_lease = execution["lease_expires_at"]
+            lease_expires_at = str(raw_lease) if raw_lease is not None else None
+            if lease_expires_at is not None and not timestamp_expired(lease_expires_at, now=now):
+                raise RuntimeError("execution lease has not expired")
+
+            output = {"error_type": "ExecutionInterrupted", "outcome": "INDETERMINATE"}
+            error = "execution outcome is indeterminate after lease expiry"
+            interrupted = connection.execute(
+                sql.INTERRUPT_EXECUTION,
+                (
+                    canonical_json(output),
+                    error,
+                    now,
+                    execution_id,
+                    int(execution["fence"]),
+                    lease_expires_at,
+                ),
+            ).fetchone()
+            if interrupted is None:
+                raise RuntimeError("execution changed during recovery")
+
+            request_id = str(execution["request_id"])
             connection.execute(
                 sql.MARK_CHANGE_REQUEST_COMPLETED,
-                (request_status, completed_at, request_id),
+                ("FAILED", now, request_id),
             )
             receipt = self._append_receipt(
                 connection,
@@ -560,25 +681,31 @@ class ProductService:
                 payload={
                     "execution_id": execution_id,
                     "request_id": request_id,
-                    "workspace_id": request_row["workspace_id"],
+                    "workspace_id": execution["workspace_id"],
                     "actor_id": actor_id,
-                    "adapter": request_row["adapter"],
-                    "risk": request_row["risk"],
-                    "environment": request_row["environment"],
-                    "status": status,
+                    "adapter": execution["adapter"],
+                    "risk": execution["risk"],
+                    "environment": execution["environment"],
+                    "status": "INTERRUPTED",
+                    "outcome": "INDETERMINATE",
                     "output_digest": hashlib.sha256(
                         canonical_json(output).encode("utf-8")
                     ).hexdigest(),
-                    "completed_at": completed_at,
+                    "completed_at": now,
                 },
             )
             self._append_audit(
                 connection,
                 actor_id=actor_id,
-                action=f"execution.{status.lower()}",
+                action="execution.interrupted",
                 target_type="execution",
                 target_id=execution_id,
-                payload={"request_id": request_id, "receipt_id": receipt["id"], "error": error},
+                payload={
+                    "request_id": request_id,
+                    "receipt_id": receipt["id"],
+                    "outcome": "INDETERMINATE",
+                    "reason": normalized_reason,
+                },
             )
         return self.get_execution(execution_id)
 
@@ -812,6 +939,7 @@ class ProductService:
     @staticmethod
     def _decode_execution(value: dict[str, Any]) -> dict[str, Any]:
         value["output"] = json.loads(value.pop("output_json"))
+        value.pop("fence", None)
         return value
 
     @staticmethod

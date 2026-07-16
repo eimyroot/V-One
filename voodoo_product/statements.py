@@ -181,16 +181,39 @@ INSERT_EXECUTION = _write(
     "executions.insert",
     """
     INSERT INTO executions(
-        id, request_id, status, adapter, output_json, idempotency_key, started_at
-    ) VALUES (?, ?, 'RUNNING', ?, '{}', ?, ?)
+        id, request_id, status, adapter, output_json, idempotency_key,
+        started_at, lease_expires_at
+    ) VALUES (?, ?, 'RUNNING', ?, '{}', ?, ?, ?)
     """,
 )
 COMPLETE_EXECUTION = _write(
     "executions.complete",
     """
     UPDATE executions
-    SET status = ?, output_json = ?, error = ?, completed_at = ?
-    WHERE id = ?
+    SET status = ?, output_json = ?, error = ?, completed_at = ?, lease_expires_at = NULL
+    WHERE id = ? AND status = 'RUNNING' AND fence = ?
+    RETURNING id
+    """,
+)
+SELECT_EXECUTION_FOR_RECOVERY = _read(
+    "executions.select_for_recovery",
+    """
+    SELECT e.id, e.request_id, e.status, e.adapter, e.output_json,
+           e.fence, e.lease_expires_at,
+           cr.workspace_id, cr.risk, cr.environment
+    FROM executions e
+    JOIN change_requests cr ON cr.id = e.request_id
+    WHERE e.id = ?
+    """,
+)
+INTERRUPT_EXECUTION = _write(
+    "executions.interrupt",
+    """
+    UPDATE executions
+    SET status = 'INTERRUPTED', output_json = ?, error = ?, completed_at = ?,
+        lease_expires_at = NULL, fence = fence + 1
+    WHERE id = ? AND status = 'RUNNING' AND fence = ? AND lease_expires_at IS ?
+    RETURNING id
     """,
 )
 LIST_EXECUTIONS = _read(
@@ -312,6 +335,8 @@ ALL_STATEMENTS = (
     SELECT_EXECUTION_BY_IDEMPOTENCY_KEY,
     INSERT_EXECUTION,
     COMPLETE_EXECUTION,
+    SELECT_EXECUTION_FOR_RECOVERY,
+    INTERRUPT_EXECUTION,
     LIST_EXECUTIONS,
     GET_EXECUTION,
     COUNT_EXECUTIONS_BY_STATUS,

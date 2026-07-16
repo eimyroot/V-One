@@ -17,6 +17,7 @@ canonical flow:
 - fail-closed production effects,
 - allowlisted local adapters,
 - idempotent executions,
+- fenced manual recovery of expired executions with indeterminate evidence,
 - emergency stop,
 - hash-chained audit events,
 - hash-chained execution receipts,

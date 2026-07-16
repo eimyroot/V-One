@@ -63,6 +63,8 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "idempotency_key",
         "started_at",
         "completed_at",
+        "fence",
+        "lease_expires_at",
     },
     "receipts": {
         "sequence",
@@ -99,6 +101,7 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
 REQUIRED_INDEXES = {
     "idx_change_requests_status",
     "idx_executions_status",
+    "idx_executions_recovery",
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
 }

@@ -29,3 +29,5 @@
 - Replaced ambiguous timestamp/ID receipt ordering with a migrated monotonic database sequence.
 - Bound RC artifact names to the source version, pinned workflow actions by commit, smoke-tested the
   release image, and checksummed the archive and SBOM without claiming unavailable provenance.
+- Added schema-v4 execution leases and monotonic fencing so an explicitly recovered, indeterminate
+  execution cannot later overwrite evidence or be retried under its bound idempotency key.

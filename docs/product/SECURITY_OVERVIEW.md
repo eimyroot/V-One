@@ -27,6 +27,8 @@
 - subprocess execution without a shell,
 - bounded subprocess output and timeout,
 - execution idempotency,
+- bounded execution leases with monotonic completion fencing,
+- recovery restricted to security reviewers or administrators while emergency stop is active,
 - emergency stop,
 - hash-chained receipts and audit events,
 - database-sequenced receipt ordering independent of timestamps and random IDs,
@@ -55,6 +57,14 @@ The HTTP boundary rejects unlisted `Host` values before routing. Console actions
 external JavaScript event listeners, so the CSP does not require `unsafe-inline` or `unsafe-eval`.
 Production operators must allowlist both the external hostname and any separate internal healthcheck
 hostname or address.
+
+An execution start commits a lease before the adapter runs. Normal completion succeeds only while
+the execution remains `RUNNING` with its original fence. After the lease expires, a security reviewer
+or administrator may recover it only while emergency stop is active. Recovery records one
+`INTERRUPTED` receipt with an `INDETERMINATE` outcome, increments the fence and marks the change
+request failed. A late worker may finish its external call, but it cannot overwrite the recovered
+database state or append a second receipt. Operators must investigate possible side effects before
+creating a new change request; the original idempotency key never triggers an automatic retry.
 
 The manual release-candidate workflow validates its version against the source tree, reruns the full
 verification suite, builds and smoke-tests the hardened product image, and emits checksums for both

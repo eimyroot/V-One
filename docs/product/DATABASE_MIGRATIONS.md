@@ -44,13 +44,18 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `3`, verify evidence integrity again, and only then
+one new instance, require health schema version `4`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
 sequence. It reconstructs existing order from the recorded `previous_hash → receipt_hash` links in
 the same exclusive migration transaction. A missing root, disconnected history, or branch prevents
 the guard row from satisfying its constraint and rolls back the complete migration.
+
+Migration `0004_execution_leases.sql` adds the execution fence, lease expiry and recovery index.
+Existing `RUNNING` rows receive their original `started_at` as an already-expired lease so they can be
+reviewed and explicitly recovered after emergency stop. Existing terminal rows retain a null lease
+and fence value `1`. The migration does not retry or silently reinterpret any execution outcome.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
