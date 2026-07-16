@@ -74,14 +74,12 @@ def test_binding_identity_is_immutable_and_not_deletable(tmp_path: Path) -> None
     database = initialized_database(tmp_path)
     insert_binding(database)
 
-    with pytest.raises(DatabaseIntegrityError):
-        with database.connect() as connection:
-            connection.execute(
-                "UPDATE external_identity_bindings SET subject = 'changed' WHERE id = 'xid_one'"
-            )
-    with pytest.raises(DatabaseIntegrityError):
-        with database.connect() as connection:
-            connection.execute("DELETE FROM external_identity_bindings WHERE id = 'xid_one'")
+    with pytest.raises(DatabaseIntegrityError), database.connect() as connection:
+        connection.execute(
+            "UPDATE external_identity_bindings SET subject = 'changed' WHERE id = 'xid_one'"
+        )
+    with pytest.raises(DatabaseIntegrityError), database.connect() as connection:
+        connection.execute("DELETE FROM external_identity_bindings WHERE id = 'xid_one'")
 
 
 def test_binding_can_be_disabled_once_but_not_reactivated(tmp_path: Path) -> None:
@@ -96,45 +94,42 @@ def test_binding_can_be_disabled_once_but_not_reactivated(tmp_path: Path) -> Non
             WHERE id = 'xid_one'
             """
         )
-    with pytest.raises(DatabaseIntegrityError):
-        with database.connect() as connection:
-            connection.execute(
-                """
-                UPDATE external_identity_bindings
-                SET active = 1, disabled_at = NULL
-                WHERE id = 'xid_one'
-                """
-            )
+    with pytest.raises(DatabaseIntegrityError), database.connect() as connection:
+        connection.execute(
+            """
+            UPDATE external_identity_bindings
+            SET active = 1, disabled_at = NULL
+            WHERE id = 'xid_one'
+            """
+        )
 
 
 def test_binding_uniqueness_prevents_subject_or_user_rebinding(tmp_path: Path) -> None:
     database = initialized_database(tmp_path)
     insert_binding(database)
 
-    with pytest.raises(DatabaseIntegrityError):
-        with database.connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO external_identity_bindings(
-                    id, provider, issuer, subject, user_id, created_at
-                ) VALUES (
-                    'xid_duplicate_subject', 'oidc', 'https://identity.example.com',
-                    'subject-one', 'usr_two', '2026-07-16T12:00:00+00:00'
-                )
-                """
+    with pytest.raises(DatabaseIntegrityError), database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO external_identity_bindings(
+                id, provider, issuer, subject, user_id, created_at
+            ) VALUES (
+                'xid_duplicate_subject', 'oidc', 'https://identity.example.com',
+                'subject-one', 'usr_two', '2026-07-16T12:00:00+00:00'
             )
-    with pytest.raises(DatabaseIntegrityError):
-        with database.connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO external_identity_bindings(
-                    id, provider, issuer, subject, user_id, created_at
-                ) VALUES (
-                    'xid_duplicate_user', 'oidc', 'https://identity.example.com',
-                    'subject-two', 'usr_one', '2026-07-16T12:00:00+00:00'
-                )
-                """
+            """
+        )
+    with pytest.raises(DatabaseIntegrityError), database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO external_identity_bindings(
+                id, provider, issuer, subject, user_id, created_at
+            ) VALUES (
+                'xid_duplicate_user', 'oidc', 'https://identity.example.com',
+                'subject-two', 'usr_one', '2026-07-16T12:00:00+00:00'
             )
+            """
+        )
 
 
 def test_external_identity_key_requires_exact_https_issuer() -> None:
