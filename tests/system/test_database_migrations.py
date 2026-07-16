@@ -125,7 +125,7 @@ def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: P
     path = tmp_path / "product.sqlite3"
     database = SQLiteProductDatabase(path, migration_directory=migrations)
 
-    with pytest.raises(sqlite3.Error):
+    with pytest.raises(DatabaseMigrationError, match="migration execution failed"):
         database.initialize()
 
     connection = sqlite3.connect(path)

@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 import secrets
-import sqlite3
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,7 +11,14 @@ from typing import Any
 
 from .adapters import AdapterContext, AdapterError, execute_adapter
 from .config import ProductConfig
-from .db import DatabaseMigrationError, create_product_database
+from .db import create_product_database
+from .persistence import (
+    DatabaseConnection,
+    DatabaseError,
+    DatabaseIntegrityError,
+    DatabaseRow,
+    ProductDatabaseAdapter,
+)
 from .security import hash_password, verify_password
 
 VALID_ROLES = {
@@ -51,16 +57,25 @@ def chained_hash(previous_hash: str, payload: dict[str, Any]) -> str:
     return hashlib.sha256(f"{previous_hash}\n{canonical_json(payload)}".encode()).hexdigest()
 
 
-def row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
+def row_dict(row: DatabaseRow | None) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
 class ProductService:
-    def __init__(self, config: ProductConfig):
+    def __init__(
+        self,
+        config: ProductConfig,
+        *,
+        database: ProductDatabaseAdapter | None = None,
+    ):
         self.config = config
-        self.db = create_product_database(
-            backend=config.database_backend,
-            path=config.database_path,
+        self.db = (
+            database
+            if database is not None
+            else create_product_database(
+                backend=self.config.database_backend,
+                path=self.config.database_path,
+            )
         )
         self.db.initialize()
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
@@ -271,7 +286,7 @@ class ProductService:
                     "INSERT INTO users(id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
                     (user_id, username.strip(), hash_password(password), role, now),
                 )
-            except sqlite3.IntegrityError as exc:
+            except DatabaseIntegrityError as exc:
                 raise ValueError("username already exists") from exc
             self._append_audit(
                 connection,
@@ -452,7 +467,7 @@ class ProductService:
                     "INSERT INTO approvals(id, request_id, approver_id, decision, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                     (approval_id, request_id, actor_id, decision, reason.strip(), now),
                 )
-            except sqlite3.IntegrityError as exc:
+            except DatabaseIntegrityError as exc:
                 raise RuntimeError("approver already decided this request") from exc
 
             if decision == "DENIED":
@@ -768,7 +783,7 @@ class ProductService:
                 if self.config.production_effects_enabled
                 else "DISABLED",
             }
-        except (sqlite3.Error, DatabaseMigrationError):
+        except DatabaseError:
             return {
                 "status": "UNAVAILABLE",
                 "database": "UNAVAILABLE",
@@ -777,7 +792,7 @@ class ProductService:
 
     def _append_audit(
         self,
-        connection: sqlite3.Connection,
+        connection: DatabaseConnection,
         *,
         actor_id: str,
         action: str,
@@ -820,7 +835,7 @@ class ProductService:
 
     def _append_receipt(
         self,
-        connection: sqlite3.Connection,
+        connection: DatabaseConnection,
         *,
         execution_id: str,
         payload: dict[str, Any],
@@ -855,7 +870,7 @@ class ProductService:
         return receipt
 
     @staticmethod
-    def _emergency_stop(connection: sqlite3.Connection) -> bool:
+    def _emergency_stop(connection: DatabaseConnection) -> bool:
         row = connection.execute(
             "SELECT value FROM runtime_flags WHERE key = 'emergency_stop'"
         ).fetchone()

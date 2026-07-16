@@ -8,6 +8,7 @@
 - HMAC-signed expiring sessions,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
+- normalized persistence errors that exclude SQL, schema names, credentials and driver diagnostics,
 - generic authentication failures with `Retry-After` on temporary lockout,
 - structured request/authentication events that exclude bodies, headers, query strings, raw paths, IP addresses and account identifiers,
 - validated request correlation IDs returned through `X-Request-ID`,
