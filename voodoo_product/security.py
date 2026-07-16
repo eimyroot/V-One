@@ -27,10 +27,10 @@ ROLE_PERMISSIONS = {
     "administrator": frozenset({"*"}),
 }
 
-_TOKEN_VERSION = "v2"
-_TOKEN_ISSUER = "voodoo-one"
-_TOKEN_AUDIENCE = "voodoo-one-control-plane"
-_TOKEN_SIGNING_PURPOSE = b"session-token/v2"
+_SESSION_FORMAT_VERSION = "v2"
+_SESSION_ISSUER = "voodoo-one"
+_SESSION_AUDIENCE = "voodoo-one-control-plane"
+_SESSION_SIGNING_PURPOSE = b"session-token/v2"
 _KEY_DERIVATION_DOMAIN = b"voodoo-one\x00key-derivation\x00"
 _MIN_TOKEN_TTL_SECONDS = 300
 _MAX_TOKEN_TTL_SECONDS = 86_400
@@ -114,10 +114,10 @@ def issue_token(
 
     now = int(time.time())
     payload = {
-        "aud": _TOKEN_AUDIENCE,
+        "aud": _SESSION_AUDIENCE,
         "exp": now + ttl_seconds,
         "iat": now,
-        "iss": _TOKEN_ISSUER,
+        "iss": _SESSION_ISSUER,
         "nonce": secrets.token_urlsafe(12),
         "role": role,
         "sub": user_id,
@@ -127,11 +127,11 @@ def issue_token(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     )
     signature = hmac.new(
-        _derive_key(secret, purpose=_TOKEN_SIGNING_PURPOSE),
+        _derive_key(secret, purpose=_SESSION_SIGNING_PURPOSE),
         encoded_payload.encode("ascii"),
         hashlib.sha256,
     ).digest()
-    return f"{_TOKEN_VERSION}.{encoded_payload}.{_b64url_encode(signature)}"
+    return f"{_SESSION_FORMAT_VERSION}.{encoded_payload}.{_b64url_encode(signature)}"
 
 
 def verify_token(*, secret: str, token: str) -> Principal:
@@ -139,10 +139,10 @@ def verify_token(*, secret: str, token: str) -> Principal:
         if not token or len(token) > _MAX_TOKEN_LENGTH:
             raise ValueError("invalid token length")
         version, encoded_payload, encoded_signature = token.split(".", 2)
-        if version != _TOKEN_VERSION:
+        if version != _SESSION_FORMAT_VERSION:
             raise ValueError("unsupported token version")
         expected_signature = hmac.new(
-            _derive_key(secret, purpose=_TOKEN_SIGNING_PURPOSE),
+            _derive_key(secret, purpose=_SESSION_SIGNING_PURPOSE),
             encoded_payload.encode("ascii"),
             hashlib.sha256,
         ).digest()
@@ -156,7 +156,7 @@ def verify_token(*, secret: str, token: str) -> Principal:
         payload: dict[str, Any] = json.loads(decoded_payload.decode("utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("invalid token payload")
-        if payload.get("iss") != _TOKEN_ISSUER or payload.get("aud") != _TOKEN_AUDIENCE:
+        if payload.get("iss") != _SESSION_ISSUER or payload.get("aud") != _SESSION_AUDIENCE:
             raise ValueError("invalid token context")
 
         issued_at = payload.get("iat")
