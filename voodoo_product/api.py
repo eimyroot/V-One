@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .config import ProductConfig
+from .observability import (
+    StructuredRequestLoggingMiddleware,
+    configure_product_logging,
+    log_event,
+)
 from .security import Principal, issue_token, verify_token
 from .service import AuthRateLimitExceeded, ProductService
 
@@ -141,6 +147,11 @@ def create_product_router(
                 )
             except PermissionError:
                 service.record_bootstrap_failure(source=source)
+                log_event(
+                    "auth.bootstrap.denied",
+                    level=logging.WARNING,
+                    auth_scope="bootstrap",
+                )
                 raise
             service.clear_bootstrap_rate_limit(source=source)
             token = issue_token(
@@ -150,8 +161,15 @@ def create_product_router(
                 role=result["role"],
                 ttl_seconds=config.token_ttl_seconds,
             )
+            log_event("auth.bootstrap.succeeded", auth_scope="bootstrap")
             return {"token": token, **result}
         except AuthRateLimitExceeded as exc:
+            log_event(
+                "auth.bootstrap.rate_limited",
+                level=logging.WARNING,
+                auth_scope="bootstrap",
+                retry_after=exc.retry_after,
+            )
             raise _rate_limit_error(exc) from exc
         except Exception as exc:
             raise _translate_error(exc) from exc
@@ -165,6 +183,11 @@ def create_product_router(
                 user = service.authenticate(username=body.username, password=body.password)
             except PermissionError as exc:
                 service.record_login_failure(username=body.username, source=source)
+                log_event(
+                    "auth.login.denied",
+                    level=logging.WARNING,
+                    auth_scope="login",
+                )
                 raise HTTPException(status_code=401, detail="invalid credentials") from exc
             service.clear_login_rate_limit(username=body.username, source=source)
             token = issue_token(
@@ -174,8 +197,15 @@ def create_product_router(
                 role=user["role"],
                 ttl_seconds=config.token_ttl_seconds,
             )
+            log_event("auth.login.succeeded", auth_scope="login")
             return {"token": token, "user": user}
         except AuthRateLimitExceeded as exc:
+            log_event(
+                "auth.login.rate_limited",
+                level=logging.WARNING,
+                auth_scope="login",
+                retry_after=exc.retry_after,
+            )
             raise _rate_limit_error(exc) from exc
         except HTTPException:
             raise
@@ -379,6 +409,7 @@ def install_product_platform(
 ) -> ProductService:
     resolved_config = config or ProductConfig.from_env()
     root = (repository_root or Path.cwd()).resolve()
+    product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
     app.state.voodoo_product_service = service
     app.include_router(
@@ -395,8 +426,20 @@ def install_product_platform(
             allow_origins=list(resolved_config.cors_origins),
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Idempotency-Key",
+                "X-Request-ID",
+            ],
+            expose_headers=["X-Request-ID"],
         )
+
+    app.add_middleware(
+        StructuredRequestLoggingMiddleware,
+        logger=product_logger,
+        environment=resolved_config.environment,
+    )
 
     static_dir = Path(__file__).with_name("static")
     app.mount("/console/assets", StaticFiles(directory=static_dir), name="voodoo-product-assets")

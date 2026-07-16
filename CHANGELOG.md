@@ -13,3 +13,6 @@
 - Expanded system/security coverage from 10 to 14 tests.
 - Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.
 - Reduced account-enumeration timing differences by verifying unknown users against a dummy password hash.
+- Added correlated JSON request and authentication security events with an explicit field allowlist.
+- Disabled raw Uvicorn access logs in supported start commands to prevent duplicate IP/URL logging.
+- Made CI and release vulnerability audits consume the fully hashed lock without implicit pip resolution.

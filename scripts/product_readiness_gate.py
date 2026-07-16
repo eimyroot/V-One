@@ -11,10 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = [
     "voodoo_product/api.py",
+    "voodoo_product/observability.py",
     "voodoo_product/service.py",
     "voodoo_product/security.py",
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
+    "tests/system/test_observability.py",
     "tests/system/test_product_platform_rc1.py",
     ".env.product.example",
     "Dockerfile.product",

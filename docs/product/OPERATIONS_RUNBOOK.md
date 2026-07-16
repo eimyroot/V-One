@@ -6,7 +6,7 @@
 set -a
 . ./.env.product.local
 set +a
-.venv/bin/python -m uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
 ## Health
@@ -32,6 +32,20 @@ Rate-limit identifiers are HMAC-keyed before persistence. Do not delete `auth_ra
 incident or routine restart. Emergency recovery requires an audited database change while writes are
 stopped; changing the session-signing secret also changes identifier derivation and must follow the
 secret-rotation runbook once that procedure is released.
+
+## Structured request logs
+
+Application request and authentication-security events are emitted as one-line JSON to stdout. Set
+the minimum application level with `VOODOO_LOG_LEVEL`; accepted values are `DEBUG`, `INFO`,
+`WARNING`, `ERROR` and `CRITICAL`.
+
+Every HTTP response includes `X-Request-ID`. A caller-provided value is accepted only when it contains
+8–128 allowlisted ASCII characters; otherwise the server generates a 32-character identifier. Logs
+contain the matched route template and never the raw path or query string.
+
+Do not remove `--no-access-log` from supported Uvicorn start commands. Log retention, transport,
+access control and alerting belong to the deployment platform and must preserve the JSON record
+without enriching it with raw authorization headers, request bodies or client addresses.
 
 ## Readiness gate
 
