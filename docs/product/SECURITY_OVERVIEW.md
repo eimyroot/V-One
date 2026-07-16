@@ -8,6 +8,8 @@
 - context-bound v2 sessions signed with a purpose-derived HMAC key,
 - explicit identity-provider boundary for password, session and bearer authentication,
 - fail-closed startup for configured but unreleased OIDC identity,
+- immutable external issuer/subject-to-user bindings with exact group-to-role confirmation,
+- active-administrator enforcement for external identity provisioning in Python and SQLite,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
 - immutable named application statements with explicit read/write modes and no dynamic service SQL,
@@ -53,12 +55,24 @@ raw root secret is not used directly as the token signing key. Legacy `v1` token
 upgrade, so operators must expect all existing console and API sessions to authenticate again. The
 runtime still revalidates active account state and the current database role on every request.
 
-FastAPI authentication routes now depend on an explicit identity-provider contract. The released
-`local` provider owns password verification, session issuance, bearer verification and live account
+FastAPI authentication routes depend on an explicit identity-provider contract. The released `local`
+provider owns password verification, session issuance, bearer verification and live account
 revalidation. OIDC configuration requires exact HTTPS issuer and JWKS endpoints, audience and
 distinct identity claim names, but OIDC execution remains unavailable. Selecting it aborts startup
-before persistence initialization and never falls back to local passwords. External groups must not
-become internal roles until a separate allowlisted mapping and integration gate are released.
+before persistence initialization and never falls back to local passwords.
+
+Schema v6 prepares the offline authorization boundary required by a future OIDC verifier. One exact
+`provider + issuer + subject` may bind to one existing internal user, and one internal user may have at
+most one subject for the same provider and issuer. Exact external groups are append-only mapped to
+known internal roles. Resolution succeeds only when all mapped groups converge to the bound user's
+current active database role. Unmapped groups grant nothing; missing, conflicting or elevated mappings
+fail closed. External claims cannot create users or mutate their roles.
+
+Binding and mapping creation requires an active administrator in both `ExternalIdentityRegistry` and
+SQLite insert triggers, preventing direct-write bypass. Rows cannot be updated or deleted. Current
+deprovisioning relies on disabling the internal user, which resolution checks every time. An additive,
+audited external-binding revocation model and a governed provisioning workflow remain required before
+enterprise OIDC release. No released HTTP or console endpoint exposes the registry.
 
 The application derives the authentication source from the ASGI server's client address and does
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
@@ -100,7 +114,8 @@ claim is made.
 
 - external penetration test,
 - dependency and container scanning,
-- released OIDC/SAML integration with explicit role mapping,
+- released OIDC/SAML cryptographic verification and governed login flow,
+- additive external identity revocation and audited provisioning workflow,
 - tenant-specific key management,
 - PostgreSQL row-level tenant isolation,
 - signed SBOM and artifact provenance,
