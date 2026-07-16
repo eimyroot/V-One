@@ -38,6 +38,8 @@ jobs:
           python -m pytest -q
           tests/system/test_external_identity_binding.py
           tests/system/test_governed_external_identity_service.py
+      - name: Audit ledger composition gate
+        run: python -m pytest tests/system/test_product_composition.py -q
       - name: Authentication and HTTP gate
         run: >-
           python -m pytest -q
