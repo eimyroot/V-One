@@ -44,7 +44,7 @@ jobs:
           git archive --format=tar.gz --prefix="v-one-${RC_VERSION}/" -o "dist/v-one-${RC_VERSION}.tar.gz" HEAD
           sha256sum "dist/v-one-${RC_VERSION}.tar.gz" > "dist/SHA256SUMS.txt"
           python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes -f cyclonedx-json -o dist/sbom.cdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: v-one-${{ inputs.version }}
           path: dist/
