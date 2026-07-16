@@ -66,4 +66,4 @@ fi
 test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'Host: evil.example' http://127.0.0.1:18000/api/v1/health)" = "400"
 curl --fail --silent --show-error http://127.0.0.1:18000/api/v1/health | \
-  python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "HEALTHY"; assert data["database_backend"] == "sqlite"; assert data["schema_version"] == 5; assert data["production_effects"] == "DISABLED"'
+  python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "HEALTHY"; assert data["database_backend"] == "sqlite"; assert data["schema_version"] == 6; assert data["production_effects"] == "DISABLED"'
