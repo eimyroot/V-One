@@ -34,6 +34,7 @@ REQUIRED = [
     "tests/system/test_http_security.py",
     "tests/system/test_persistence_boundary.py",
     "tests/system/test_statement_catalog.py",
+    "tests/system/test_token_security.py",
     "tests/system/test_observability.py",
     "tests/system/test_product_platform_rc1.py",
     "tests/system/test_release_supply_chain.py",
