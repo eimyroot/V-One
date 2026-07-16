@@ -2,15 +2,17 @@
 
 ## Purpose and ownership
 
-`voodoo_product/statements.py` is the sole owner of SQL executed by `ProductService`. Every
-application operation references a named, immutable `DatabaseStatement`; the service owns parameters
-and business flow, while the catalog owns dialect text and read/write classification. Migration,
-schema-validation and adapter-internal SQL remain owned by `voodoo_product/db.py` and migration files.
+`voodoo_product/statements.py` is the sole owner of SQL executed by `ProductService` and
+`ExternalIdentityRegistry`. Every application operation references a named, immutable
+`DatabaseStatement`; application services own parameters and business flow, while the catalog owns
+dialect text and read/write classification. Migration, schema-validation and adapter-internal SQL
+remain owned by `voodoo_product/db.py` and migration files.
 
 The catalog is explicit rather than generated. Names are stable lowercase identifiers, startup
-rejects duplicate names, and tests lock the current inventory at 46 statements and all 51 service
-execution sites. Dynamic SQL construction in the service is prohibited. Optional query behavior must
-select between complete catalog entries, as the pending/all approval views do.
+rejects duplicate names, and tests lock the current inventory at 50 statements, all 51
+`ProductService` execution sites and all 6 external-identity execution sites. Dynamic SQL construction
+in application services is prohibited. Optional query behavior must select between complete catalog
+entries, as the pending/all approval views do.
 
 ## Backend selection and safety
 
@@ -21,7 +23,11 @@ placeholder syntax or logs statement text.
 
 Raw SQL remains accepted by the low-level connection protocol only for adapter internals, migrations,
 controlled administration and isolated tests. New application SQL belongs in the catalog and must be
-referenced from the service by its constant.
+referenced from the calling service by its constant.
+
+External identity statements deliberately separate insert and exact-resolution operations. Binding
+lookups require provider, issuer and subject. Role lookups require provider, issuer and external group.
+No statement derives a role from a substring, pattern, case fold or unbounded group list.
 
 ## Change procedure
 
@@ -29,8 +35,8 @@ For each new or changed application operation:
 
 1. Add or update one immutable catalog entry with an unambiguous read/write mode.
 2. Preserve parameter ordering and result-column semantics for every supported dialect.
-3. Reference the entry from the service without concatenation or interpolation.
-4. Add behavior coverage and update the catalog inventory test.
+3. Reference the entry from the application service without concatenation or interpolation.
+4. Add behavior coverage and update the catalog inventory and execution-site tests.
 5. Run lint, compile, all tests, readiness and dependency-audit gates.
 
 Changing a statement name or result shape is an internal compatibility change and requires analysis
