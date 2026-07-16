@@ -8,6 +8,7 @@ from . import statements as sql
 from .identity import (
     ExternalIdentityClaims,
     validate_external_group,
+    validate_external_identity_provider,
     validate_external_identity_reference,
 )
 from .persistence import (
@@ -99,11 +100,7 @@ class ExternalIdentityRegistry:
         external_group: str,
         internal_role: str,
     ) -> dict[str, Any]:
-        validate_external_identity_reference(
-            provider=provider,
-            issuer=issuer,
-            subject="mapping-contract",
-        )
+        validate_external_identity_provider(provider=provider, issuer=issuer)
         validate_external_group(external_group)
         if internal_role not in ROLE_PERMISSIONS:
             raise ValueError("external role mapping targets an unknown role")
