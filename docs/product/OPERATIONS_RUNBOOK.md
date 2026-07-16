@@ -33,6 +33,14 @@ incident or routine restart. Emergency recovery requires an audited database cha
 stopped; changing the session-signing secret also changes identifier derivation and must follow the
 secret-rotation runbook once that procedure is released.
 
+## Session token compatibility
+
+The current runtime issues only context-bound `v2` bearer tokens. Deploying this build invalidates all
+legacy `v1` sessions by design; users must authenticate again after the upgrade. Do not add a silent
+`v1` verification fallback. The token signing key is derived from
+`VOODOO_SESSION_SIGNING_SECRET`, so rotating that secret also invalidates every current token and must
+be coordinated with operator access, emergency-stop state and the encrypted secret backup.
+
 ## Structured request logs
 
 Application request and authentication-security events are emitted as one-line JSON to stdout. Set
