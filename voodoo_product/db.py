@@ -65,6 +65,7 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "completed_at",
     },
     "receipts": {
+        "sequence",
         "id",
         "execution_id",
         "payload_json",

@@ -612,14 +612,19 @@ class ProductService:
         with self.db.connect() as connection:
             rows = connection.execute(sql.LIST_RECEIPTS_FOR_VERIFICATION).fetchall()
         previous_hash = "GENESIS"
-        for index, row in enumerate(rows, start=1):
+        for expected_sequence, row in enumerate(rows, start=1):
             payload = json.loads(row["payload_json"])
             expected = chained_hash(previous_hash, payload)
-            if row["previous_hash"] != previous_hash or row["receipt_hash"] != expected:
+            if (
+                int(row["sequence"]) != expected_sequence
+                or row["previous_hash"] != previous_hash
+                or row["receipt_hash"] != expected
+            ):
                 return {
                     "valid": False,
                     "count": len(rows),
-                    "broken_at": index,
+                    "broken_at": expected_sequence,
+                    "sequence": row["sequence"],
                     "receipt_id": row["id"],
                 }
             previous_hash = row["receipt_hash"]

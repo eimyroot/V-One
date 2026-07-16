@@ -31,6 +31,12 @@ the already-bound execution even when the original request has moved from `APPRO
 `COMPLETED`. A key bound to another request still fails closed. This ordering is part of the adapter
 contract and is covered by a deterministic concurrent regression test.
 
+Receipt order is owned by the database `sequence`, never by wall-clock timestamps or random IDs.
+Sequence assignment, receipt insertion and chain-head selection remain inside the globally serialized
+transaction. Verification requires contiguous sequence values as well as matching previous and
+computed hashes. Migration v3 reconstructs earlier ordering from the stored hash links and fails the
+whole migration when the history is disconnected or branched.
+
 Each adapter declares its write-serialization contract. SQLite currently declares `global`: every
 write transaction is serialized across the database. A future adapter must preserve this behavior
 until separate concurrency proofs exist for audit-chain heads, receipt-chain heads, approval state,

@@ -22,4 +22,5 @@ details in logs. Repository security advisories must be used once enabled by the
 - application SQL selected only from the reviewed statement catalog,
 - unavailable database dialects fail closed without SQL fallback,
 - untrusted HTTP hosts and inline browser execution denied by default,
+- receipt-chain order derived only from a monotonic database sequence,
 - audit and receipt integrity verified independently of liveness probes.

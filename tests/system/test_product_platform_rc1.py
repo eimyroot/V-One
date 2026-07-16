@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import voodoo_product.service as service_module
 from voodoo_product.api import install_product_platform
 from voodoo_product.config import ProductConfig
 
@@ -368,6 +370,68 @@ def test_receipt_tampering_is_detected(tmp_path: Path) -> None:
     verification = client.get("/api/v1/evidence/verify", headers=headers(admin))
     assert verification.status_code == 200
     assert verification.json()["receipts"]["valid"] is False
+
+
+def test_receipt_sequence_is_stable_when_timestamps_collide(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = build_client(tmp_path)
+    admin = bootstrap(client)
+    create_user(client, admin, "operator", "operator")
+    operator = login(client, "operator")
+    workspace = client.get("/api/v1/workspaces", headers=headers(admin)).json()[0]
+    service = client.app.state.voodoo_product_service
+    original_new_id = service_module.new_id
+    receipt_ids = iter(("rcpt_z", "rcpt_a"))
+
+    monkeypatch.setattr(
+        service_module,
+        "utc_now",
+        lambda: "2026-07-16T12:00:00.000+00:00",
+    )
+
+    def controlled_new_id(prefix: str) -> str:
+        return next(receipt_ids) if prefix == "rcpt" else original_new_id(prefix)
+
+    monkeypatch.setattr(service_module, "new_id", controlled_new_id)
+
+    for index in range(2):
+        request = client.post(
+            "/api/v1/change-requests",
+            headers=headers(admin),
+            json={
+                "workspace_id": workspace["id"],
+                "title": f"Receipt ordering {index}",
+                "risk": "R1",
+                "environment": "local",
+                "adapter": "echo",
+                "payload": {"index": index},
+            },
+        ).json()
+        client.post(f"/api/v1/change-requests/{request['id']}/submit", headers=headers(admin))
+        client.post(
+            f"/api/v1/change-requests/{request['id']}/decision",
+            headers=headers(operator),
+            json={"decision": "APPROVED", "reason": "receipt ordering regression"},
+        )
+        execution = client.post(
+            f"/api/v1/change-requests/{request['id']}/execute",
+            headers={**headers(operator), "Idempotency-Key": f"receipt-order-{index}"},
+        )
+        assert execution.status_code == 200, execution.text
+
+    receipts = service.list_receipts()
+    assert [(row["sequence"], row["id"]) for row in receipts] == [
+        (2, "rcpt_a"),
+        (1, "rcpt_z"),
+    ]
+    verification = service.verify_receipt_chain()
+    assert verification == {
+        "valid": True,
+        "count": 2,
+        "head": receipts[0]["receipt_hash"],
+    }
 
 
 def test_inactive_account_invalidates_existing_session(tmp_path: Path) -> None:

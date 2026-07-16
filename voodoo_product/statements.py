@@ -222,15 +222,15 @@ COUNT_EXECUTIONS_BY_STATUS = _read(
 
 LIST_RECEIPTS = _read(
     "receipts.list",
-    "SELECT * FROM receipts ORDER BY created_at DESC LIMIT ?",
+    "SELECT * FROM receipts ORDER BY sequence DESC LIMIT ?",
 )
 LIST_RECEIPTS_FOR_VERIFICATION = _read(
     "receipts.list_for_verification",
-    "SELECT * FROM receipts ORDER BY created_at, id",
+    "SELECT * FROM receipts ORDER BY sequence",
 )
 SELECT_RECEIPT_HEAD = _read(
     "receipts.select_head",
-    "SELECT receipt_hash FROM receipts ORDER BY created_at DESC, id DESC LIMIT 1",
+    "SELECT receipt_hash FROM receipts ORDER BY sequence DESC LIMIT 1",
 )
 INSERT_RECEIPT = _write(
     "receipts.insert",

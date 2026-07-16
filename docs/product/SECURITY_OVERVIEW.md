@@ -29,6 +29,7 @@
 - execution idempotency,
 - emergency stop,
 - hash-chained receipts and audit events,
+- database-sequenced receipt ordering independent of timestamps and random IDs,
 - non-root read-only Docker runtime with dropped capabilities.
 
 `VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
