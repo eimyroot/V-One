@@ -31,6 +31,10 @@ jobs:
         run: python -m ruff check .
       - name: Compile
         run: python -m compileall -q voodoo_product scripts tests
+      - name: Migration regression gate
+        run: python -m pytest tests/system/test_database_migrations.py -q
+      - name: External identity binding gate
+        run: python -m pytest tests/system/test_external_identity_binding.py -q
       - name: Test
         run: python -m pytest -q
       - name: Product readiness gate
