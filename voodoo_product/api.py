@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -127,8 +127,14 @@ def create_product_router(
         return dependency
 
     @router.get("/health")
-    def health() -> dict[str, Any]:
-        return service.health()
+    def health() -> JSONResponse:
+        payload = service.health()
+        status_code = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if payload["status"] == "UNAVAILABLE"
+            else status.HTTP_200_OK
+        )
+        return JSONResponse(status_code=status_code, content=payload)
 
     @router.get("/bootstrap/status")
     def bootstrap_status() -> dict[str, Any]:

@@ -21,6 +21,7 @@ class ProductConfig:
     sandbox_root: Path
     session_signing_secret: str
     bootstrap_token: str
+    database_backend: str = "sqlite"
     token_ttl_seconds: int = 3_600
     auth_max_failures: int = 5
     auth_source_max_failures: int = 20
@@ -33,6 +34,8 @@ class ProductConfig:
     def __post_init__(self) -> None:
         if self.environment not in {"local", "development", "staging", "test", "production"}:
             raise ValueError("VOODOO_ENV is invalid")
+        if self.database_backend not in {"sqlite", "postgresql"}:
+            raise ValueError("VOODOO_DATABASE_BACKEND is invalid")
         if len(self.session_signing_secret.encode("utf-8")) < 32:
             raise ValueError("session signing secret must contain at least 32 bytes")
         if len(self.bootstrap_token.encode("utf-8")) < 24:
@@ -99,6 +102,7 @@ class ProductConfig:
             sandbox_root=sandbox_root,
             session_signing_secret=signing_secret,
             bootstrap_token=bootstrap_token,
+            database_backend=os.getenv("VOODOO_DATABASE_BACKEND", "sqlite").strip().lower(),
             token_ttl_seconds=int(os.getenv("VOODOO_TOKEN_TTL_SECONDS", "3600")),
             auth_max_failures=int(os.getenv("VOODOO_AUTH_MAX_FAILURES", "5")),
             auth_source_max_failures=int(os.getenv("VOODOO_AUTH_SOURCE_MAX_FAILURES", "20")),

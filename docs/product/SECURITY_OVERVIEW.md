@@ -7,6 +7,7 @@
 - `scrypt` password hashing with per-user salt,
 - HMAC-signed expiring sessions,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
+- ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
 - generic authentication failures with `Retry-After` on temporary lockout,
 - structured request/authentication events that exclude bodies, headers, query strings, raw paths, IP addresses and account identifiers,
 - validated request correlation IDs returned through `X-Request-ID`,
@@ -23,6 +24,10 @@
 - emergency stop,
 - hash-chained receipts and audit events,
 - non-root read-only Docker runtime with dropped capabilities.
+
+`VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
+startup before the service accepts traffic. This prevents a SQLite-specific service layer from being
+misrepresented as production-ready PostgreSQL support.
 
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the
