@@ -133,9 +133,11 @@ REQUIRED_TRIGGERS = {
     "trg_workspaces_environment_update_valid",
     "trg_workspaces_environment_immutable",
     "trg_executions_environment_insert",
+    "trg_external_identity_binding_admin_creator",
     "trg_external_identity_binding_active_user",
     "trg_external_identity_binding_immutable_update",
     "trg_external_identity_binding_immutable_delete",
+    "trg_external_role_mapping_admin_creator",
     "trg_external_role_mapping_immutable_update",
     "trg_external_role_mapping_immutable_delete",
 }
