@@ -1,0 +1,20 @@
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "S", "UP", "B", "SIM"]
+ignore = [
+  "B008",  # FastAPI dependency injection uses Depends in parameter defaults
+  "E501",  # formatter cannot safely wrap SQL and evidence strings
+  "S101",  # assert is expected in tests
+  "S603",  # subprocess uses a fixed allowlist and shell=False
+  "S607",  # allowlisted npm executable is resolved by a constrained PATH
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S107"]

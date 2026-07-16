@@ -1,0 +1,52 @@
+name: release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer release candidate, for example 0.9.0-rc2
+        required: true
+        type: string
+      confirmation:
+        description: Type BUILD_RC to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: inputs.confirmation == 'BUILD_RC'
+    environment: release-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.13"
+      - name: Install locked dependencies
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Verify release candidate
+        run: |
+          python -m ruff check .
+          python -m pytest -q
+          python scripts/product_readiness_gate.py
+          python -m pip_audit -r requirements-product.lock --require-hashes
+      - name: Build source archive and checksums
+        env:
+          RC_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="v-one-${RC_VERSION}/" -o "dist/v-one-${RC_VERSION}.tar.gz" HEAD
+          sha256sum "dist/v-one-${RC_VERSION}.tar.gz" > "dist/SHA256SUMS.txt"
+          python -m pip_audit -r requirements-product.lock -f cyclonedx-json -o dist/sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v-one-${{ inputs.version }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

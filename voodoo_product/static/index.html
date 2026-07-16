@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VOODOO One</title>
+  <link rel="stylesheet" href="/console/assets/styles.css" />
+</head>
+<body>
+  <div id="auth-screen" class="auth-shell">
+    <section class="auth-card">
+      <div class="brand-mark">V1</div>
+      <h1>VOODOO One</h1>
+      <p>Governed AI Operations Control Plane</p>
+      <form id="login-form">
+        <label>Uživatel<input id="login-username" autocomplete="username" required /></label>
+        <label>Heslo<input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Přihlásit</button>
+      </form>
+      <details id="bootstrap-panel">
+        <summary>První spuštění</summary>
+        <form id="bootstrap-form">
+          <label>Admin uživatel<input id="bootstrap-username" value="admin" required /></label>
+          <label>Admin heslo<input id="bootstrap-password" type="password" minlength="12" required /></label>
+          <label>Bootstrap token<input id="bootstrap-token" type="password" required /></label>
+          <button type="submit">Inicializovat platformu</button>
+        </form>
+      </details>
+      <div id="auth-error" class="error"></div>
+    </section>
+  </div>
+
+  <div id="app-shell" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark small">V1</span><strong>VOODOO One</strong></div>
+      <div class="context"><span id="environment-badge">LOCAL</span><span id="health-badge">UNKNOWN</span></div>
+      <div class="user"><span id="current-user"></span><button id="logout-button" class="secondary">Odhlásit</button></div>
+    </header>
+    <aside class="sidebar">
+      <button data-view="command" class="nav active">Command Center</button>
+      <button data-view="changes" class="nav">Change Requests</button>
+      <button data-view="approvals" class="nav">Approvals</button>
+      <button data-view="executions" class="nav">Executions</button>
+      <button data-view="evidence" class="nav">Evidence</button>
+      <button data-view="health" class="nav">System Health</button>
+    </aside>
+    <main class="workspace">
+      <section id="view-command" class="view active">
+        <div class="page-head"><div><h1>Command Center</h1><p>Aktuální stav řízených operací.</p></div><button data-refresh="command">Obnovit</button></div>
+        <div id="command-kpis" class="kpi-grid"></div>
+        <div class="grid-two"><article class="panel"><h2>Riziko</h2><div id="risk-overview"></div></article><article class="panel"><h2>Integrita</h2><div id="integrity-overview"></div></article></div>
+      </section>
+
+      <section id="view-changes" class="view">
+        <div class="page-head"><div><h1>Change Requests</h1><p>Požadavek → review → execution → evidence.</p></div><button id="new-change-button">Nový požadavek</button></div>
+        <div id="change-form-panel" class="panel hidden">
+          <form id="change-form" class="form-grid">
+            <label>Workspace<select id="change-workspace" required></select></label>
+            <label>Název<input id="change-title" required /></label>
+            <label>Riziko<select id="change-risk"><option>R0</option><option selected>R1</option><option>R2</option><option>R3</option><option>R4</option></select></label>
+            <label>Environment<select id="change-environment"><option>local</option><option>development</option><option>staging</option><option>production</option></select></label>
+            <label>Adapter<select id="change-adapter"><option>echo</option><option>write_artifact</option><option>run_validation</option></select></label>
+            <label class="wide">Popis<textarea id="change-description"></textarea></label>
+            <label class="wide">Payload JSON<textarea id="change-payload">{"message":"VOODOO One ready"}</textarea></label>
+            <div class="wide actions"><button type="submit">Vytvořit</button><button type="button" id="cancel-change-button" class="secondary">Zrušit</button></div>
+          </form>
+        </div>
+        <div class="panel table-panel"><table><thead><tr><th>Risk</th><th>Request</th><th>Environment</th><th>Adapter</th><th>Status</th><th>Approval</th><th>Akce</th></tr></thead><tbody id="changes-table"></tbody></table></div>
+      </section>
+
+      <section id="view-approvals" class="view">
+        <div class="page-head"><div><h1>Approvals</h1><p>Jeden centralizovaný approval inbox.</p></div><button data-refresh="approvals">Obnovit</button></div>
+        <div id="approvals-list" class="cards"></div>
+      </section>
+
+      <section id="view-executions" class="view">
+        <div class="page-head"><div><h1>Executions</h1><p>Skutečně provedené řízené operace.</p></div><button data-refresh="executions">Obnovit</button></div>
+        <div class="panel table-panel"><table><thead><tr><th>Status</th><th>Execution</th><th>Request</th><th>Risk</th><th>Environment</th><th>Adapter</th><th>Receipt</th></tr></thead><tbody id="executions-table"></tbody></table></div>
+      </section>
+
+      <section id="view-evidence" class="view">
+        <div class="page-head"><div><h1>Evidence</h1><p>Hash-chain receipts a auditní integrita.</p></div><button data-refresh="evidence">Ověřit</button></div>
+        <div id="evidence-summary" class="kpi-grid"></div><div id="receipts-list" class="cards"></div>
+      </section>
+
+      <section id="view-health" class="view">
+        <div class="page-head"><div><h1>System Health</h1><p>Runtime, databáze, evidence a bezpečnostní stav.</p></div><button data-refresh="health">Obnovit</button></div>
+        <article class="panel"><pre id="health-json"></pre></article>
+        <article class="panel danger-zone"><h2>Emergency control</h2><p>Zastaví nové execution operace a vytvoří auditní událost.</p><input id="stop-reason" placeholder="Povinný důvod" /><button id="activate-stop" class="danger">Aktivovat emergency stop</button><button id="clear-stop" class="secondary">Zrušit emergency stop</button></article>
+      </section>
+    </main>
+    <div id="toast" class="toast hidden"></div>
+  </div>
+  <script src="/console/assets/app.js" defer></script>
+</body>
+</html>
