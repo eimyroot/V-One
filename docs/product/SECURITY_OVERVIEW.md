@@ -5,7 +5,7 @@
 - no hardcoded authentication secret,
 - generated local secrets stored outside Git,
 - `scrypt` password hashing with per-user salt,
-- HMAC-signed expiring sessions,
+- context-bound v2 sessions signed with a purpose-derived HMAC key,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
 - immutable named application statements with explicit read/write modes and no dynamic service SQL,
@@ -44,6 +44,12 @@ independent concurrency proofs.
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the
 container health probe.
+
+Bearer tokens use version `v2`, fixed issuer and audience claims, bounded claim types and lifetime,
+and a signing key derived from the runtime root secret under a session-token-specific context. The
+raw root secret is not used directly as the token signing key. Legacy `v1` tokens fail closed after
+upgrade, so operators must expect all existing console and API sessions to authenticate again. The
+runtime still revalidates active account state and the current database role on every request.
 
 The application derives the authentication source from the ASGI server's client address and does
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
