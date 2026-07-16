@@ -16,3 +16,6 @@
 - Added correlated JSON request and authentication security events with an explicit field allowlist.
 - Disabled raw Uvicorn access logs in supported start commands to prevent duplicate IP/URL logging.
 - Made CI and release vulnerability audits consume the fully hashed lock without implicit pip resolution.
+- Replaced implicit SQLite schema creation with ordered, atomic migrations recorded with SHA-256 checksums.
+- Added schema, index and integrity validation plus a fail-closed startup boundary for unreleased PostgreSQL support.
+- Made database-unavailable health responses return HTTP 503 for correct orchestrator detection.

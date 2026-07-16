@@ -56,9 +56,31 @@ set +a
 .venv/bin/python scripts/product_readiness_gate.py
 ```
 
+## Database migrations
+
+SQLite migrations run automatically and atomically before the application starts accepting traffic.
+The health response must report `database_backend: sqlite` and `schema_version: 2`. Never edit an
+applied migration: its SHA-256 checksum is part of the database history and drift blocks startup.
+Database unavailability or migration-history drift returns HTTP `503`, which makes the container
+healthcheck fail instead of reporting a false-positive HTTP success.
+
+For an upgrade:
+
+1. Activate emergency stop and stop every application process so that no writer remains.
+2. Copy the database, `-wal` and `-shm` files as one consistent backup set.
+3. Deploy the new immutable application artifact while keeping production effects disabled.
+4. Start exactly one instance and wait for migration completion.
+5. Verify `/api/v1/health` reports `HEALTHY`, `sqlite`, schema version `2`, and production effects
+   `DISABLED`.
+6. Run the authenticated `/api/v1/evidence/verify` operation, then start the remaining instances.
+
+Migrations are forward-only. Rolling back application code does not downgrade the database. Use the
+pre-migration backup if the previous binary cannot operate against the new schema. The complete
+contract and failure handling are documented in `docs/product/DATABASE_MIGRATIONS.md`.
+
 ## Backup
 
-Stop writes or activate emergency stop, then copy:
+Stop every application process after activating emergency stop, then copy:
 
 ```text
 storage/product/voodoo_one.sqlite3

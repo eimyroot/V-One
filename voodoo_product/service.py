@@ -12,7 +12,7 @@ from typing import Any
 
 from .adapters import AdapterContext, AdapterError, execute_adapter
 from .config import ProductConfig
-from .db import ProductDatabase
+from .db import DatabaseMigrationError, create_product_database
 from .security import hash_password, verify_password
 
 VALID_ROLES = {
@@ -58,7 +58,10 @@ def row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
 class ProductService:
     def __init__(self, config: ProductConfig):
         self.config = config
-        self.db = ProductDatabase(config.database_path)
+        self.db = create_product_database(
+            backend=config.database_backend,
+            path=config.database_path,
+        )
         self.db.initialize()
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
         self._dummy_password_hash = hash_password(
@@ -758,13 +761,19 @@ class ProductService:
             return {
                 "status": "EMERGENCY_STOP" if stop else "HEALTHY",
                 "database": "HEALTHY",
+                "database_backend": self.db.backend_name,
+                "schema_version": self.db.schema_version(),
                 "evidence_integrity": "NOT_CHECKED_BY_LIVENESS",
                 "production_effects": "ENABLED"
                 if self.config.production_effects_enabled
                 else "DISABLED",
             }
-        except sqlite3.Error as exc:
-            return {"status": "UNAVAILABLE", "database": "UNAVAILABLE", "detail": str(exc)}
+        except (sqlite3.Error, DatabaseMigrationError):
+            return {
+                "status": "UNAVAILABLE",
+                "database": "UNAVAILABLE",
+                "database_backend": self.db.backend_name,
+            }
 
     def _append_audit(
         self,
