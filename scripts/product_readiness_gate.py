@@ -17,11 +17,13 @@ REQUIRED = [
     "voodoo_product/observability.py",
     "voodoo_product/persistence.py",
     "voodoo_product/service.py",
+    "voodoo_product/statements.py",
     "voodoo_product/security.py",
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
     "tests/system/test_database_migrations.py",
     "tests/system/test_persistence_boundary.py",
+    "tests/system/test_statement_catalog.py",
     "tests/system/test_observability.py",
     "tests/system/test_product_platform_rc1.py",
     ".env.product.example",
@@ -34,6 +36,7 @@ REQUIRED = [
     "SECURITY.md",
     "docs/product/DATABASE_MIGRATIONS.md",
     "docs/product/PERSISTENCE_BOUNDARY.md",
+    "docs/product/STATEMENT_CATALOG.md",
 ]
 
 

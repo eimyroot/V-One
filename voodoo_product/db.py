@@ -17,8 +17,10 @@ from .persistence import (
     DatabaseIntegrityError,
     DatabaseMigrationError,
     DatabaseOperationError,
+    DatabaseStatement,
     ProductDatabaseAdapter,
     QueryParameters,
+    SQLInput,
 )
 
 MIGRATION_PATTERN = re.compile(r"^(?P<version>[0-9]{4})_[a-z0-9_]+\.sql$")
@@ -161,11 +163,16 @@ class SQLiteConnection:
 
     def execute(
         self,
-        sql: str,
+        statement: SQLInput,
         parameters: QueryParameters = (),
         /,
     ) -> sqlite3.Cursor:
         self._require_open()
+        sql = (
+            statement.for_backend("sqlite")
+            if isinstance(statement, DatabaseStatement)
+            else statement
+        )
         try:
             return self._connection.execute(sql, parameters)
         except sqlite3.IntegrityError as exc:
@@ -231,6 +238,7 @@ class SQLiteConnection:
 
 class SQLiteProductDatabase:
     backend_name = "sqlite"
+    write_serialization = "global"
 
     def __init__(self, path: Path, *, migration_directory: Path = DEFAULT_MIGRATION_DIRECTORY):
         self.path = Path(path)

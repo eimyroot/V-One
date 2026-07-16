@@ -8,6 +8,8 @@
 - HMAC-signed expiring sessions,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
+- immutable named application statements with explicit read/write modes and no dynamic service SQL,
+- fail-closed statement resolution when a backend dialect is absent or unknown,
 - normalized persistence errors that exclude SQL, schema names, credentials and driver diagnostics,
 - generic authentication failures with `Retry-After` on temporary lockout,
 - structured request/authentication events that exclude bodies, headers, query strings, raw paths, IP addresses and account identifiers,
@@ -28,7 +30,9 @@
 
 `VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
 startup before the service accepts traffic. This prevents a SQLite-specific service layer from being
-misrepresented as production-ready PostgreSQL support.
+misrepresented as production-ready PostgreSQL support. The statement catalog has no cross-dialect
+fallback, and a future adapter must preserve global write serialization until narrower locking has
+independent concurrency proofs.
 
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the

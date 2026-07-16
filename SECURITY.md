@@ -19,4 +19,6 @@ details in logs. Repository security advisories must be used once enabled by the
 - filesystem effects confined to a governed sandbox,
 - secrets supplied at runtime and never committed,
 - production effects disabled unless explicitly released,
+- application SQL selected only from the reviewed statement catalog,
+- unavailable database dialects fail closed without SQL fallback,
 - audit and receipt integrity verified independently of liveness probes.

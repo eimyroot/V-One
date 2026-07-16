@@ -21,3 +21,5 @@
 - Made database-unavailable health responses return HTTP 503 for correct orchestrator detection.
 - Isolated backend connections and errors behind a tested persistence protocol without enabling PostgreSQL.
 - Closed bounded database connections deterministically and hardened concurrent SQLite WAL startup.
+- Centralized all application SQL in an immutable, classified statement catalog with no dynamic service SQL.
+- Added fail-closed per-dialect statement selection while keeping PostgreSQL and production effects disabled.

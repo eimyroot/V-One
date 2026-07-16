@@ -60,4 +60,5 @@ testing remain enterprise-release gates. Until those controls pass, PostgreSQL s
 
 The backend-independent connection and error contract is documented in
 `docs/product/PERSISTENCE_BOUNDARY.md`. It isolates the current SQLite adapter but deliberately does
-not translate or claim portability for application SQL.
+not claim released PostgreSQL support. Application SQL ownership and the per-dialect fail-closed gate
+are documented in `docs/product/STATEMENT_CATALOG.md`.
