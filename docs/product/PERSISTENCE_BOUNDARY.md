@@ -7,9 +7,11 @@
 backend-specific integrity errors. The configured adapter owns connection creation, transaction
 boundaries, error normalization, schema initialization and schema-version reporting.
 
-SQLite remains the only released adapter. The application queries still use SQLite parameter markers
-and SQLite-compatible conflict syntax. This boundary is therefore backend-isolated but not yet
-dialect-neutral, and it must not be represented as PostgreSQL support.
+Application database calls use the immutable, backend-owned statement catalog in
+`voodoo_product/statements.py`. SQLite remains the only released dialect in that catalog. PostgreSQL
+SQL is intentionally absent, so attempting to resolve any application statement for PostgreSQL fails
+closed instead of executing SQLite syntax against a different driver. This boundary must not be
+represented as PostgreSQL support.
 
 ## Connection ownership
 
@@ -23,12 +25,19 @@ and rolls back on every exception. The SQLite adapter retains `BEGIN IMMEDIATE`,
 synchronous writes, foreign-key enforcement and a bounded busy timeout. Initial WAL activation uses a
 bounded retry for the SQLite-specific concurrent-start lock condition.
 
+Each adapter declares its write-serialization contract. SQLite currently declares `global`: every
+write transaction is serialized across the database. A future adapter must preserve this behavior
+until separate concurrency proofs exist for audit-chain heads, receipt-chain heads, approval state,
+execution idempotency and authentication rate limits. PostgreSQL can satisfy the initial contract with
+a transaction-scoped global advisory lock; weakening it is a separate reviewed change.
+
 ## Error contract
 
 Adapters translate backend exceptions into:
 
 - `DatabaseIntegrityError` for constraint violations,
 - `DatabaseOperationError` for other connection or statement failures,
+- `DatabaseStatementError` when a named statement is invalid or unavailable for a backend,
 - `DatabaseMigrationError` for migration and schema failures,
 - `DatabaseBackendError` for unsupported or unsafe backend selection.
 
@@ -38,7 +47,8 @@ controlled internal debugging; it must not be returned by the public API or emit
 
 ## PostgreSQL gate
 
-A PostgreSQL release requires a PostgreSQL implementation of this contract, a separate migration set,
-dialect-neutral statements or repositories, bounded pooling, TLS and credential configuration,
-classified retry behavior, and integration tests against the supported server version. Until every
-gate passes, selecting PostgreSQL continues to abort startup.
+A PostgreSQL release requires a PostgreSQL implementation of this contract, a complete reviewed SQL
+definition for every catalog statement, a separate migration set, globally serialized writes,
+bounded pooling, TLS and credential configuration, classified retry behavior, and integration tests
+against the supported server version. Until every gate passes, selecting PostgreSQL continues to
+abort startup.

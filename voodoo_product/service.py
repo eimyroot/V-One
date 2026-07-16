@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import statements as sql
 from .adapters import AdapterContext, AdapterError, execute_adapter
 from .config import ProductConfig
 from .db import create_product_database
@@ -85,25 +86,25 @@ class ProductService:
 
     def has_users(self) -> bool:
         with self.db.connect() as connection:
-            row = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+            row = connection.execute(sql.COUNT_USERS).fetchone()
             return bool(row and int(row["count"]) > 0)
 
     def bootstrap_admin(self, *, username: str, password: str, token: str) -> dict[str, Any]:
         if not secrets.compare_digest(token, self.config.bootstrap_token):
             raise PermissionError("invalid bootstrap token")
         with self.db.transaction() as connection:
-            count = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+            count = connection.execute(sql.COUNT_USERS).fetchone()
             if count and int(count["count"]) > 0:
                 raise RuntimeError("bootstrap is already closed")
             user_id = new_id("usr")
             workspace_id = new_id("wrk")
             now = utc_now()
             connection.execute(
-                "INSERT INTO users(id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                sql.INSERT_USER,
                 (user_id, username.strip(), hash_password(password), "administrator", now),
             )
             connection.execute(
-                "INSERT INTO workspaces(id, name, environment, created_at) VALUES (?, ?, ?, ?)",
+                sql.INSERT_WORKSPACE,
                 (workspace_id, "VOODOO Production", "production", now),
             )
             self._append_audit(
@@ -137,7 +138,7 @@ class ProductService:
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
         with self.db.connect() as connection:
             row = connection.execute(
-                "SELECT id, username, password_hash, role, active FROM users WHERE username = ?",
+                sql.SELECT_USER_FOR_AUTH,
                 (username.strip(),),
             ).fetchone()
         encoded_password = (
@@ -174,10 +175,7 @@ class ProductService:
             for scope, value, _ in entries:
                 key_hash = self._auth_rate_limit_key(scope=scope, value=value)
                 row = connection.execute(
-                    """
-                    SELECT failure_count, window_started_at, blocked_until
-                    FROM auth_rate_limits WHERE scope = ? AND key_hash = ?
-                    """,
+                    sql.SELECT_AUTH_RATE_LIMIT,
                     (scope, key_hash),
                 ).fetchone()
                 if row is None:
@@ -191,7 +189,7 @@ class ProductService:
                 )
                 if blocked_until > 0 or window_expired:
                     connection.execute(
-                        "DELETE FROM auth_rate_limits WHERE scope = ? AND key_hash = ?",
+                        sql.DELETE_AUTH_RATE_LIMIT,
                         (scope, key_hash),
                     )
         if retry_after:
@@ -203,16 +201,13 @@ class ProductService:
         retention = max(self.config.auth_window_seconds, self.config.auth_lockout_seconds) * 2
         with self.db.transaction() as connection:
             connection.execute(
-                "DELETE FROM auth_rate_limits WHERE updated_at < ?",
+                sql.DELETE_EXPIRED_AUTH_RATE_LIMITS,
                 (now - retention,),
             )
             for scope, value, maximum in entries:
                 key_hash = self._auth_rate_limit_key(scope=scope, value=value)
                 row = connection.execute(
-                    """
-                    SELECT failure_count, window_started_at, blocked_until
-                    FROM auth_rate_limits WHERE scope = ? AND key_hash = ?
-                    """,
+                    sql.SELECT_AUTH_RATE_LIMIT,
                     (scope, key_hash),
                 ).fetchone()
                 if row is not None and int(row["blocked_until"]) > now:
@@ -232,16 +227,7 @@ class ProductService:
                     now + self.config.auth_lockout_seconds if failure_count >= maximum else 0
                 )
                 connection.execute(
-                    """
-                    INSERT INTO auth_rate_limits(
-                        scope, key_hash, failure_count, window_started_at, blocked_until, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(scope, key_hash) DO UPDATE SET
-                        failure_count = excluded.failure_count,
-                        window_started_at = excluded.window_started_at,
-                        blocked_until = excluded.blocked_until,
-                        updated_at = excluded.updated_at
-                    """,
+                    sql.UPSERT_AUTH_RATE_LIMIT,
                     (scope, key_hash, failure_count, window_started_at, blocked_until, now),
                 )
                 if blocked_until > now:
@@ -253,14 +239,14 @@ class ProductService:
         with self.db.transaction() as connection:
             for scope, value, _ in entries:
                 connection.execute(
-                    "DELETE FROM auth_rate_limits WHERE scope = ? AND key_hash = ?",
+                    sql.DELETE_AUTH_RATE_LIMIT,
                     (scope, self._auth_rate_limit_key(scope=scope, value=value)),
                 )
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         with self.db.connect() as connection:
             row = connection.execute(
-                "SELECT id, username, role, active FROM users WHERE id = ?",
+                sql.SELECT_ACTIVE_USER,
                 (user_id,),
             ).fetchone()
         if row is None or not int(row["active"]):
@@ -283,7 +269,7 @@ class ProductService:
         with self.db.transaction() as connection:
             try:
                 connection.execute(
-                    "INSERT INTO users(id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                    sql.INSERT_USER,
                     (user_id, username.strip(), hash_password(password), role, now),
                 )
             except DatabaseIntegrityError as exc:
@@ -300,9 +286,7 @@ class ProductService:
 
     def list_workspaces(self) -> list[dict[str, Any]]:
         with self.db.connect() as connection:
-            rows = connection.execute(
-                "SELECT id, name, environment, created_at FROM workspaces ORDER BY name"
-            ).fetchall()
+            rows = connection.execute(sql.LIST_WORKSPACES).fetchall()
         return [dict(row) for row in rows]
 
     def create_workspace(self, *, actor_id: str, name: str, environment: str) -> dict[str, Any]:
@@ -312,7 +296,7 @@ class ProductService:
         now = utc_now()
         with self.db.transaction() as connection:
             connection.execute(
-                "INSERT INTO workspaces(id, name, environment, created_at) VALUES (?, ?, ?, ?)",
+                sql.INSERT_WORKSPACE,
                 (workspace_id, name.strip(), environment, now),
             )
             self._append_audit(
@@ -349,18 +333,11 @@ class ProductService:
         request_id = new_id("cr")
         now = utc_now()
         with self.db.transaction() as connection:
-            workspace = connection.execute(
-                "SELECT id FROM workspaces WHERE id = ?", (workspace_id,)
-            ).fetchone()
+            workspace = connection.execute(sql.SELECT_WORKSPACE_ID, (workspace_id,)).fetchone()
             if workspace is None:
                 raise LookupError("workspace not found")
             connection.execute(
-                """
-                INSERT INTO change_requests(
-                    id, workspace_id, title, description, risk, environment,
-                    adapter, payload_json, status, requested_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)
-                """,
+                sql.INSERT_CHANGE_REQUEST,
                 (
                     request_id,
                     workspace_id,
@@ -388,13 +365,7 @@ class ProductService:
     def list_change_requests(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self.db.connect() as connection:
             rows = connection.execute(
-                """
-                SELECT cr.*, u.username AS requested_by_username,
-                       (SELECT COUNT(*) FROM approvals a WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approval_count
-                FROM change_requests cr
-                JOIN users u ON u.id = cr.requested_by
-                ORDER BY cr.updated_at DESC LIMIT ?
-                """,
+                sql.LIST_CHANGE_REQUESTS,
                 (max(1, min(limit, 500)),),
             ).fetchall()
         return [self._decode_change_request(dict(row)) for row in rows]
@@ -402,12 +373,7 @@ class ProductService:
     def get_change_request(self, request_id: str) -> dict[str, Any]:
         with self.db.connect() as connection:
             row = connection.execute(
-                """
-                SELECT cr.*, u.username AS requested_by_username,
-                       (SELECT COUNT(*) FROM approvals a WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approval_count
-                FROM change_requests cr JOIN users u ON u.id = cr.requested_by
-                WHERE cr.id = ?
-                """,
+                sql.GET_CHANGE_REQUEST,
                 (request_id,),
             ).fetchone()
         if row is None:
@@ -416,16 +382,14 @@ class ProductService:
 
     def submit_change_request(self, *, actor_id: str, request_id: str) -> dict[str, Any]:
         with self.db.transaction() as connection:
-            row = connection.execute(
-                "SELECT status FROM change_requests WHERE id = ?", (request_id,)
-            ).fetchone()
+            row = connection.execute(sql.SELECT_CHANGE_REQUEST_STATUS, (request_id,)).fetchone()
             if row is None:
                 raise LookupError("change request not found")
             if row["status"] != "DRAFT":
                 raise RuntimeError("only a draft can be submitted")
             now = utc_now()
             connection.execute(
-                "UPDATE change_requests SET status = 'REVIEW_REQUIRED', updated_at = ? WHERE id = ?",
+                sql.MARK_CHANGE_REQUEST_SUBMITTED,
                 (now, request_id),
             )
             self._append_audit(
@@ -451,7 +415,7 @@ class ProductService:
             raise ValueError("decision must be APPROVED or DENIED")
         with self.db.transaction() as connection:
             request_row = connection.execute(
-                "SELECT status, environment, requested_by FROM change_requests WHERE id = ?",
+                sql.SELECT_CHANGE_REQUEST_APPROVAL_CONTEXT,
                 (request_id,),
             ).fetchone()
             if request_row is None:
@@ -464,7 +428,7 @@ class ProductService:
             now = utc_now()
             try:
                 connection.execute(
-                    "INSERT INTO approvals(id, request_id, approver_id, decision, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    sql.INSERT_APPROVAL,
                     (approval_id, request_id, actor_id, decision, reason.strip(), now),
                 )
             except DatabaseIntegrityError as exc:
@@ -474,13 +438,13 @@ class ProductService:
                 next_status = "DENIED"
             else:
                 approved_count = connection.execute(
-                    "SELECT COUNT(*) AS count FROM approvals WHERE request_id = ? AND decision = 'APPROVED'",
+                    sql.COUNT_APPROVED,
                     (request_id,),
                 ).fetchone()["count"]
                 required = 2 if request_row["environment"] == "production" else 1
                 next_status = "APPROVED" if int(approved_count) >= required else "REVIEW_REQUIRED"
             connection.execute(
-                "UPDATE change_requests SET status = ?, updated_at = ? WHERE id = ?",
+                sql.UPDATE_CHANGE_REQUEST_STATUS,
                 (next_status, now, request_id),
             )
             self._append_audit(
@@ -494,19 +458,10 @@ class ProductService:
         return self.get_change_request(request_id)
 
     def list_approvals(self, *, pending_only: bool = False) -> list[dict[str, Any]]:
-        query = """
-            SELECT cr.id AS request_id, cr.title, cr.risk, cr.environment, cr.status,
-                   cr.updated_at, u.username AS requested_by,
-                   (SELECT COUNT(*) FROM approvals a WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count,
-                   CASE WHEN cr.environment = 'production' THEN 2 ELSE 1 END AS required_count
-            FROM change_requests cr JOIN users u ON u.id = cr.requested_by
-        """
-        params: tuple[Any, ...] = ()
-        if pending_only:
-            query += " WHERE cr.status = 'REVIEW_REQUIRED'"
-        query += " ORDER BY cr.updated_at DESC"
         with self.db.connect() as connection:
-            rows = connection.execute(query, params).fetchall()
+            rows = connection.execute(
+                sql.LIST_PENDING_APPROVALS if pending_only else sql.LIST_APPROVALS
+            ).fetchall()
         return [dict(row) for row in rows]
 
     def execute_change_request(
@@ -520,7 +475,7 @@ class ProductService:
         if idempotency_key:
             with self.db.connect() as read_connection:
                 existing = read_connection.execute(
-                    "SELECT id, request_id FROM executions WHERE idempotency_key = ?",
+                    sql.SELECT_EXECUTION_BY_IDEMPOTENCY_KEY,
                     (idempotency_key,),
                 ).fetchone()
             if existing is not None:
@@ -532,7 +487,7 @@ class ProductService:
             if self._emergency_stop(connection):
                 raise PermissionError("emergency stop is active")
             request_row = connection.execute(
-                "SELECT * FROM change_requests WHERE id = ?", (request_id,)
+                sql.SELECT_CHANGE_REQUEST_FOR_EXECUTION, (request_id,)
             ).fetchone()
             if request_row is None:
                 raise LookupError("change request not found")
@@ -546,14 +501,11 @@ class ProductService:
             execution_id = new_id("exec")
             now = utc_now()
             connection.execute(
-                """
-                INSERT INTO executions(id, request_id, status, adapter, output_json, idempotency_key, started_at)
-                VALUES (?, ?, 'RUNNING', ?, '{}', ?, ?)
-                """,
+                sql.INSERT_EXECUTION,
                 (execution_id, request_id, request_row["adapter"], idempotency_key, now),
             )
             connection.execute(
-                "UPDATE change_requests SET status = 'RUNNING', updated_at = ? WHERE id = ?",
+                sql.MARK_CHANGE_REQUEST_RUNNING,
                 (now, request_id),
             )
             self._append_audit(
@@ -587,12 +539,12 @@ class ProductService:
         with self.db.transaction() as connection:
             completed_at = utc_now()
             connection.execute(
-                "UPDATE executions SET status = ?, output_json = ?, error = ?, completed_at = ? WHERE id = ?",
+                sql.COMPLETE_EXECUTION,
                 (status, canonical_json(output), error, completed_at, execution_id),
             )
             request_status = "COMPLETED" if status == "SUCCEEDED" else "FAILED"
             connection.execute(
-                "UPDATE change_requests SET status = ?, updated_at = ? WHERE id = ?",
+                sql.MARK_CHANGE_REQUEST_COMPLETED,
                 (request_status, completed_at, request_id),
             )
             receipt = self._append_receipt(
@@ -626,14 +578,7 @@ class ProductService:
     def list_executions(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self.db.connect() as connection:
             rows = connection.execute(
-                """
-                SELECT e.*, cr.title, cr.risk, cr.environment, cr.workspace_id,
-                       r.id AS receipt_id, r.receipt_hash
-                FROM executions e
-                JOIN change_requests cr ON cr.id = e.request_id
-                LEFT JOIN receipts r ON r.execution_id = e.id
-                ORDER BY e.started_at DESC LIMIT ?
-                """,
+                sql.LIST_EXECUTIONS,
                 (max(1, min(limit, 500)),),
             ).fetchall()
         return [self._decode_execution(dict(row)) for row in rows]
@@ -641,14 +586,7 @@ class ProductService:
     def get_execution(self, execution_id: str) -> dict[str, Any]:
         with self.db.connect() as connection:
             row = connection.execute(
-                """
-                SELECT e.*, cr.title, cr.risk, cr.environment, cr.workspace_id,
-                       r.id AS receipt_id, r.receipt_hash
-                FROM executions e
-                JOIN change_requests cr ON cr.id = e.request_id
-                LEFT JOIN receipts r ON r.execution_id = e.id
-                WHERE e.id = ?
-                """,
+                sql.GET_EXECUTION,
                 (execution_id,),
             ).fetchone()
         if row is None:
@@ -658,14 +596,14 @@ class ProductService:
     def list_receipts(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self.db.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM receipts ORDER BY created_at DESC LIMIT ?",
+                sql.LIST_RECEIPTS,
                 (max(1, min(limit, 500)),),
             ).fetchall()
         return [self._decode_receipt(dict(row)) for row in rows]
 
     def verify_receipt_chain(self) -> dict[str, Any]:
         with self.db.connect() as connection:
-            rows = connection.execute("SELECT * FROM receipts ORDER BY created_at, id").fetchall()
+            rows = connection.execute(sql.LIST_RECEIPTS_FOR_VERIFICATION).fetchall()
         previous_hash = "GENESIS"
         for index, row in enumerate(rows, start=1):
             payload = json.loads(row["payload_json"])
@@ -683,14 +621,14 @@ class ProductService:
     def list_audit_events(self, *, limit: int = 200) -> list[dict[str, Any]]:
         with self.db.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM audit_events ORDER BY sequence DESC LIMIT ?",
+                sql.LIST_AUDIT_EVENTS,
                 (max(1, min(limit, 1000)),),
             ).fetchall()
         return [self._decode_audit(dict(row)) for row in rows]
 
     def verify_audit_chain(self) -> dict[str, Any]:
         with self.db.connect() as connection:
-            rows = connection.execute("SELECT * FROM audit_events ORDER BY sequence").fetchall()
+            rows = connection.execute(sql.LIST_AUDIT_EVENTS_FOR_VERIFICATION).fetchall()
         previous_hash = "GENESIS"
         for row in rows:
             payload = {
@@ -712,21 +650,15 @@ class ProductService:
         with self.db.connect() as connection:
             statuses = {
                 row["status"]: row["count"]
-                for row in connection.execute(
-                    "SELECT status, COUNT(*) AS count FROM change_requests GROUP BY status"
-                ).fetchall()
+                for row in connection.execute(sql.COUNT_CHANGE_REQUESTS_BY_STATUS).fetchall()
             }
             executions = {
                 row["status"]: row["count"]
-                for row in connection.execute(
-                    "SELECT status, COUNT(*) AS count FROM executions GROUP BY status"
-                ).fetchall()
+                for row in connection.execute(sql.COUNT_EXECUTIONS_BY_STATUS).fetchall()
             }
             risks = {
                 row["risk"]: row["count"]
-                for row in connection.execute(
-                    "SELECT risk, COUNT(*) AS count FROM change_requests GROUP BY risk"
-                ).fetchall()
+                for row in connection.execute(sql.COUNT_CHANGE_REQUESTS_BY_RISK).fetchall()
             }
             stop = self._emergency_stop(connection)
         receipts = self.verify_receipt_chain()
@@ -749,11 +681,7 @@ class ProductService:
         with self.db.transaction() as connection:
             now = utc_now()
             connection.execute(
-                """
-                INSERT INTO runtime_flags(key, value, updated_by, updated_at)
-                VALUES ('emergency_stop', ?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-                """,
+                sql.UPSERT_EMERGENCY_STOP,
                 ("true" if active else "false", actor_id, now),
             )
             self._append_audit(
@@ -771,7 +699,7 @@ class ProductService:
     def health(self) -> dict[str, Any]:
         try:
             with self.db.connect() as connection:
-                connection.execute("SELECT 1").fetchone()
+                connection.execute(sql.HEALTH_CHECK).fetchone()
                 stop = self._emergency_stop(connection)
             return {
                 "status": "EMERGENCY_STOP" if stop else "HEALTHY",
@@ -800,9 +728,7 @@ class ProductService:
         target_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        last = connection.execute(
-            "SELECT event_hash FROM audit_events ORDER BY sequence DESC LIMIT 1"
-        ).fetchone()
+        last = connection.execute(sql.SELECT_AUDIT_HEAD).fetchone()
         previous_hash = str(last["event_hash"]) if last else "GENESIS"
         event = {
             "id": new_id("aud"),
@@ -815,10 +741,7 @@ class ProductService:
         }
         event_hash = chained_hash(previous_hash, event)
         connection.execute(
-            """
-            INSERT INTO audit_events(id, actor_id, action, target_type, target_id, payload_json, previous_hash, event_hash, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+            sql.INSERT_AUDIT_EVENT,
             (
                 event["id"],
                 actor_id,
@@ -840,9 +763,7 @@ class ProductService:
         execution_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        last = connection.execute(
-            "SELECT receipt_hash FROM receipts ORDER BY created_at DESC, id DESC LIMIT 1"
-        ).fetchone()
+        last = connection.execute(sql.SELECT_RECEIPT_HEAD).fetchone()
         previous_hash = str(last["receipt_hash"]) if last else "GENESIS"
         receipt_hash = chained_hash(previous_hash, payload)
         receipt = {
@@ -854,10 +775,7 @@ class ProductService:
             "created_at": utc_now(),
         }
         connection.execute(
-            """
-            INSERT INTO receipts(id, execution_id, payload_json, previous_hash, receipt_hash, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
+            sql.INSERT_RECEIPT,
             (
                 receipt["id"],
                 execution_id,
@@ -871,9 +789,7 @@ class ProductService:
 
     @staticmethod
     def _emergency_stop(connection: DatabaseConnection) -> bool:
-        row = connection.execute(
-            "SELECT value FROM runtime_flags WHERE key = 'emergency_stop'"
-        ).fetchone()
+        row = connection.execute(sql.SELECT_EMERGENCY_STOP).fetchone()
         return bool(row and str(row["value"]).lower() == "true")
 
     @staticmethod
