@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import ast
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+REQUIRED = [
+    "voodoo_product/api.py",
+    "voodoo_product/service.py",
+    "voodoo_product/security.py",
+    "voodoo_product/static/index.html",
+    "tests/system/test_product_platform_rc1.py",
+    ".env.product.example",
+    "Dockerfile.product",
+    "docker-compose.product.yml",
+    "requirements-product.lock",
+    "requirements-dev.lock",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release-candidate.yml",
+    "SECURITY.md",
+]
+
+
+def run(command: list[str]) -> dict[str, object]:
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
+    return {
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout[-8000:],
+        "stderr": completed.stderr[-8000:],
+    }
+
+
+def main() -> int:
+    checks: dict[str, object] = {}
+    missing = [item for item in REQUIRED if not (ROOT / item).is_file()]
+    checks["required_files"] = {"ok": not missing, "missing": missing}
+
+    syntax_errors: list[str] = []
+    for path in (ROOT / "voodoo_product").rglob("*.py"):
+        try:
+            ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            syntax_errors.append(f"{path}: {exc}")
+    checks["python_syntax"] = {"ok": not syntax_errors, "errors": syntax_errors}
+
+    secret_findings: list[str] = []
+    forbidden = {
+        "default development secret": re.compile(r"local-dev-secret-change-me"),
+        "OpenAI-style API key": re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
+        "GitHub personal access token": re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),
+        "AWS access key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+        "private key": re.compile(r"BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY"),
+    }
+    for path in ROOT.rglob("*"):
+        if path.resolve() == Path(__file__).resolve():
+            continue
+        if path.is_file() and path.suffix in {".py", ".md", ".yml", ".yaml", ".example"}:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for label, pattern in forbidden.items():
+                if pattern.search(text):
+                    secret_findings.append(f"{path.relative_to(ROOT)} contains {label}")
+    checks["secret_scan"] = {"ok": not secret_findings, "findings": secret_findings}
+
+    tests = run([sys.executable, "-m", "pytest", "tests/system/test_product_platform_rc1.py", "-q"])
+    checks["system_tests"] = {"ok": tests["returncode"] == 0, **tests}
+
+    compile_result = run([sys.executable, "-m", "compileall", "-q", "voodoo_product"])
+    checks["compileall"] = {"ok": compile_result["returncode"] == 0, **compile_result}
+
+    checks["production_fail_closed"] = {
+        "ok": os.getenv("VOODOO_ALLOW_PRODUCTION_EFFECTS", "false").lower()
+        not in {"1", "true", "yes", "on"},
+        "note": "Production effects must remain disabled until external adapters pass a separate governed release gate.",
+    }
+
+    passed = all(bool(value.get("ok")) for value in checks.values() if isinstance(value, dict))
+    report = {
+        "product": "VOODOO One",
+        "version": "0.9.0-rc2-dev",
+        "passed": passed,
+        "checks": checks,
+    }
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    return 0 if passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

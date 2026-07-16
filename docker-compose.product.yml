@@ -1,0 +1,27 @@
+services:
+  voodoo-one:
+    build:
+      context: .
+      dockerfile: Dockerfile.product
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    env_file:
+      - .env.product.local
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - voodoo_product_data:/app/storage/product
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 128
+
+volumes:
+  voodoo_product_data:

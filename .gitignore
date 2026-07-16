@@ -1,0 +1,11 @@
+.env.product.local
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.sqlite3-*
+audit-output/
+dist/
+storage/product/
