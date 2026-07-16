@@ -6,6 +6,8 @@
 - generated local secrets stored outside Git,
 - `scrypt` password hashing with per-user salt,
 - context-bound v2 sessions signed with a purpose-derived HMAC key,
+- explicit identity-provider boundary for password, session and bearer authentication,
+- fail-closed startup for configured but unreleased OIDC identity,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
 - immutable named application statements with explicit read/write modes and no dynamic service SQL,
@@ -51,6 +53,13 @@ raw root secret is not used directly as the token signing key. Legacy `v1` token
 upgrade, so operators must expect all existing console and API sessions to authenticate again. The
 runtime still revalidates active account state and the current database role on every request.
 
+FastAPI authentication routes now depend on an explicit identity-provider contract. The released
+`local` provider owns password verification, session issuance, bearer verification and live account
+revalidation. OIDC configuration requires exact HTTPS issuer and JWKS endpoints, audience and
+distinct identity claim names, but OIDC execution remains unavailable. Selecting it aborts startup
+before persistence initialization and never falls back to local passwords. External groups must not
+become internal roles until a separate allowlisted mapping and integration gate are released.
+
 The application derives the authentication source from the ASGI server's client address and does
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
 trusted proxy at the ASGI server boundary; arbitrary client-supplied forwarding headers must not be
@@ -91,7 +100,7 @@ claim is made.
 
 - external penetration test,
 - dependency and container scanning,
-- OIDC/SAML integration,
+- released OIDC/SAML integration with explicit role mapping,
 - tenant-specific key management,
 - PostgreSQL row-level tenant isolation,
 - signed SBOM and artifact provenance,
