@@ -156,12 +156,14 @@ The secret file must be encrypted and access-controlled.
 
 Never retry an expired `RUNNING` execution automatically: its adapter may already have produced a
 side effect. First investigate the worker and target system. Then activate emergency stop and use a
-current security-reviewer or administrator token from the operator workstation:
+current security-reviewer or administrator token from the operator workstation.
 
 The default adapter timeout is 120 seconds and the lease is 180 seconds. Keep
 `VOODOO_EXECUTION_LEASE_SECONDS` at least 30 seconds above
 `VOODOO_EXECUTION_TIMEOUT_SECONDS`, and configure the orchestrator termination grace above the
 execution timeout. The supplied Compose deployment waits 150 seconds before a forced stop.
+
+After confirming those preconditions, run:
 
 ```bash
 export VOODOO_URL=http://127.0.0.1:8000
