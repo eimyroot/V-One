@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -26,14 +27,33 @@ ROLE_PERMISSIONS = {
     "administrator": frozenset({"*"}),
 }
 
+_TOKEN_VERSION = "v2"
+_TOKEN_ISSUER = "voodoo-one"
+_TOKEN_AUDIENCE = "voodoo-one-control-plane"
+_TOKEN_SIGNING_PURPOSE = b"session-token/v2"
+_KEY_DERIVATION_DOMAIN = b"voodoo-one\x00key-derivation\x00"
+_MIN_TOKEN_TTL_SECONDS = 300
+_MAX_TOKEN_TTL_SECONDS = 86_400
+_MAX_TOKEN_LENGTH = 4_096
+_CLOCK_SKEW_SECONDS = 60
+
 
 def _b64url_encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
 def _b64url_decode(value: str) -> bytes:
+    if not value:
+        raise ValueError("empty base64url value")
     padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(value + padding)
+    return base64.b64decode(value + padding, altchars=b"-_", validate=True)
+
+
+def _derive_key(secret: str, *, purpose: bytes) -> bytes:
+    secret_bytes = secret.encode("utf-8")
+    if len(secret_bytes) < 32:
+        raise ValueError("secret must contain at least 32 bytes")
+    return hmac.new(secret_bytes, _KEY_DERIVATION_DOMAIN + purpose, hashlib.sha256).digest()
 
 
 def hash_password(password: str) -> str:
@@ -60,7 +80,7 @@ def verify_password(password: str, encoded: str) -> bool:
             dklen=len(expected),
         )
         return hmac.compare_digest(actual, expected)
-    except (ValueError, TypeError):
+    except (binascii.Error, OverflowError, TypeError, ValueError):
         return False
 
 
@@ -83,50 +103,94 @@ def issue_token(
     role: str,
     ttl_seconds: int,
 ) -> str:
+    if not 1 <= len(user_id) <= 128:
+        raise ValueError("user ID is invalid")
+    if not 1 <= len(username) <= 80:
+        raise ValueError("username is invalid")
+    if role not in ROLE_PERMISSIONS:
+        raise ValueError("unknown role")
+    if not _MIN_TOKEN_TTL_SECONDS <= ttl_seconds <= _MAX_TOKEN_TTL_SECONDS:
+        raise ValueError("token TTL is invalid")
+
     now = int(time.time())
     payload = {
+        "aud": _TOKEN_AUDIENCE,
+        "exp": now + ttl_seconds,
+        "iat": now,
+        "iss": _TOKEN_ISSUER,
+        "nonce": secrets.token_urlsafe(12),
+        "role": role,
         "sub": user_id,
         "username": username,
-        "role": role,
-        "iat": now,
-        "exp": now + ttl_seconds,
-        "nonce": secrets.token_urlsafe(12),
     }
     encoded_payload = _b64url_encode(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     )
     signature = hmac.new(
-        secret.encode("utf-8"), encoded_payload.encode("ascii"), hashlib.sha256
+        _derive_key(secret, purpose=_TOKEN_SIGNING_PURPOSE),
+        encoded_payload.encode("ascii"),
+        hashlib.sha256,
     ).digest()
-    return f"v1.{encoded_payload}.{_b64url_encode(signature)}"
+    return f"{_TOKEN_VERSION}.{encoded_payload}.{_b64url_encode(signature)}"
 
 
 def verify_token(*, secret: str, token: str) -> Principal:
     try:
+        if not token or len(token) > _MAX_TOKEN_LENGTH:
+            raise ValueError("invalid token length")
         version, encoded_payload, encoded_signature = token.split(".", 2)
-        if version != "v1":
+        if version != _TOKEN_VERSION:
             raise ValueError("unsupported token version")
         expected_signature = hmac.new(
-            secret.encode("utf-8"), encoded_payload.encode("ascii"), hashlib.sha256
+            _derive_key(secret, purpose=_TOKEN_SIGNING_PURPOSE),
+            encoded_payload.encode("ascii"),
+            hashlib.sha256,
         ).digest()
         supplied_signature = _b64url_decode(encoded_signature)
-        if not hmac.compare_digest(expected_signature, supplied_signature):
+        if len(supplied_signature) != hashlib.sha256().digest_size or not hmac.compare_digest(
+            expected_signature, supplied_signature
+        ):
             raise ValueError("invalid token signature")
-        payload: dict[str, Any] = json.loads(_b64url_decode(encoded_payload))
+
+        decoded_payload = _b64url_decode(encoded_payload)
+        payload: dict[str, Any] = json.loads(decoded_payload.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("invalid token payload")
+        if payload.get("iss") != _TOKEN_ISSUER or payload.get("aud") != _TOKEN_AUDIENCE:
+            raise ValueError("invalid token context")
+
+        issued_at = payload.get("iat")
+        expires_at = payload.get("exp")
+        if type(issued_at) is not int or type(expires_at) is not int:
+            raise ValueError("invalid token timestamps")
         now = int(time.time())
-        issued_at = int(payload["iat"])
-        expires_at = int(payload["exp"])
-        if issued_at > now + 60:
+        if issued_at > now + _CLOCK_SKEW_SECONDS:
             raise ValueError("token issued in the future")
         if expires_at <= now or expires_at <= issued_at:
             raise ValueError("token expired")
-        role = str(payload["role"])
-        if role not in ROLE_PERMISSIONS:
+        if expires_at - issued_at > _MAX_TOKEN_TTL_SECONDS:
+            raise ValueError("token lifetime is invalid")
+
+        user_id = payload.get("sub")
+        username = payload.get("username")
+        nonce = payload.get("nonce")
+        role = payload.get("role")
+        if not isinstance(user_id, str) or not 1 <= len(user_id) <= 128:
+            raise ValueError("invalid subject")
+        if not isinstance(username, str) or not 1 <= len(username) <= 80:
+            raise ValueError("invalid username")
+        if not isinstance(nonce, str) or not 16 <= len(nonce) <= 128:
+            raise ValueError("invalid nonce")
+        if not isinstance(role, str) or role not in ROLE_PERMISSIONS:
             raise ValueError("unknown role")
-        return Principal(
-            user_id=str(payload["sub"]),
-            username=str(payload["username"]),
-            role=role,
-        )
-    except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
+
+        return Principal(user_id=user_id, username=username, role=role)
+    except (
+        binascii.Error,
+        KeyError,
+        UnicodeDecodeError,
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+    ) as exc:
         raise ValueError("invalid authentication token") from exc
