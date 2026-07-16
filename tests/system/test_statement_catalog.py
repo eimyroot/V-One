@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_statement_catalog_is_complete_unique_and_classified() -> None:
-    assert len(ALL_STATEMENTS) == 46
+    assert len(ALL_STATEMENTS) == 50
     assert tuple(STATEMENTS_BY_NAME) == tuple(statement.name for statement in ALL_STATEMENTS)
     assert tuple(STATEMENTS_BY_NAME.values()) == ALL_STATEMENTS
 
@@ -126,10 +126,9 @@ def _is_catalog_expression(node: ast.expr) -> bool:
     )
 
 
-def test_service_database_calls_use_only_catalog_statements() -> None:
-    source = ROOT / "voodoo_product" / "service.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-    execute_calls = [
+def _database_execute_calls(path: Path) -> list[ast.Call]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
@@ -137,5 +136,16 @@ def test_service_database_calls_use_only_catalog_statements() -> None:
         and node.func.attr == "execute"
     ]
 
+
+def test_service_database_calls_use_only_catalog_statements() -> None:
+    execute_calls = _database_execute_calls(ROOT / "voodoo_product" / "service.py")
+
     assert len(execute_calls) == 51
+    assert all(call.args and _is_catalog_expression(call.args[0]) for call in execute_calls)
+
+
+def test_external_identity_database_calls_use_only_catalog_statements() -> None:
+    execute_calls = _database_execute_calls(ROOT / "voodoo_product" / "external_identity.py")
+
+    assert len(execute_calls) == 6
     assert all(call.args and _is_catalog_expression(call.args[0]) for call in execute_calls)
