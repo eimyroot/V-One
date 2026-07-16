@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
+_DEFAULT_TRUSTED_HOSTS = ("localhost", "127.0.0.1", "testserver")
+_HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -12,6 +15,24 @@ def _bool_env(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in _TRUE_VALUES
+
+
+def _valid_trusted_host(host: str) -> bool:
+    if (
+        not host
+        or host == "*"
+        or host != host.strip().lower()
+        or len(host) > 253
+        or any(character in host for character in ("*", ":", "/", " "))
+    ):
+        return False
+    if host.replace(".", "").isdigit():
+        octets = host.split(".")
+        return len(octets) == 4 and all(
+            octet.isdigit() and str(int(octet)) == octet and 0 <= int(octet) <= 255
+            for octet in octets
+        )
+    return all(_HOST_LABEL_PATTERN.fullmatch(label) for label in host.split("."))
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +51,7 @@ class ProductConfig:
     log_level: str = "INFO"
     production_effects_enabled: bool = False
     cors_origins: tuple[str, ...] = ()
+    trusted_hosts: tuple[str, ...] = _DEFAULT_TRUSTED_HOSTS
 
     def __post_init__(self) -> None:
         if self.environment not in {"local", "development", "staging", "test", "production"}:
@@ -59,6 +81,12 @@ class ProductConfig:
                 ("https://", "http://127.0.0.1", "http://localhost")
             ):
                 raise ValueError("CORS origins must be explicit HTTPS or loopback URLs")
+        if not self.trusted_hosts or any(
+            not _valid_trusted_host(host) for host in self.trusted_hosts
+        ):
+            raise ValueError("trusted hosts must be explicit lowercase hostnames or IPv4 addresses")
+        if len(set(self.trusted_hosts)) != len(self.trusted_hosts):
+            raise ValueError("trusted hosts must be unique")
 
     @classmethod
     def from_env(cls) -> ProductConfig:
@@ -95,6 +123,11 @@ class ProductConfig:
         origins = tuple(
             item.strip() for item in os.getenv("VOODOO_CORS_ORIGINS", "").split(",") if item.strip()
         )
+        trusted_hosts = tuple(
+            item.strip().lower()
+            for item in os.getenv("VOODOO_TRUSTED_HOSTS", "localhost,127.0.0.1").split(",")
+            if item.strip()
+        )
 
         return cls(
             environment=os.getenv("VOODOO_ENV", "local").strip().lower(),
@@ -111,4 +144,5 @@ class ProductConfig:
             log_level=os.getenv("VOODOO_LOG_LEVEL", "INFO").strip().upper(),
             production_effects_enabled=_bool_env("VOODOO_ALLOW_PRODUCTION_EFFECTS", False),
             cors_origins=origins,
+            trusted_hosts=trusted_hosts,
         )

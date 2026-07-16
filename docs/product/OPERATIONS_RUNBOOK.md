@@ -6,7 +6,7 @@
 set -a
 . ./.env.product.local
 set +a
-.venv/bin/python -m uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log
+.venv/bin/python -m uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log --no-server-header
 ```
 
 ## Health
@@ -46,6 +46,27 @@ contain the matched route template and never the raw path or query string.
 Do not remove `--no-access-log` from supported Uvicorn start commands. Log retention, transport,
 access control and alerting belong to the deployment platform and must preserve the JSON record
 without enriching it with raw authorization headers, request bodies or client addresses.
+
+## HTTP trust boundary
+
+`VOODOO_TRUSTED_HOSTS` is a comma-separated allowlist of exact lowercase hostnames or IPv4
+addresses. Schemes, ports, wildcards, duplicates and empty lists are rejected at startup. The
+application ignores the request port during matching. For a container behind
+`control.example.com`, retain the internal healthcheck address explicitly:
+
+```text
+VOODOO_TRUSTED_HOSTS=control.example.com,127.0.0.1
+```
+
+Requests with any other `Host` receive HTTP `400` before routing. Do not use a catch-all host to make
+a deployment pass. Configure DNS and the reverse proxy first, then add only the intended public and
+internal healthcheck names.
+
+All responses disable storage and add no-sniff, frame, referrer, permissions and cross-origin
+isolation headers. The console and API use a strict Content Security Policy without inline scripts,
+inline styles or eval. `VOODOO_ENV=production` additionally enables one-year HSTS; use that environment
+only behind correctly terminated HTTPS. Supported Uvicorn commands disable both access and server
+headers.
 
 ## Readiness gate
 

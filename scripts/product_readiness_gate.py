@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = [
     "voodoo_product/api.py",
     "voodoo_product/db.py",
+    "voodoo_product/http_security.py",
     "voodoo_product/migrations/sqlite/0001_core_schema.sql",
     "voodoo_product/migrations/sqlite/0002_auth_rate_limits.sql",
     "voodoo_product/observability.py",
@@ -22,6 +23,7 @@ REQUIRED = [
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
     "tests/system/test_database_migrations.py",
+    "tests/system/test_http_security.py",
     "tests/system/test_persistence_boundary.py",
     "tests/system/test_statement_catalog.py",
     "tests/system/test_observability.py",

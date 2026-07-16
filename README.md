@@ -27,13 +27,14 @@ python scripts/product_readiness_gate.py
 ## Local start
 
 Create `.env.product.local` from `.env.product.example`, replace both secret placeholders with
-cryptographically random values, keep `VOODOO_ALLOW_PRODUCTION_EFFECTS=false`, then run:
+cryptographically random values, set `VOODOO_TRUSTED_HOSTS` to the exact accepted hostnames, keep
+`VOODOO_ALLOW_PRODUCTION_EFFECTS=false`, then run:
 
 ```bash
 set -a
 . ./.env.product.local
 set +a
-.venv/bin/uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log
+.venv/bin/uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log --no-server-header
 ```
 
 Console: `http://127.0.0.1:8000/console`
