@@ -20,6 +20,8 @@ details in logs. Repository security advisories must be used once enabled by the
 - filesystem effects confined to a governed sandbox,
 - secrets supplied at runtime and never committed,
 - session tokens use an explicit v2 issuer/audience context and a purpose-derived signing key,
+- authentication routes depend on the configured identity-provider boundary,
+- unreleased identity providers abort startup without local-authentication fallback,
 - production effects disabled unless explicitly released,
 - application SQL selected only from the reviewed statement catalog,
 - unavailable database dialects fail closed without SQL fallback,
