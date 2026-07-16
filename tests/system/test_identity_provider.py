@@ -27,6 +27,21 @@ def build_config(tmp_path: Path, **overrides: object) -> ProductConfig:
     return ProductConfig(**values)
 
 
+def test_identity_fields_preserve_existing_positional_config_contract(tmp_path: Path) -> None:
+    config = ProductConfig(
+        "test",
+        tmp_path / "product.sqlite3",
+        tmp_path / "sandboxes",
+        "s" * 64,
+        "b" * 48,
+        "sqlite",
+        900,
+    )
+
+    assert config.token_ttl_seconds == 900
+    assert config.identity_provider == "local"
+
+
 class FakeIdentityService:
     def __init__(self) -> None:
         self.role = "operator"
