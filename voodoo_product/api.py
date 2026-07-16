@@ -14,12 +14,17 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import ProductConfig
 from .http_security import SecurityHeadersMiddleware
+from .identity import (
+    IdentityProvider,
+    create_identity_provider,
+    validate_identity_provider_startup,
+)
 from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
     log_event,
 )
-from .security import Principal, issue_token, verify_token
+from .security import Principal
 from .service import AuthRateLimitExceeded, ProductService
 
 
@@ -97,7 +102,7 @@ def _rate_limit_error(exc: AuthRateLimitExceeded) -> HTTPException:
 
 def create_product_router(
     *,
-    config: ProductConfig,
+    identity_provider: IdentityProvider,
     service: ProductService,
     repository_root: Path,
 ) -> APIRouter:
@@ -111,15 +116,8 @@ def create_product_router(
         if len(authorization) > 4096:
             raise HTTPException(status_code=401, detail="invalid authentication token")
         try:
-            token_principal = verify_token(
-                secret=config.session_signing_secret,
-                token=authorization.removeprefix("Bearer ").strip(),
-            )
-            active_user = service.get_active_user(token_principal.user_id)
-            return Principal(
-                user_id=active_user["id"],
-                username=active_user["username"],
-                role=active_user["role"],
+            return identity_provider.authenticate_bearer(
+                authorization.removeprefix("Bearer ").strip()
             )
         except (PermissionError, ValueError) as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
@@ -166,12 +164,10 @@ def create_product_router(
                 )
                 raise
             service.clear_bootstrap_rate_limit(source=source)
-            token = issue_token(
-                secret=config.session_signing_secret,
+            token = identity_provider.issue_session(
                 user_id=result["user_id"],
                 username=body.username,
                 role=result["role"],
-                ttl_seconds=config.token_ttl_seconds,
             )
             log_event("auth.bootstrap.succeeded", auth_scope="bootstrap")
             return {"token": token, **result}
@@ -192,7 +188,10 @@ def create_product_router(
         try:
             service.enforce_login_rate_limit(username=body.username, source=source)
             try:
-                user = service.authenticate(username=body.username, password=body.password)
+                user = identity_provider.authenticate_password(
+                    username=body.username,
+                    password=body.password,
+                )
             except PermissionError as exc:
                 service.record_login_failure(username=body.username, source=source)
                 log_event(
@@ -202,12 +201,10 @@ def create_product_router(
                 )
                 raise HTTPException(status_code=401, detail="invalid credentials") from exc
             service.clear_login_rate_limit(username=body.username, source=source)
-            token = issue_token(
-                secret=config.session_signing_secret,
+            token = identity_provider.issue_session(
                 user_id=user["id"],
                 username=user["username"],
                 role=user["role"],
-                ttl_seconds=config.token_ttl_seconds,
             )
             log_event("auth.login.succeeded", auth_scope="login")
             return {"token": token, "user": user}
@@ -433,15 +430,25 @@ def install_product_platform(
     *,
     config: ProductConfig | None = None,
     repository_root: Path | None = None,
+    identity_provider: IdentityProvider | None = None,
 ) -> ProductService:
     resolved_config = config or ProductConfig.from_env()
+    validate_identity_provider_startup(resolved_config)
+    if identity_provider is not None and identity_provider.name != resolved_config.identity_provider:
+        raise RuntimeError("injected identity provider does not match configured provider")
+
     root = (repository_root or Path.cwd()).resolve()
     product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
+    resolved_identity_provider = identity_provider or create_identity_provider(
+        config=resolved_config,
+        service=service,
+    )
     app.state.voodoo_product_service = service
+    app.state.voodoo_identity_provider = resolved_identity_provider
     app.include_router(
         create_product_router(
-            config=resolved_config,
+            identity_provider=resolved_identity_provider,
             service=service,
             repository_root=root,
         )

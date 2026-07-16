@@ -15,6 +15,7 @@ REQUIRED = [
     "voodoo_product/api.py",
     "voodoo_product/db.py",
     "voodoo_product/http_security.py",
+    "voodoo_product/identity.py",
     "voodoo_product/migrations/sqlite/0001_core_schema.sql",
     "voodoo_product/migrations/sqlite/0002_auth_rate_limits.sql",
     "voodoo_product/migrations/sqlite/0003_receipt_sequence.sql",
@@ -32,6 +33,7 @@ REQUIRED = [
     "tests/system/test_execution_idempotency.py",
     "tests/system/test_execution_recovery.py",
     "tests/system/test_http_security.py",
+    "tests/system/test_identity_provider.py",
     "tests/system/test_persistence_boundary.py",
     "tests/system/test_statement_catalog.py",
     "tests/system/test_token_security.py",
@@ -49,6 +51,7 @@ REQUIRED = [
     ".github/workflows/release-candidate.yml",
     "SECURITY.md",
     "docs/product/DATABASE_MIGRATIONS.md",
+    "docs/product/IDENTITY_PROVIDER_BOUNDARY.md",
     "docs/product/PERSISTENCE_BOUNDARY.md",
     "docs/product/STATEMENT_CATALOG.md",
 ]
