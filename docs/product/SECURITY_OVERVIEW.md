@@ -8,6 +8,8 @@
 - HMAC-signed expiring sessions,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
 - generic authentication failures with `Retry-After` on temporary lockout,
+- structured request/authentication events that exclude bodies, headers, query strings, raw paths, IP addresses and account identifiers,
+- validated request correlation IDs returned through `X-Request-ID`,
 - live account and role validation on every authenticated request,
 - permission-based RBAC,
 - separation of requester and approver,
@@ -30,6 +32,10 @@ The application derives the authentication source from the ASGI server's client 
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
 trusted proxy at the ASGI server boundary; arbitrary client-supplied forwarding headers must not be
 trusted.
+
+Supported runtime commands disable Uvicorn's raw access log. The product middleware records only a
+route template, method, response status, bounded duration, correlation ID and allowlisted security
+metadata. Unexpected exception messages and tracebacks are not emitted by the request logger.
 
 ## Required security gates before enterprise release
 

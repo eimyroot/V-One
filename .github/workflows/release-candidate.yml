@@ -35,7 +35,7 @@ jobs:
           python -m ruff check .
           python -m pytest -q
           python scripts/product_readiness_gate.py
-          python -m pip_audit -r requirements-product.lock --require-hashes
+          python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes
       - name: Build source archive and checksums
         env:
           RC_VERSION: ${{ inputs.version }}
@@ -43,7 +43,7 @@ jobs:
           mkdir -p dist
           git archive --format=tar.gz --prefix="v-one-${RC_VERSION}/" -o "dist/v-one-${RC_VERSION}.tar.gz" HEAD
           sha256sum "dist/v-one-${RC_VERSION}.tar.gz" > "dist/SHA256SUMS.txt"
-          python -m pip_audit -r requirements-product.lock -f cyclonedx-json -o dist/sbom.cdx.json
+          python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes -f cyclonedx-json -o dist/sbom.cdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: v-one-${{ inputs.version }}

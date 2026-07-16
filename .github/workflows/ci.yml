@@ -36,4 +36,4 @@ jobs:
       - name: Product readiness gate
         run: python scripts/product_readiness_gate.py
       - name: Dependency vulnerability audit
-        run: python -m pip_audit -r requirements-product.lock --require-hashes
+        run: python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes

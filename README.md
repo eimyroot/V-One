@@ -33,7 +33,7 @@ cryptographically random values, keep `VOODOO_ALLOW_PRODUCTION_EFFECTS=false`, t
 set -a
 . ./.env.product.local
 set +a
-.venv/bin/uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000
+.venv/bin/uvicorn voodoo_product.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
 Console: `http://127.0.0.1:8000/console`

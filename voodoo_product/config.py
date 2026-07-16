@@ -26,6 +26,7 @@ class ProductConfig:
     auth_source_max_failures: int = 20
     auth_window_seconds: int = 300
     auth_lockout_seconds: int = 900
+    log_level: str = "INFO"
     production_effects_enabled: bool = False
     cors_origins: tuple[str, ...] = ()
 
@@ -46,6 +47,8 @@ class ProductConfig:
             raise ValueError("auth window must be between 10 and 3600 seconds")
         if not 10 <= self.auth_lockout_seconds <= 86_400:
             raise ValueError("auth lockout must be between 10 and 86400 seconds")
+        if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("log level is invalid")
         if self.production_effects_enabled and self.environment != "production":
             raise ValueError("production effects require VOODOO_ENV=production")
         for origin in self.cors_origins:
@@ -101,6 +104,7 @@ class ProductConfig:
             auth_source_max_failures=int(os.getenv("VOODOO_AUTH_SOURCE_MAX_FAILURES", "20")),
             auth_window_seconds=int(os.getenv("VOODOO_AUTH_WINDOW_SECONDS", "300")),
             auth_lockout_seconds=int(os.getenv("VOODOO_AUTH_LOCKOUT_SECONDS", "900")),
+            log_level=os.getenv("VOODOO_LOG_LEVEL", "INFO").strip().upper(),
             production_effects_enabled=_bool_env("VOODOO_ALLOW_PRODUCTION_EFFECTS", False),
             cors_origins=origins,
         )
