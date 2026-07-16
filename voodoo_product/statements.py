@@ -27,6 +27,40 @@ SELECT_ACTIVE_USER = _read(
     "SELECT id, username, role, active FROM users WHERE id = ?",
 )
 
+INSERT_EXTERNAL_IDENTITY_BINDING = _write(
+    "external_identity_bindings.insert",
+    """
+    INSERT INTO external_identity_bindings(
+        id, provider, issuer, subject, user_id, created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """,
+)
+INSERT_EXTERNAL_ROLE_MAPPING = _write(
+    "external_role_mappings.insert",
+    """
+    INSERT INTO external_role_mappings(
+        id, provider, issuer, external_group, internal_role, created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """,
+)
+SELECT_EXTERNAL_IDENTITY = _read(
+    "external_identity_bindings.select_authorized",
+    """
+    SELECT b.user_id, u.username, u.role, u.active
+    FROM external_identity_bindings b
+    JOIN users u ON u.id = b.user_id
+    WHERE b.provider = ? AND b.issuer = ? AND b.subject = ?
+    """,
+)
+SELECT_EXTERNAL_ROLE_MAPPING = _read(
+    "external_role_mappings.select",
+    """
+    SELECT internal_role
+    FROM external_role_mappings
+    WHERE provider = ? AND issuer = ? AND external_group = ?
+    """,
+)
+
 INSERT_WORKSPACE = _write(
     "workspaces.insert",
     "INSERT INTO workspaces(id, name, environment, created_at) VALUES (?, ?, ?, ?)",
@@ -325,6 +359,10 @@ ALL_STATEMENTS = (
     INSERT_USER,
     SELECT_USER_FOR_AUTH,
     SELECT_ACTIVE_USER,
+    INSERT_EXTERNAL_IDENTITY_BINDING,
+    INSERT_EXTERNAL_ROLE_MAPPING,
+    SELECT_EXTERNAL_IDENTITY,
+    SELECT_EXTERNAL_ROLE_MAPPING,
     INSERT_WORKSPACE,
     LIST_WORKSPACES,
     SELECT_WORKSPACE_CONTEXT,
