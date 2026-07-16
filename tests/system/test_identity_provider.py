@@ -84,9 +84,11 @@ def test_factory_returns_only_configured_local_provider(tmp_path: Path) -> None:
     assert provider.name == "local"
 
 
-def test_local_mode_rejects_stray_oidc_endpoints(tmp_path: Path) -> None:
+def test_local_mode_rejects_stray_oidc_settings(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="OIDC settings require"):
         build_config(tmp_path, oidc_issuer="https://id.example.com")
+    with pytest.raises(ValueError, match="OIDC settings require"):
+        build_config(tmp_path, oidc_username_claim="email")
 
 
 def test_oidc_contract_is_strict_but_provider_remains_unreleased(tmp_path: Path) -> None:
