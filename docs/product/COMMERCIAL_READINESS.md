@@ -12,6 +12,7 @@ canonical flow:
 - persistent SQLite product read/write model,
 - local users and role enforcement,
 - multi-workspace registry,
+- workspace-authoritative environment policy with database-enforced anti-downgrade controls,
 - separation of requester and approver,
 - two-person approval for production requests,
 - fail-closed production effects,

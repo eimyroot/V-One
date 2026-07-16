@@ -57,7 +57,7 @@ def test_transaction_commits_successful_write(tmp_path: Path) -> None:
             INSERT INTO workspaces(id, name, environment, created_at)
             VALUES (?, ?, ?, ?)
             """,
-            ("wrk_commit", "Committed", "test", "2026-01-01T00:00:00+00:00"),
+            ("wrk_commit", "Committed", "local", "2026-01-01T00:00:00+00:00"),
         )
 
     with database.connect() as connection:
@@ -78,7 +78,7 @@ def test_transaction_rolls_back_and_closes_after_exception(tmp_path: Path) -> No
             INSERT INTO workspaces(id, name, environment, created_at)
             VALUES (?, ?, ?, ?)
             """,
-            ("wrk_rollback", "Rolled Back", "test", "2026-01-01T00:00:00+00:00"),
+            ("wrk_rollback", "Rolled Back", "local", "2026-01-01T00:00:00+00:00"),
         )
         raise RuntimeError("force rollback")
 
@@ -117,7 +117,7 @@ def test_service_accepts_injected_database_adapter(tmp_path: Path) -> None:
     service = ProductService(config(tmp_path), database=database)
 
     assert service.db is database
-    assert service.health()["schema_version"] == 4
+    assert service.health()["schema_version"] == 5
 
 
 def test_service_source_has_no_sqlite_runtime_dependency() -> None:

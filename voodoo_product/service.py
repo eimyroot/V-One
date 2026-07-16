@@ -119,6 +119,11 @@ class ProductService:
                 raise RuntimeError("bootstrap is already closed")
             user_id = new_id("usr")
             workspace_id = new_id("wrk")
+            workspace_environment = (
+                self.config.environment
+                if self.config.environment in VALID_ENVIRONMENTS
+                else "local"
+            )
             now = utc_now()
             connection.execute(
                 sql.INSERT_USER,
@@ -126,7 +131,12 @@ class ProductService:
             )
             connection.execute(
                 sql.INSERT_WORKSPACE,
-                (workspace_id, "VOODOO Production", "production", now),
+                (
+                    workspace_id,
+                    f"VOODOO {workspace_environment.title()}",
+                    workspace_environment,
+                    now,
+                ),
             )
             self._append_audit(
                 connection,
@@ -134,9 +144,18 @@ class ProductService:
                 action="system.bootstrap",
                 target_type="workspace",
                 target_id=workspace_id,
-                payload={"username": username, "role": "administrator"},
+                payload={
+                    "username": username,
+                    "role": "administrator",
+                    "workspace_environment": workspace_environment,
+                },
             )
-            return {"user_id": user_id, "workspace_id": workspace_id, "role": "administrator"}
+            return {
+                "user_id": user_id,
+                "workspace_id": workspace_id,
+                "workspace_environment": workspace_environment,
+                "role": "administrator",
+            }
 
     def enforce_login_rate_limit(self, *, username: str, source: str) -> None:
         self._enforce_auth_rate_limits(self._login_rate_limit_keys(username, source))
@@ -354,9 +373,14 @@ class ProductService:
         request_id = new_id("cr")
         now = utc_now()
         with self.db.transaction() as connection:
-            workspace = connection.execute(sql.SELECT_WORKSPACE_ID, (workspace_id,)).fetchone()
+            workspace = connection.execute(
+                sql.SELECT_WORKSPACE_CONTEXT,
+                (workspace_id,),
+            ).fetchone()
             if workspace is None:
                 raise LookupError("workspace not found")
+            if str(workspace["environment"]) != environment:
+                raise ValueError("change request environment must match workspace environment")
             connection.execute(
                 sql.INSERT_CHANGE_REQUEST,
                 (
@@ -406,6 +430,7 @@ class ProductService:
             row = connection.execute(sql.SELECT_CHANGE_REQUEST_STATUS, (request_id,)).fetchone()
             if row is None:
                 raise LookupError("change request not found")
+            self._require_workspace_environment(row)
             if row["status"] != "DRAFT":
                 raise RuntimeError("only a draft can be submitted")
             now = utc_now()
@@ -441,6 +466,7 @@ class ProductService:
             ).fetchone()
             if request_row is None:
                 raise LookupError("change request not found")
+            self._require_workspace_environment(request_row)
             if request_row["status"] not in {"REVIEW_REQUIRED", "APPROVED"}:
                 raise RuntimeError("request is not awaiting review")
             if request_row["requested_by"] == actor_id:
@@ -514,6 +540,7 @@ class ProductService:
                 ).fetchone()
                 if request_row is None:
                     raise LookupError("change request not found")
+                self._require_workspace_environment(request_row)
                 if request_row["status"] != "APPROVED":
                     raise PermissionError("change request is not approved")
                 if (
@@ -930,6 +957,18 @@ class ProductService:
     def _emergency_stop(connection: DatabaseConnection) -> bool:
         row = connection.execute(sql.SELECT_EMERGENCY_STOP).fetchone()
         return bool(row and str(row["value"]).lower() == "true")
+
+    @staticmethod
+    def _require_workspace_environment(value: DatabaseRow) -> None:
+        request_environment = str(value["environment"])
+        workspace_environment = str(value["workspace_environment"])
+        if (
+            request_environment not in VALID_ENVIRONMENTS
+            or workspace_environment not in VALID_ENVIRONMENTS
+        ):
+            raise RuntimeError("change request environment boundary is invalid")
+        if request_environment != workspace_environment:
+            raise RuntimeError("change request environment does not match workspace")
 
     @staticmethod
     def _decode_change_request(value: dict[str, Any]) -> dict[str, Any]:

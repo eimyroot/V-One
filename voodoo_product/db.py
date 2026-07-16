@@ -105,6 +105,15 @@ REQUIRED_INDEXES = {
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
 }
+REQUIRED_TRIGGERS = {
+    "trg_change_requests_environment_insert",
+    "trg_change_requests_environment_update",
+    "trg_change_requests_environment_immutable",
+    "trg_workspaces_environment_insert_valid",
+    "trg_workspaces_environment_update_valid",
+    "trg_workspaces_environment_immutable",
+    "trg_executions_environment_insert",
+}
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
@@ -403,6 +412,17 @@ class SQLiteProductDatabase:
         if missing_indexes:
             raise DatabaseMigrationError(
                 f"SQLite schema validation failed: missing indexes {sorted(missing_indexes)}"
+            )
+        triggers = {
+            str(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+            ).fetchall()
+        }
+        missing_triggers = REQUIRED_TRIGGERS - triggers
+        if missing_triggers:
+            raise DatabaseMigrationError(
+                f"SQLite schema validation failed: missing triggers {sorted(missing_triggers)}"
             )
         integrity = connection.execute("PRAGMA integrity_check").fetchone()
         if integrity is None or str(integrity[0]) != "ok":

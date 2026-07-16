@@ -27,7 +27,7 @@ integrity failure.
 3. Reconcile `PRAGMA user_version` with the recorded migration history.
 4. Validate the recorded history as an exact prefix of the deployed files.
 5. Execute pending statements and record each version in the same transaction.
-6. Validate tables, columns, indexes and `PRAGMA integrity_check`.
+6. Validate tables, columns, indexes, required triggers and `PRAGMA integrity_check`.
 7. Commit once; any exception rolls back the complete startup attempt.
 
 Concurrent instances serialize on the database lock. Operationally, upgrades still start one
@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `4`, verify evidence integrity again, and only then
+one new instance, require health schema version `5`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -56,6 +56,12 @@ Migration `0004_execution_leases.sql` adds the execution fence, lease expiry and
 Existing `RUNNING` rows receive their original `started_at` as an already-expired lease so they can be
 reviewed and explicitly recovered after emergency stop. Existing terminal rows retain a null lease
 and fence value `1`. The migration does not retry or silently reinterpret any execution outcome.
+
+Migration `0005_workspace_environment_boundary.sql` makes the workspace environment authoritative.
+Database triggers reject new or retargeted change requests whose environment differs from their
+workspace, prevent environment reclassification after governance begins, and reject execution rows
+for any historical mismatch. Existing historical rows are preserved rather than silently rewritten;
+the service blocks their submit, review and execution paths.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
