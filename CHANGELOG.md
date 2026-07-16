@@ -11,8 +11,9 @@
 - Reduced the default session lifetime from eight hours to one hour.
 - Replaced legacy v1 bearer tokens with context-bound v2 tokens signed by a purpose-derived key.
 - Routed local password and bearer authentication through an explicit provider boundary while keeping OIDC fail-closed.
+- Added schema-v6 immutable external identity bindings and exact group-to-role confirmation without enabling network OIDC.
 - Separated constant-time liveness from explicit evidence-chain verification.
-- Expanded system/security coverage from 10 to 14 tests.
+- Expanded system and security coverage across identity, persistence, execution and release boundaries.
 - Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.
 - Reduced account-enumeration timing differences by verifying unknown users against a dummy password hash.
 - Added correlated JSON request and authentication security events with an explicit field allowlist.
