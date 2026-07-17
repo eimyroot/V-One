@@ -19,11 +19,11 @@ from .identity import (
     create_identity_provider,
     validate_identity_provider_startup,
 )
-from .service import ProductService
 from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
 )
+from .service import ProductService
 
 
 @dataclass(frozen=True, slots=True)
