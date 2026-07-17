@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 
 from voodoo_product.bootstrap import BootstrapService
+from voodoo_product.composition import install_composed_product_platform
 from voodoo_product.config import ProductConfig
 from voodoo_product.service import ProductService
 
@@ -58,6 +60,35 @@ def test_bootstrap_service_uses_only_statement_catalog() -> None:
         and call.args[0].value.id == "sql"
         for call in execute_calls
     )
+
+
+def test_product_service_delegates_bootstrap_surface() -> None:
+    source = ROOT / "voodoo_product" / "service.py"
+    source_text = source.read_text(encoding="utf-8")
+    tree = ast.parse(source_text, filename=str(source))
+    product_service = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProductService"
+    )
+    methods = {
+        node.name: node
+        for node in product_service.body
+        if isinstance(node, ast.FunctionDef) and node.name in {"has_users", "bootstrap_admin"}
+    }
+
+    assert set(methods) == {"has_users", "bootstrap_admin"}
+    assert all(
+        not any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "execute"
+            for node in ast.walk(method)
+        )
+        for method in methods.values()
+    )
+    assert "return self.bootstrap_service.has_users()" in source_text
+    assert "return self.bootstrap_service.bootstrap_admin(" in source_text
+    assert "sql.INSERT_USER" not in source_text
+    assert "sql.INSERT_WORKSPACE" not in source_text
 
 
 def test_bootstrap_service_provisions_user_workspace_and_audit_atomically(tmp_path: Path) -> None:
@@ -164,3 +195,44 @@ def test_bootstrap_service_closes_after_first_success(tmp_path: Path) -> None:
             password="secret",
             token=product.config.bootstrap_token,
         )
+
+
+def test_product_service_rejects_bootstrap_service_from_another_composition(
+    tmp_path: Path,
+) -> None:
+    first = ProductService(product_config(tmp_path, name="first"))
+    second = ProductService(product_config(tmp_path, name="second"))
+
+    with pytest.raises(
+        ValueError,
+        match="bootstrap service must use the product service database",
+    ):
+        ProductService(
+            first.config,
+            database=first.db,
+            authentication_rate_limit_service=first.authentication_rate_limit_service,
+            bootstrap_service=second.bootstrap_service,
+            audit_ledger=first.audit_ledger,
+            user_account_service=first.user_account_service,
+            workspace_service=first.workspace_service,
+            change_request_service=first.change_request_service,
+            receipt_ledger=first.receipt_ledger,
+            operational_safety_service=first.operational_safety_service,
+            execution_service=first.execution_service,
+            platform_status_service=first.platform_status_service,
+        )
+
+
+def test_composition_exposes_shared_bootstrap_service(tmp_path: Path) -> None:
+    app = FastAPI()
+    composition = install_composed_product_platform(
+        app,
+        config=product_config(tmp_path),
+        repository_root=tmp_path,
+    )
+
+    assert app.state.voodoo_bootstrap_service is composition.bootstrap_service
+    assert composition.service.bootstrap_service is composition.bootstrap_service
+    assert composition.bootstrap_service.db is composition.service.db
+    assert composition.bootstrap_service.config is composition.service.config
+    assert composition.bootstrap_service.audit_ledger is composition.audit_ledger
