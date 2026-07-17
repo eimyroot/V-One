@@ -31,6 +31,35 @@ jobs:
           persist-credentials: true
           fetch-depth: 1
           show-progress: false
+      - name: Split emergency-stop matcher assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/apply_operational_safety_composition.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''replace_exact(
+              execution,
+              "if self._emergency_stop(connection):",
+              "if self.operational_safety_service.is_active(connection):",
+              count=2,
+          )
+          '''
+          new = '''replace_exact(
+              execution,
+              "if self._emergency_stop(connection):",
+              "if self.operational_safety_service.is_active(connection):",
+          )
+          replace_exact(
+              execution,
+              "if not self._emergency_stop(connection):",
+              "if not self.operational_safety_service.is_active(connection):",
+          )
+          '''
+          if text.count(old) != 1:
+              raise SystemExit("expected one unsplit emergency-stop matcher block")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
       - name: Apply assertion-bound transform
         id: transform
         continue-on-error: true
