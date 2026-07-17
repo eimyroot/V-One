@@ -80,13 +80,15 @@ jobs:
           tests/system/test_platform_status_service.py
           tests/system/test_product_composition.py
           tests/system/test_statement_catalog.py
-      - name: Evidence and operational safety compatibility gates
+      - name: Evidence primitive compatibility gate
         if: steps.transform.outputs.pending == 'true'
-        run: >-
-          python -m pytest -q
-          tests/system/test_evidence_primitives.py
-          tests/system/test_receipt_ledger.py
-          tests/system/test_operational_safety.py
+        run: python -m pytest -q tests/system/test_evidence_primitives.py
+      - name: Receipt ledger compatibility gate
+        if: steps.transform.outputs.pending == 'true'
+        run: python -m pytest -q tests/system/test_receipt_ledger.py
+      - name: Operational safety compatibility gate
+        if: steps.transform.outputs.pending == 'true'
+        run: python -m pytest -q tests/system/test_operational_safety.py
       - name: Product compatibility gate
         if: steps.transform.outputs.pending == 'true'
         run: >-
