@@ -1,9 +1,9 @@
 name: branch workspace service composition
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/workspace-service-composition-20260717
+      - main
 
 permissions:
   contents: write
@@ -14,6 +14,9 @@ concurrency:
 
 jobs:
   apply:
+    if: >-
+      github.repository == 'nulleimy/V-One' &&
+      github.event.pull_request.head.ref == 'agent/workspace-service-composition-20260717'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
