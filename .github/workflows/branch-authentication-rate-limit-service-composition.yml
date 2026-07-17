@@ -46,6 +46,9 @@ jobs:
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
         run: python3 scripts/apply_authentication_rate_limit_service_composition.py
+      - name: Normalize generated source bytes
+        if: steps.transform.outputs.pending == 'true'
+        run: python3 scripts/normalize_authentication_rate_limit_generated_source.py
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.transform.outputs.pending == 'true'
         with:
@@ -109,6 +112,7 @@ jobs:
           scripts/apply_authentication_rate_limit_service_composition.py
           scripts/normalize_authentication_rate_limit_transform_anchor.py
           scripts/normalize_authentication_rate_limit_helper_anchor.py
+          scripts/normalize_authentication_rate_limit_generated_source.py
           scripts/label_authentication_rate_limit_transform_assertions.py
       - name: Verify exact scope and commit
         if: steps.transform.outputs.pending == 'true'
@@ -126,6 +130,7 @@ jobs:
               "scripts/apply_authentication_rate_limit_service_composition.py",
               "scripts/normalize_authentication_rate_limit_transform_anchor.py",
               "scripts/normalize_authentication_rate_limit_helper_anchor.py",
+              "scripts/normalize_authentication_rate_limit_generated_source.py",
               "scripts/label_authentication_rate_limit_transform_assertions.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_authentication_rate_limit_service.py",
