@@ -8,8 +8,6 @@ from pathlib import Path
 from voodoo_product.evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from voodoo_product.service import (
     canonical_json as legacy_canonical_json,
-)
-from voodoo_product.service import (
     chained_hash as legacy_chained_hash,
 )
 
@@ -32,7 +30,11 @@ def test_evidence_primitives_are_dependency_neutral() -> None:
         if isinstance(node, ast.ImportFrom) and node.module is not None
     }
 
-    assert not {module for module in imported_modules | imported_from if module.startswith("voodoo_product")}
+    assert not {
+        module
+        for module in imported_modules | imported_from
+        if module.startswith("voodoo_product")
+    }
     assert ".service" not in source_text
     assert ".persistence" not in source_text
     assert "fastapi" not in source_text
