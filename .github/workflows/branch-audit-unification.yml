@@ -1,0 +1,51 @@
+name: branch audit unification
+
+on:
+  push:
+    branches:
+      - agent/product-service-audit-unification-20260717
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-audit-unification
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.repository == 'nulleimy/V-One'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12.13"
+      - name: Apply assertion-bound transform
+        run: python scripts/apply_product_service_audit_unification.py
+      - name: Validate transformed Python
+        run: |
+          python -m compileall -q voodoo_product scripts tests/system/test_product_composition.py
+          git diff --check
+      - name: Commit transformed files
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No transform changes remain"
+            exit 0
+          fi
+          git config user.name "VOODOO Governance Bot"
+          git config user.email "governance-bot@users.noreply.github.com"
+          git add \
+            voodoo_product/service.py \
+            voodoo_product/composition.py \
+            voodoo_product/ledger_service.py \
+            tests/system/test_product_composition.py \
+            scripts/product_readiness_gate.py \
+            docs/product/AUDIT_LEDGER_COMPOSITION_BOUNDARY.md
+          git commit -m "architecture: unify product service audit ledger"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
