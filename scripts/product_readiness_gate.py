@@ -21,6 +21,7 @@ REQUIRED = [
     "voodoo_product/external_identity_statements.py",
     "voodoo_product/http_security.py",
     "voodoo_product/identity.py",
+    "voodoo_product/ledger_service.py",
     "voodoo_product/main.py",
     "voodoo_product/migrations/sqlite/0001_core_schema.sql",
     "voodoo_product/migrations/sqlite/0002_auth_rate_limits.sql",
