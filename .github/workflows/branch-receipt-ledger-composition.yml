@@ -139,9 +139,15 @@ jobs:
               "voodoo_product/receipt.py",
               "voodoo_product/service.py",
           }
-          actual = set(
+          worktree = set(
               subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
           )
+          index = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          actual = worktree | index
           if actual != expected:
               raise SystemExit(f"unexpected scope: missing={expected - actual}, extra={actual - expected}")
           PY
