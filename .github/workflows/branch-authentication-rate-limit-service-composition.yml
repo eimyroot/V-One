@@ -30,7 +30,8 @@ jobs:
         id: transform
         shell: bash
         run: |
-          if [ -f scripts/apply_authentication_rate_limit_service_composition.py ]; then
+          if [ -f scripts/apply_authentication_rate_limit_service_composition.py ] && \
+             [ ! -f .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt ]; then
             echo "pending=true" >> "$GITHUB_OUTPUT"
           else
             echo "pending=false" >> "$GITHUB_OUTPUT"
@@ -40,7 +41,22 @@ jobs:
         run: python3 scripts/normalize_authentication_rate_limit_transform_anchor.py
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
-        run: python3 scripts/apply_authentication_rate_limit_service_composition.py
+        shell: bash
+        run: |
+          set +e
+          output="$(python3 scripts/apply_authentication_rate_limit_service_composition.py 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            git reset --hard HEAD
+            printf '%s\n' "$output" > .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt
+            git config user.name "VOODOO Governance Bot"
+            git config user.email "governance-bot@users.noreply.github.com"
+            git add .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt
+            git commit -m "chore: capture authentication rate-limit transform assertion"
+            git push origin HEAD:agent/authentication-rate-limit-service-composition-20260717
+            exit "$status"
+          fi
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.transform.outputs.pending == 'true'
         with:
