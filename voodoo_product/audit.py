@@ -4,8 +4,8 @@ import json
 from typing import Any, Protocol
 
 from . import statements as sql
+from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from .persistence import DatabaseConnection, ProductDatabaseAdapter
-from .service import canonical_json, chained_hash, new_id, utc_now
 
 
 class AuditLedgerWriter(Protocol):
