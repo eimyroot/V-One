@@ -38,6 +38,9 @@ jobs:
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
         run: python3 scripts/apply_platform_status_service_composition.py
+      - name: Align operational safety ownership test
+        if: steps.transform.outputs.pending == 'true'
+        run: python3 scripts/fix_platform_status_operational_safety_test.py
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.transform.outputs.pending == 'true'
         with:
@@ -55,6 +58,7 @@ jobs:
           voodoo_product/service.py
           voodoo_product/composition.py
           tests/system/test_platform_status_service.py
+          tests/system/test_operational_safety.py
           tests/system/test_statement_catalog.py
           scripts/product_readiness_gate.py
       - name: Verify changed Python lint
@@ -65,6 +69,7 @@ jobs:
           voodoo_product/service.py
           voodoo_product/composition.py
           tests/system/test_platform_status_service.py
+          tests/system/test_operational_safety.py
           tests/system/test_statement_catalog.py
           scripts/product_readiness_gate.py
       - name: Compile transformed source
@@ -98,9 +103,12 @@ jobs:
       - name: Product readiness gate
         if: steps.transform.outputs.pending == 'true'
         run: python scripts/product_readiness_gate.py
-      - name: Remove branch-only executor script
+      - name: Remove branch-only executor scripts
         if: steps.transform.outputs.pending == 'true'
-        run: git rm -f scripts/apply_platform_status_service_composition.py
+        run: >-
+          git rm -f
+          scripts/apply_platform_status_service_composition.py
+          scripts/fix_platform_status_operational_safety_test.py
       - name: Verify exact scope and commit
         if: steps.transform.outputs.pending == 'true'
         shell: bash
@@ -115,7 +123,9 @@ jobs:
           expected = {
               "docs/product/PLATFORM_STATUS_SERVICE_COMPOSITION_BOUNDARY.md",
               "scripts/apply_platform_status_service_composition.py",
+              "scripts/fix_platform_status_operational_safety_test.py",
               "scripts/product_readiness_gate.py",
+              "tests/system/test_operational_safety.py",
               "tests/system/test_platform_status_service.py",
               "tests/system/test_statement_catalog.py",
               "voodoo_product/composition.py",
@@ -141,6 +151,7 @@ jobs:
           git add \
             docs/product/PLATFORM_STATUS_SERVICE_COMPOSITION_BOUNDARY.md \
             scripts/product_readiness_gate.py \
+            tests/system/test_operational_safety.py \
             tests/system/test_platform_status_service.py \
             tests/system/test_statement_catalog.py \
             voodoo_product/composition.py \
