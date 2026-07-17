@@ -35,6 +35,9 @@ jobs:
           else
             echo "pending=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Normalize assertion anchor
+        if: steps.transform.outputs.pending == 'true'
+        run: python3 scripts/normalize_authentication_rate_limit_transform_anchor.py
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
         run: python3 scripts/apply_authentication_rate_limit_service_composition.py
@@ -94,9 +97,12 @@ jobs:
       - name: Product readiness gate
         if: steps.transform.outputs.pending == 'true'
         run: python scripts/product_readiness_gate.py
-      - name: Remove branch-only executor script
+      - name: Remove branch-only executor scripts
         if: steps.transform.outputs.pending == 'true'
-        run: git rm -f scripts/apply_authentication_rate_limit_service_composition.py
+        run: >-
+          git rm -f
+          scripts/apply_authentication_rate_limit_service_composition.py
+          scripts/normalize_authentication_rate_limit_transform_anchor.py
       - name: Verify exact scope and commit
         if: steps.transform.outputs.pending == 'true'
         shell: bash
@@ -111,6 +117,7 @@ jobs:
           expected = {
               "docs/product/AUTHENTICATION_RATE_LIMIT_SERVICE_COMPOSITION_BOUNDARY.md",
               "scripts/apply_authentication_rate_limit_service_composition.py",
+              "scripts/normalize_authentication_rate_limit_transform_anchor.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_authentication_rate_limit_service.py",
               "tests/system/test_statement_catalog.py",
