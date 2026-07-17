@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import voodoo_product.service as service_module
+import voodoo_product.receipt as receipt_module
 from voodoo_product.api import install_product_platform
 from voodoo_product.config import ProductConfig
 
@@ -424,11 +424,11 @@ def test_receipt_sequence_is_stable_when_timestamps_collide(
     operator = login(client, "operator")
     workspace = client.get("/api/v1/workspaces", headers=headers(admin)).json()[0]
     service = client.app.state.voodoo_product_service
-    original_new_id = service_module.new_id
+    original_new_id = receipt_module.new_id
     receipt_ids = iter(("rcpt_z", "rcpt_a"))
 
     monkeypatch.setattr(
-        service_module,
+        receipt_module,
         "utc_now",
         lambda: "2026-07-16T12:00:00.000+00:00",
     )
@@ -436,7 +436,7 @@ def test_receipt_sequence_is_stable_when_timestamps_collide(
     def controlled_new_id(prefix: str) -> str:
         return next(receipt_ids) if prefix == "rcpt" else original_new_id(prefix)
 
-    monkeypatch.setattr(service_module, "new_id", controlled_new_id)
+    monkeypatch.setattr(receipt_module, "new_id", controlled_new_id)
 
     for index in range(2):
         request = client.post(

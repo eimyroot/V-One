@@ -90,7 +90,7 @@ def test_product_service_rejects_audit_ledger_from_another_database(tmp_path: Pa
         )
 
 
-def test_composition_shares_database_and_audit_ledger_without_public_routes(
+def test_composition_shares_database_and_evidence_ledgers_without_public_routes(
     tmp_path: Path,
 ) -> None:
     app = FastAPI()
@@ -103,10 +103,13 @@ def test_composition_shares_database_and_audit_ledger_without_public_routes(
     assert composition.service.__class__ is ProductService
     assert app.state.voodoo_product_service is composition.service
     assert app.state.voodoo_audit_ledger is composition.audit_ledger
+    assert app.state.voodoo_receipt_ledger is composition.receipt_ledger
     assert app.state.voodoo_external_identity_service is composition.external_identity_service
     assert app.state.voodoo_product_composition is composition
     assert composition.service.audit_ledger is composition.audit_ledger
+    assert composition.service.receipt_ledger is composition.receipt_ledger
     assert composition.audit_ledger.db is composition.service.db
+    assert composition.receipt_ledger.db is composition.service.db
     assert composition.external_identity_service.db is composition.service.db
     assert composition.external_identity_service.audit_ledger is composition.audit_ledger
 
