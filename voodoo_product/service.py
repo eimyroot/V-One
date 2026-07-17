@@ -9,6 +9,7 @@ from . import statements as sql
 from .adapters import execute_adapter
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService, AuthRateLimitExceeded
+from .bootstrap import BootstrapService
 from .change_request import ChangeRequestService
 from .config import ProductConfig
 from .db import create_product_database
@@ -56,6 +57,7 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         authentication_rate_limit_service: AuthenticationRateLimitService | None = None,
+        bootstrap_service: BootstrapService | None = None,
         audit_ledger: AuditLedger | None = None,
         user_account_service: UserAccountService | None = None,
         workspace_service: WorkspaceService | None = None,
@@ -96,6 +98,25 @@ class ProductService:
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_bootstrap_service = bootstrap_service or BootstrapService(
+            database=self.db,
+            config=self.config,
+            audit_ledger=self.audit_ledger,
+            id_factory=lambda prefix: new_id(prefix),
+            clock=lambda: utc_now(),
+            password_hasher=lambda password: hash_password(password),
+            token_comparator=lambda supplied, expected: secrets.compare_digest(
+                supplied,
+                expected,
+            ),
+        )
+        if resolved_bootstrap_service.db is not self.db:
+            raise ValueError("bootstrap service must use the product service database")
+        if resolved_bootstrap_service.config is not self.config:
+            raise ValueError("bootstrap service must use the product service configuration")
+        if resolved_bootstrap_service.audit_ledger is not self.audit_ledger:
+            raise ValueError("bootstrap service must use the product service audit ledger")
+        self.bootstrap_service = resolved_bootstrap_service
         resolved_user_account_service = user_account_service or UserAccountService(
             database=self.db,
             audit_ledger=self.audit_ledger,
@@ -227,56 +248,14 @@ class ProductService:
         )
 
     def has_users(self) -> bool:
-        with self.db.connect() as connection:
-            row = connection.execute(sql.COUNT_USERS).fetchone()
-            return bool(row and int(row["count"]) > 0)
+        return self.bootstrap_service.has_users()
 
     def bootstrap_admin(self, *, username: str, password: str, token: str) -> dict[str, Any]:
-        if not secrets.compare_digest(token, self.config.bootstrap_token):
-            raise PermissionError("invalid bootstrap token")
-        with self.db.transaction() as connection:
-            count = connection.execute(sql.COUNT_USERS).fetchone()
-            if count and int(count["count"]) > 0:
-                raise RuntimeError("bootstrap is already closed")
-            user_id = new_id("usr")
-            workspace_id = new_id("wrk")
-            workspace_environment = (
-                self.config.environment
-                if self.config.environment in VALID_ENVIRONMENTS
-                else "local"
-            )
-            now = utc_now()
-            connection.execute(
-                sql.INSERT_USER,
-                (user_id, username.strip(), hash_password(password), "administrator", now),
-            )
-            connection.execute(
-                sql.INSERT_WORKSPACE,
-                (
-                    workspace_id,
-                    f"VOODOO {workspace_environment.title()}",
-                    workspace_environment,
-                    now,
-                ),
-            )
-            self._append_audit(
-                connection,
-                actor_id=user_id,
-                action="system.bootstrap",
-                target_type="workspace",
-                target_id=workspace_id,
-                payload={
-                    "username": username,
-                    "role": "administrator",
-                    "workspace_environment": workspace_environment,
-                },
-            )
-            return {
-                "user_id": user_id,
-                "workspace_id": workspace_id,
-                "workspace_environment": workspace_environment,
-                "role": "administrator",
-            }
+        return self.bootstrap_service.bootstrap_admin(
+            username=username,
+            password=password,
+            token=token,
+        )
 
     def enforce_login_rate_limit(self, *, username: str, source: str) -> None:
         self.authentication_rate_limit_service.enforce_login_rate_limit(
