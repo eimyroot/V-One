@@ -5,11 +5,14 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from voodoo_product.evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from voodoo_product.service import (
     canonical_json as legacy_canonical_json,
+)
+from voodoo_product.service import (
     chained_hash as legacy_chained_hash,
 )
+
+from voodoo_product.evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 
 ROOT = Path(__file__).resolve().parents[2]
 
