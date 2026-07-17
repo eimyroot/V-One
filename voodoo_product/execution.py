@@ -12,7 +12,8 @@ from .adapters import AdapterContext, AdapterError, execute_adapter
 from .audit import AuditLedger
 from .config import ProductConfig
 from .evidence_primitives import canonical_json, new_id, utc_now
-from .persistence import DatabaseConnection, DatabaseRow, ProductDatabaseAdapter
+from .operational_safety import OperationalSafetyService
+from .persistence import DatabaseRow, ProductDatabaseAdapter
 from .receipt import ReceiptLedger
 
 AdapterExecutor = Callable[..., dict[str, Any]]
@@ -53,6 +54,7 @@ class ExecutionService:
         config: ProductConfig,
         audit_ledger: AuditLedger,
         receipt_ledger: ReceiptLedger,
+        operational_safety_service: OperationalSafetyService,
         adapter_executor: AdapterExecutor = execute_adapter,
         id_factory: IdFactory = new_id,
         clock: Clock = utc_now,
@@ -63,10 +65,17 @@ class ExecutionService:
             raise ValueError("execution service audit ledger must use its database")
         if receipt_ledger.db is not database:
             raise ValueError("execution service receipt ledger must use its database")
+        if operational_safety_service.db is not database:
+            raise ValueError("execution operational safety service must use its database")
+        if operational_safety_service.audit_ledger is not audit_ledger:
+            raise ValueError(
+                "execution operational safety service must use its audit ledger"
+            )
         self.db = database
         self.config = config
         self.audit_ledger = audit_ledger
         self.receipt_ledger = receipt_ledger
+        self.operational_safety_service = operational_safety_service
         self._adapter_executor = adapter_executor
         self._id_factory = id_factory
         self._clock = clock
@@ -95,7 +104,7 @@ class ExecutionService:
                     existing_execution_id = str(existing["id"])
 
             if existing_execution_id is None:
-                if self._emergency_stop(connection):
+                if self.operational_safety_service.is_active(connection):
                     raise PermissionError("emergency stop is active")
                 request_row = connection.execute(
                     sql.SELECT_CHANGE_REQUEST_FOR_EXECUTION,
@@ -230,7 +239,7 @@ class ExecutionService:
             raise ValueError("recovery reason must contain 3 to 2000 characters")
 
         with self.db.transaction() as connection:
-            if not self._emergency_stop(connection):
+            if not self.operational_safety_service.is_active(connection):
                 raise PermissionError("emergency stop must be active for execution recovery")
             execution = connection.execute(
                 sql.SELECT_EXECUTION_FOR_RECOVERY,
@@ -322,11 +331,6 @@ class ExecutionService:
         if row is None:
             raise LookupError("execution not found")
         return self._decode_execution(dict(row))
-
-    @staticmethod
-    def _emergency_stop(connection: DatabaseConnection) -> bool:
-        row = connection.execute(sql.SELECT_EMERGENCY_STOP).fetchone()
-        return bool(row and str(row["value"]).lower() == "true")
 
     @staticmethod
     def _require_workspace_environment(value: DatabaseRow) -> None:
