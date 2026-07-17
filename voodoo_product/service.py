@@ -5,16 +5,16 @@ import hmac
 import json
 import secrets
 import time
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from . import statements as sql
-from .adapters import AdapterContext, AdapterError, execute_adapter
+from .adapters import execute_adapter
 from .audit import AuditLedger
 from .config import ProductConfig
 from .db import create_product_database
 from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
+from .execution import ExecutionService, timestamp_after, timestamp_expired
 from .persistence import (
     DatabaseConnection,
     DatabaseError,
@@ -53,25 +53,8 @@ class AuthRateLimitExceeded(Exception):
         super().__init__("authentication temporarily rate limited")
 
 
-def timestamp_after(value: str, seconds: int) -> str:
-    try:
-        parsed = datetime.fromisoformat(value)
-        if parsed.tzinfo is None:
-            raise ValueError("timestamp has no timezone")
-    except ValueError as exc:
-        raise RuntimeError("execution timestamp is invalid") from exc
-    return (parsed + timedelta(seconds=seconds)).astimezone(UTC).isoformat(timespec="milliseconds")
 
 
-def timestamp_expired(value: str, *, now: str) -> bool:
-    try:
-        expires_at = datetime.fromisoformat(value)
-        current = datetime.fromisoformat(now)
-        if expires_at.tzinfo is None or current.tzinfo is None:
-            raise ValueError("timestamp has no timezone")
-    except ValueError as exc:
-        raise RuntimeError("execution lease timestamp is invalid") from exc
-    return expires_at <= current
 
 
 def row_dict(row: DatabaseRow | None) -> dict[str, Any] | None:
@@ -86,6 +69,7 @@ class ProductService:
         database: ProductDatabaseAdapter | None = None,
         audit_ledger: AuditLedger | None = None,
         receipt_ledger: ReceiptLedger | None = None,
+        execution_service: ExecutionService | None = None,
     ) -> None:
         self.config = config
         self.db = (
@@ -105,6 +89,30 @@ class ProductService:
         if resolved_receipt_ledger.db is not self.db:
             raise ValueError("receipt ledger must use the product service database")
         self.receipt_ledger = resolved_receipt_ledger
+        resolved_execution_service = execution_service or ExecutionService(
+            database=self.db,
+            config=self.config,
+            audit_ledger=self.audit_ledger,
+            receipt_ledger=self.receipt_ledger,
+            adapter_executor=lambda adapter, payload, *, context: execute_adapter(
+                adapter,
+                payload,
+                context=context,
+            ),
+            id_factory=lambda prefix: new_id(prefix),
+            clock=lambda: utc_now(),
+            lease_deadline=lambda value, seconds: timestamp_after(value, seconds),
+            lease_expired=lambda value, *, now: timestamp_expired(value, now=now),
+        )
+        if resolved_execution_service.db is not self.db:
+            raise ValueError("execution service must use the product service database")
+        if resolved_execution_service.config is not self.config:
+            raise ValueError("execution service must use the product service configuration")
+        if resolved_execution_service.audit_ledger is not self.audit_ledger:
+            raise ValueError("execution service must use the product service audit ledger")
+        if resolved_execution_service.receipt_ledger is not self.receipt_ledger:
+            raise ValueError("execution service must use the product service receipt ledger")
+        self.execution_service = resolved_execution_service
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
         self._dummy_password_hash = hash_password(
             f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
@@ -524,138 +532,12 @@ class ProductService:
         idempotency_key: str | None,
         repository_root: Path,
     ) -> dict[str, Any]:
-        existing_execution_id: str | None = None
-        request_row: DatabaseRow | None = None
-        with self.db.transaction() as connection:
-            if idempotency_key:
-                existing = connection.execute(
-                    sql.SELECT_EXECUTION_BY_IDEMPOTENCY_KEY,
-                    (idempotency_key,),
-                ).fetchone()
-                if existing is not None:
-                    if str(existing["request_id"]) != request_id:
-                        raise RuntimeError("idempotency key is bound to another request")
-                    existing_execution_id = str(existing["id"])
-
-            if existing_execution_id is None:
-                if self._emergency_stop(connection):
-                    raise PermissionError("emergency stop is active")
-                request_row = connection.execute(
-                    sql.SELECT_CHANGE_REQUEST_FOR_EXECUTION, (request_id,)
-                ).fetchone()
-                if request_row is None:
-                    raise LookupError("change request not found")
-                self._require_workspace_environment(request_row)
-                if request_row["status"] != "APPROVED":
-                    raise PermissionError("change request is not approved")
-                if (
-                    request_row["environment"] == "production"
-                    and not self.config.production_effects_enabled
-                ):
-                    raise PermissionError("production effects remain disabled")
-                execution_id = new_id("exec")
-                execution_fence = 1
-                now = utc_now()
-                lease_expires_at = timestamp_after(now, self.config.execution_lease_seconds)
-                connection.execute(
-                    sql.INSERT_EXECUTION,
-                    (
-                        execution_id,
-                        request_id,
-                        request_row["adapter"],
-                        idempotency_key,
-                        now,
-                        lease_expires_at,
-                    ),
-                )
-                connection.execute(
-                    sql.MARK_CHANGE_REQUEST_RUNNING,
-                    (now, request_id),
-                )
-                self._append_audit(
-                    connection,
-                    actor_id=actor_id,
-                    action="execution.start",
-                    target_type="execution",
-                    target_id=execution_id,
-                    payload={"request_id": request_id, "adapter": request_row["adapter"]},
-                )
-
-        if existing_execution_id is not None:
-            return self.get_execution(existing_execution_id)
-        if request_row is None:
-            raise RuntimeError("execution start transaction did not produce a request")
-
-        try:
-            output = execute_adapter(
-                str(request_row["adapter"]),
-                json.loads(str(request_row["payload_json"])),
-                context=AdapterContext(
-                    workspace_id=str(request_row["workspace_id"]),
-                    repository_root=repository_root.resolve(),
-                    sandbox_root=self.config.sandbox_root,
-                    timeout_seconds=self.config.execution_timeout_seconds,
-                ),
-            )
-            if output.get("success") is False:
-                raise AdapterError("validation adapter returned non-zero status")
-            status = "SUCCEEDED"
-            error = None
-        except Exception as exc:
-            output = {"error_type": type(exc).__name__}
-            status = "FAILED"
-            error = str(exc)[:2000]
-
-        with self.db.transaction() as connection:
-            completed_at = utc_now()
-            completed = connection.execute(
-                sql.COMPLETE_EXECUTION,
-                (
-                    status,
-                    canonical_json(output),
-                    error,
-                    completed_at,
-                    execution_id,
-                    execution_fence,
-                ),
-            ).fetchone()
-            if completed is not None:
-                request_status = "COMPLETED" if status == "SUCCEEDED" else "FAILED"
-                connection.execute(
-                    sql.MARK_CHANGE_REQUEST_COMPLETED,
-                    (request_status, completed_at, request_id),
-                )
-                receipt = self._append_receipt(
-                    connection,
-                    execution_id=execution_id,
-                    payload={
-                        "execution_id": execution_id,
-                        "request_id": request_id,
-                        "workspace_id": request_row["workspace_id"],
-                        "actor_id": actor_id,
-                        "adapter": request_row["adapter"],
-                        "risk": request_row["risk"],
-                        "environment": request_row["environment"],
-                        "status": status,
-                        "output_digest": hashlib.sha256(
-                            canonical_json(output).encode("utf-8")
-                        ).hexdigest(),
-                        "completed_at": completed_at,
-                    },
-                )
-                self._append_audit(
-                    connection,
-                    actor_id=actor_id,
-                    action=f"execution.{status.lower()}",
-                    target_type="execution",
-                    target_id=execution_id,
-                    payload={
-                        "request_id": request_id,
-                        "receipt_id": receipt["id"],
-                        "error": error,
-                    },
-                )
-        return self.get_execution(execution_id)
+        return self.execution_service.execute_change_request(
+            actor_id=actor_id,
+            request_id=request_id,
+            idempotency_key=idempotency_key,
+            repository_root=repository_root,
+        )
 
     def recover_execution(
         self,
@@ -664,100 +546,17 @@ class ProductService:
         execution_id: str,
         reason: str,
     ) -> dict[str, Any]:
-        normalized_reason = reason.strip()
-        if not 3 <= len(normalized_reason) <= 2_000:
-            raise ValueError("recovery reason must contain 3 to 2000 characters")
-
-        with self.db.transaction() as connection:
-            if not self._emergency_stop(connection):
-                raise PermissionError("emergency stop must be active for execution recovery")
-            execution = connection.execute(
-                sql.SELECT_EXECUTION_FOR_RECOVERY,
-                (execution_id,),
-            ).fetchone()
-            if execution is None:
-                raise LookupError("execution not found")
-            if execution["status"] != "RUNNING":
-                raise RuntimeError("execution is not running")
-
-            now = utc_now()
-            raw_lease = execution["lease_expires_at"]
-            lease_expires_at = str(raw_lease) if raw_lease is not None else None
-            if lease_expires_at is not None and not timestamp_expired(lease_expires_at, now=now):
-                raise RuntimeError("execution lease has not expired")
-
-            output = {"error_type": "ExecutionInterrupted", "outcome": "INDETERMINATE"}
-            error = "execution outcome is indeterminate after lease expiry"
-            interrupted = connection.execute(
-                sql.INTERRUPT_EXECUTION,
-                (
-                    canonical_json(output),
-                    error,
-                    now,
-                    execution_id,
-                    int(execution["fence"]),
-                    lease_expires_at,
-                ),
-            ).fetchone()
-            if interrupted is None:
-                raise RuntimeError("execution changed during recovery")
-
-            request_id = str(execution["request_id"])
-            connection.execute(
-                sql.MARK_CHANGE_REQUEST_COMPLETED,
-                ("FAILED", now, request_id),
-            )
-            receipt = self._append_receipt(
-                connection,
-                execution_id=execution_id,
-                payload={
-                    "execution_id": execution_id,
-                    "request_id": request_id,
-                    "workspace_id": execution["workspace_id"],
-                    "actor_id": actor_id,
-                    "adapter": execution["adapter"],
-                    "risk": execution["risk"],
-                    "environment": execution["environment"],
-                    "status": "INTERRUPTED",
-                    "outcome": "INDETERMINATE",
-                    "output_digest": hashlib.sha256(
-                        canonical_json(output).encode("utf-8")
-                    ).hexdigest(),
-                    "completed_at": now,
-                },
-            )
-            self._append_audit(
-                connection,
-                actor_id=actor_id,
-                action="execution.interrupted",
-                target_type="execution",
-                target_id=execution_id,
-                payload={
-                    "request_id": request_id,
-                    "receipt_id": receipt["id"],
-                    "outcome": "INDETERMINATE",
-                    "reason": normalized_reason,
-                },
-            )
-        return self.get_execution(execution_id)
+        return self.execution_service.recover_execution(
+            actor_id=actor_id,
+            execution_id=execution_id,
+            reason=reason,
+        )
 
     def list_executions(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        with self.db.connect() as connection:
-            rows = connection.execute(
-                sql.LIST_EXECUTIONS,
-                (max(1, min(limit, 500)),),
-            ).fetchall()
-        return [self._decode_execution(dict(row)) for row in rows]
+        return self.execution_service.list_executions(limit=limit)
 
     def get_execution(self, execution_id: str) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            row = connection.execute(
-                sql.GET_EXECUTION,
-                (execution_id,),
-            ).fetchone()
-        if row is None:
-            raise LookupError("execution not found")
-        return self._decode_execution(dict(row))
+        return self.execution_service.get_execution(execution_id)
 
     def list_receipts(self, *, limit: int = 100) -> list[dict[str, Any]]:
         return self.receipt_ledger.list_receipts(limit=limit)
@@ -895,10 +694,4 @@ class ProductService:
     @staticmethod
     def _decode_change_request(value: dict[str, Any]) -> dict[str, Any]:
         value["payload"] = json.loads(value.pop("payload_json"))
-        return value
-
-    @staticmethod
-    def _decode_execution(value: dict[str, Any]) -> dict[str, Any]:
-        value["output"] = json.loads(value.pop("output_json"))
-        value.pop("fence", None)
         return value

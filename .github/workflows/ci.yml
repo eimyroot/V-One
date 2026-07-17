@@ -54,6 +54,7 @@ jobs:
       - name: Execution and persistence gate
         run: >-
           python -m pytest -q
+          tests/system/test_execution_service.py
           tests/system/test_execution_idempotency.py
           tests/system/test_execution_recovery.py
           tests/system/test_persistence_boundary.py

@@ -12,6 +12,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api import create_product_router
 from .audit import AuditLedger
 from .config import ProductConfig
+from .execution import ExecutionService
 from .external_identity_service import GovernedExternalIdentityService
 from .http_security import SecurityHeadersMiddleware
 from .identity import (
@@ -32,6 +33,7 @@ class ProductComposition:
     service: ProductService
     audit_ledger: AuditLedger
     receipt_ledger: ReceiptLedger
+    execution_service: ExecutionService
     external_identity_service: GovernedExternalIdentityService
 
 
@@ -54,6 +56,7 @@ def install_composed_product_platform(
     service = ProductService(resolved_config)
     audit_ledger = service.audit_ledger
     receipt_ledger = service.receipt_ledger
+    execution_service = service.execution_service
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
         service=service,
@@ -66,6 +69,7 @@ def install_composed_product_platform(
         service=service,
         audit_ledger=audit_ledger,
         receipt_ledger=receipt_ledger,
+        execution_service=execution_service,
         external_identity_service=external_identity_service,
     )
 
@@ -73,6 +77,7 @@ def install_composed_product_platform(
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
     app.state.voodoo_receipt_ledger = receipt_ledger
+    app.state.voodoo_execution_service = execution_service
     app.state.voodoo_external_identity_service = external_identity_service
     app.state.voodoo_product_composition = composition
     app.include_router(
