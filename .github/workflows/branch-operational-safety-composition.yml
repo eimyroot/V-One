@@ -137,7 +137,7 @@ jobs:
       - name: Product readiness gate
         run: python scripts/product_readiness_gate.py
       - name: Remove branch-only executor script
-        run: git rm scripts/apply_operational_safety_composition.py
+        run: git rm -f scripts/apply_operational_safety_composition.py
       - name: Verify exact scope and commit
         shell: bash
         run: |
