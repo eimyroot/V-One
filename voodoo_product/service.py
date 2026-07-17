@@ -22,7 +22,16 @@ from .persistence import (
     DatabaseRow,
     ProductDatabaseAdapter,
 )
+from .receipt import ReceiptLedger
 from .security import hash_password, verify_password
+
+__all__ = [
+    "ProductService",
+    "canonical_json",
+    "chained_hash",
+    "new_id",
+    "utc_now",
+]
 
 VALID_ROLES = {
     "viewer",
@@ -76,6 +85,7 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         audit_ledger: AuditLedger | None = None,
+        receipt_ledger: ReceiptLedger | None = None,
     ) -> None:
         self.config = config
         self.db = (
@@ -91,6 +101,10 @@ class ProductService:
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_receipt_ledger = receipt_ledger or ReceiptLedger(self.db)
+        if resolved_receipt_ledger.db is not self.db:
+            raise ValueError("receipt ledger must use the product service database")
+        self.receipt_ledger = resolved_receipt_ledger
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
         self._dummy_password_hash = hash_password(
             f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
@@ -746,34 +760,10 @@ class ProductService:
         return self._decode_execution(dict(row))
 
     def list_receipts(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        with self.db.connect() as connection:
-            rows = connection.execute(
-                sql.LIST_RECEIPTS,
-                (max(1, min(limit, 500)),),
-            ).fetchall()
-        return [self._decode_receipt(dict(row)) for row in rows]
+        return self.receipt_ledger.list_receipts(limit=limit)
 
     def verify_receipt_chain(self) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            rows = connection.execute(sql.LIST_RECEIPTS_FOR_VERIFICATION).fetchall()
-        previous_hash = "GENESIS"
-        for expected_sequence, row in enumerate(rows, start=1):
-            payload = json.loads(row["payload_json"])
-            expected = chained_hash(previous_hash, payload)
-            if (
-                int(row["sequence"]) != expected_sequence
-                or row["previous_hash"] != previous_hash
-                or row["receipt_hash"] != expected
-            ):
-                return {
-                    "valid": False,
-                    "count": len(rows),
-                    "broken_at": expected_sequence,
-                    "sequence": row["sequence"],
-                    "receipt_id": row["id"],
-                }
-            previous_hash = row["receipt_hash"]
-        return {"valid": True, "count": len(rows), "head": previous_hash}
+        return self.receipt_ledger.verify()
 
     def list_audit_events(self, *, limit: int = 200) -> list[dict[str, Any]]:
         return self.audit_ledger.list_events(limit=limit)
@@ -879,29 +869,11 @@ class ProductService:
         execution_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        last = connection.execute(sql.SELECT_RECEIPT_HEAD).fetchone()
-        previous_hash = str(last["receipt_hash"]) if last else "GENESIS"
-        receipt_hash = chained_hash(previous_hash, payload)
-        receipt = {
-            "id": new_id("rcpt"),
-            "execution_id": execution_id,
-            "payload": payload,
-            "previous_hash": previous_hash,
-            "receipt_hash": receipt_hash,
-            "created_at": utc_now(),
-        }
-        connection.execute(
-            sql.INSERT_RECEIPT,
-            (
-                receipt["id"],
-                execution_id,
-                canonical_json(payload),
-                previous_hash,
-                receipt_hash,
-                receipt["created_at"],
-            ),
+        return self.receipt_ledger.append(
+            connection,
+            execution_id=execution_id,
+            payload=payload,
         )
-        return receipt
 
     @staticmethod
     def _emergency_stop(connection: DatabaseConnection) -> bool:
@@ -929,9 +901,4 @@ class ProductService:
     def _decode_execution(value: dict[str, Any]) -> dict[str, Any]:
         value["output"] = json.loads(value.pop("output_json"))
         value.pop("fence", None)
-        return value
-
-    @staticmethod
-    def _decode_receipt(value: dict[str, Any]) -> dict[str, Any]:
-        value["payload"] = json.loads(value.pop("payload_json"))
         return value

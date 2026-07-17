@@ -23,6 +23,7 @@ from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
 )
+from .receipt import ReceiptLedger
 from .service import ProductService
 
 
@@ -30,6 +31,7 @@ from .service import ProductService
 class ProductComposition:
     service: ProductService
     audit_ledger: AuditLedger
+    receipt_ledger: ReceiptLedger
     external_identity_service: GovernedExternalIdentityService
 
 
@@ -40,7 +42,7 @@ def install_composed_product_platform(
     repository_root: Path | None = None,
     identity_provider: IdentityProvider | None = None,
 ) -> ProductComposition:
-    """Install the production platform with one shared audit ledger."""
+    """Install the production platform with shared evidence ledgers."""
 
     resolved_config = config or ProductConfig.from_env()
     validate_identity_provider_startup(resolved_config)
@@ -51,6 +53,7 @@ def install_composed_product_platform(
     product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
     audit_ledger = service.audit_ledger
+    receipt_ledger = service.receipt_ledger
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
         service=service,
@@ -62,12 +65,14 @@ def install_composed_product_platform(
     composition = ProductComposition(
         service=service,
         audit_ledger=audit_ledger,
+        receipt_ledger=receipt_ledger,
         external_identity_service=external_identity_service,
     )
 
     app.state.voodoo_product_service = service
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
+    app.state.voodoo_receipt_ledger = receipt_ledger
     app.state.voodoo_external_identity_service = external_identity_service
     app.state.voodoo_product_composition = composition
     app.include_router(

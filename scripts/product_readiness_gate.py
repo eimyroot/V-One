@@ -31,6 +31,7 @@ REQUIRED = [
     "voodoo_product/migrations/sqlite/0006_external_identity_bindings.sql",
     "voodoo_product/observability.py",
     "voodoo_product/persistence.py",
+    "voodoo_product/receipt.py",
     "voodoo_product/service.py",
     "voodoo_product/statements.py",
     "voodoo_product/security.py",
@@ -49,6 +50,7 @@ REQUIRED = [
     "tests/system/test_persistence_boundary.py",
     "tests/system/test_product_composition.py",
     "tests/system/test_product_platform_rc1.py",
+    "tests/system/test_receipt_ledger.py",
     "tests/system/test_release_supply_chain.py",
     "tests/system/test_statement_catalog.py",
     "tests/system/test_token_security.py",
@@ -68,6 +70,7 @@ REQUIRED = [
     "docs/product/GOVERNED_EXTERNAL_IDENTITY_SERVICE.md",
     "docs/product/IDENTITY_PROVIDER_BOUNDARY.md",
     "docs/product/PERSISTENCE_BOUNDARY.md",
+    "docs/product/RECEIPT_LEDGER_COMPOSITION_BOUNDARY.md",
     "docs/product/STATEMENT_CATALOG.md",
 ]
 
