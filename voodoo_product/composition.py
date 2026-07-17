@@ -20,7 +20,10 @@ from .identity import (
     validate_identity_provider_startup,
 )
 from .ledger_service import LedgerBackedProductService
-from .observability import StructuredRequestLoggingMiddleware, configure_product_logging
+from .observability import (
+    StructuredRequestLoggingMiddleware,
+    configure_product_logging,
+)
 
 
 @dataclass(frozen=True, slots=True)
