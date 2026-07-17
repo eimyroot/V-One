@@ -30,36 +30,22 @@ jobs:
         id: transform
         shell: bash
         run: |
-          if [ -f scripts/apply_authentication_rate_limit_service_composition.py ] && \
-             [ ! -f .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt ]; then
+          if [ -f scripts/apply_authentication_rate_limit_service_composition.py ]; then
             echo "pending=true" >> "$GITHUB_OUTPUT"
           else
             echo "pending=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Normalize assertion anchor
+      - name: Normalize assertion anchors
         if: steps.transform.outputs.pending == 'true'
-        run: python3 scripts/normalize_authentication_rate_limit_transform_anchor.py
+        run: |
+          python3 scripts/normalize_authentication_rate_limit_transform_anchor.py
+          python3 scripts/normalize_authentication_rate_limit_helper_anchor.py
       - name: Label assertion diagnostics
         if: steps.transform.outputs.pending == 'true'
         run: python3 scripts/label_authentication_rate_limit_transform_assertions.py
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
-        shell: bash
-        run: |
-          set +e
-          output="$(python3 scripts/apply_authentication_rate_limit_service_composition.py 2>&1)"
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            git reset --hard HEAD
-            printf '%s\n' "$output" > .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt
-            git config user.name "VOODOO Governance Bot"
-            git config user.email "governance-bot@users.noreply.github.com"
-            git add .github/AUTH_RATE_LIMIT_TRANSFORM_ERROR.txt
-            git commit -m "chore: capture authentication rate-limit transform assertion"
-            git push origin HEAD:agent/authentication-rate-limit-service-composition-20260717
-            exit "$status"
-          fi
+        run: python3 scripts/apply_authentication_rate_limit_service_composition.py
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.transform.outputs.pending == 'true'
         with:
@@ -122,6 +108,7 @@ jobs:
           git rm -f
           scripts/apply_authentication_rate_limit_service_composition.py
           scripts/normalize_authentication_rate_limit_transform_anchor.py
+          scripts/normalize_authentication_rate_limit_helper_anchor.py
           scripts/label_authentication_rate_limit_transform_assertions.py
       - name: Verify exact scope and commit
         if: steps.transform.outputs.pending == 'true'
@@ -138,6 +125,7 @@ jobs:
               "docs/product/AUTHENTICATION_RATE_LIMIT_SERVICE_COMPOSITION_BOUNDARY.md",
               "scripts/apply_authentication_rate_limit_service_composition.py",
               "scripts/normalize_authentication_rate_limit_transform_anchor.py",
+              "scripts/normalize_authentication_rate_limit_helper_anchor.py",
               "scripts/label_authentication_rate_limit_transform_assertions.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_authentication_rate_limit_service.py",
