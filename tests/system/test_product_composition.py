@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-
 from voodoo_product.api import install_product_platform
 from voodoo_product.composition import install_composed_product_platform
 from voodoo_product.config import ProductConfig
@@ -100,7 +99,7 @@ def test_composition_shares_database_and_audit_ledger_without_public_routes(
         repository_root=tmp_path,
     )
 
-    assert type(composition.service) is ProductService
+    assert composition.service.__class__ is ProductService
     assert app.state.voodoo_product_service is composition.service
     assert app.state.voodoo_audit_ledger is composition.audit_ledger
     assert app.state.voodoo_external_identity_service is composition.external_identity_service
