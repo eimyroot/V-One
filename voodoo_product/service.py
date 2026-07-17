@@ -19,12 +19,12 @@ from .operational_safety import OperationalSafetyService
 from .persistence import (
     DatabaseConnection,
     DatabaseError,
-    DatabaseIntegrityError,
     DatabaseRow,
     ProductDatabaseAdapter,
 )
 from .receipt import ReceiptLedger
 from .security import hash_password, verify_password
+from .user_account import UserAccountService
 from .workspace import WorkspaceService
 
 __all__ = [
@@ -70,6 +70,7 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         audit_ledger: AuditLedger | None = None,
+        user_account_service: UserAccountService | None = None,
         workspace_service: WorkspaceService | None = None,
         change_request_service: ChangeRequestService | None = None,
         receipt_ledger: ReceiptLedger | None = None,
@@ -90,6 +91,22 @@ class ProductService:
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_user_account_service = user_account_service or UserAccountService(
+            database=self.db,
+            audit_ledger=self.audit_ledger,
+            id_factory=lambda prefix: new_id(prefix),
+            clock=lambda: utc_now(),
+            password_hasher=lambda password: hash_password(password),
+        )
+        if resolved_user_account_service.db is not self.db:
+            raise ValueError(
+                "user account service must use the product service database"
+            )
+        if resolved_user_account_service.audit_ledger is not self.audit_ledger:
+            raise ValueError(
+                "user account service must use the product service audit ledger"
+            )
+        self.user_account_service = resolved_user_account_service
         resolved_workspace_service = workspace_service or WorkspaceService(
             database=self.db,
             audit_ledger=self.audit_ledger,
@@ -360,45 +377,17 @@ class ProductService:
                 )
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            row = connection.execute(
-                sql.SELECT_ACTIVE_USER,
-                (user_id,),
-            ).fetchone()
-        if row is None or not int(row["active"]):
-            raise PermissionError("account is inactive")
-        if str(row["role"]) not in VALID_ROLES:
-            raise PermissionError("account role is invalid")
-        return {
-            "id": str(row["id"]),
-            "username": str(row["username"]),
-            "role": str(row["role"]),
-        }
+        return self.user_account_service.get_active_user(user_id)
 
     def create_user(
         self, *, actor_id: str, username: str, password: str, role: str
     ) -> dict[str, Any]:
-        if role not in VALID_ROLES:
-            raise ValueError("unknown role")
-        user_id = new_id("usr")
-        now = utc_now()
-        with self.db.transaction() as connection:
-            try:
-                connection.execute(
-                    sql.INSERT_USER,
-                    (user_id, username.strip(), hash_password(password), role, now),
-                )
-            except DatabaseIntegrityError as exc:
-                raise ValueError("username already exists") from exc
-            self._append_audit(
-                connection,
-                actor_id=actor_id,
-                action="user.create",
-                target_type="user",
-                target_id=user_id,
-                payload={"username": username, "role": role},
-            )
-        return {"id": user_id, "username": username, "role": role, "active": True}
+        return self.user_account_service.create_user(
+            actor_id=actor_id,
+            username=username,
+            password=password,
+            role=role,
+        )
 
     def list_workspaces(self) -> list[dict[str, Any]]:
         return self.workspace_service.list_workspaces()
