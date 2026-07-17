@@ -92,7 +92,7 @@ def test_governed_service_database_calls_use_identity_catalog_and_audit_ledger()
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 7
+    assert len(execute_calls) == 6
     assert all(
         call.args
         and isinstance(call.args[0], ast.Attribute)
