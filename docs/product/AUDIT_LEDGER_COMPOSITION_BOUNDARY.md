@@ -2,17 +2,17 @@
 
 ## Status
 
-Implemented as the production runtime composition boundary. The audit ledger is now dependency-cycle-free, but the compatibility `ProductService` still contains its legacy audit methods until the next governed removal step.
+Implemented as the canonical product audit boundary. `ProductService` now owns and delegates to one reusable `AuditLedger`; the temporary ledger-backed subclass and duplicate audit implementation have been removed.
 
 ## Purpose
 
-`LedgerBackedProductService` preserves the existing product service interface while delegating audit append, list, and verification operations to one reusable `AuditLedger` instance.
+Every product operation, governed external identity operation, audit reader, and audit verifier must share one database-bound ledger implementation without changing the public service interface or stored evidence format.
 
 ## Runtime composition
 
 `install_composed_product_platform` creates:
 
-- one ledger-backed product service;
+- one canonical `ProductService`;
 - one audit ledger owned by that service;
 - one governed external identity service using the same database and ledger;
 - one immutable `ProductComposition` containing those components.
@@ -21,13 +21,13 @@ The components are stored on `app.state` for internal dependency access. The ide
 
 ## Delegation contract
 
-The production service overrides only the audit surface:
+`ProductService` preserves all existing methods while delegating its audit surface:
 
 - `_append_audit` delegates to `AuditLedger.append` inside the caller transaction;
 - `list_audit_events` delegates to the bounded ledger reader;
 - `verify_audit_chain` delegates to the ledger verifier.
 
-The ledger-backed service contains no direct SQL execution. All other product behavior remains inherited from `ProductService`.
+The service contains no direct audit SQL statements. Constructor injection is permitted only when the supplied ledger is bound to the exact same database adapter instance.
 
 ## Neutral evidence primitives
 
@@ -38,19 +38,19 @@ The ledger-backed service contains no direct SQL execution. All other product be
 - deterministic canonical JSON encoding;
 - SHA-256 chaining over the previous hash and canonical payload.
 
-`AuditLedger` imports these primitives directly and no longer imports `ProductService`. A fixed compatibility vector verifies that canonical JSON and hash output are byte-for-byte identical to the existing stored evidence format.
+`AuditLedger` imports these primitives directly. A fixed compatibility vector verifies that canonical JSON and hash output remain byte-for-byte identical to the existing stored evidence format.
 
 ## Audit guarantees
 
-The ledger uses the canonical statement catalog, preserves the existing `GENESIS`-anchored SHA-256 chain, verifies every hash transition, and remains compatible with audit events produced by existing product operations.
+The ledger uses the canonical statement catalog, preserves the existing `GENESIS`-anchored SHA-256 chain, verifies every hash transition, and remains compatible with audit events produced before this unification.
 
 External identity events continue to exclude the raw provider subject. Only its SHA-256 digest appears in responses and audit payloads.
 
 ## Compatibility boundary
 
-The older installer and base service remain available for compatibility and focused tests. The production ASGI entrypoint uses the composed installer. System tests enforce route and middleware parity between both installers.
+Both the compatibility installer and the production composition installer now use the same canonical `ProductService` audit implementation. System tests enforce route and middleware parity, shared-ledger identity, database binding, and absence of legacy audit SQL from the service.
 
-The next governed step may import the neutral primitives and `AuditLedger` into the base service, delegate its audit surface, remove the temporary ledger-backed subclass, and delete the legacy duplicate audit implementation. That step must preserve all public service methods and the stored hash-chain format.
+The removed `ledger_service.py` module was internal and temporary. No public route, schema, service method, or evidence field was removed.
 
 ## Explicitly disabled
 

@@ -19,7 +19,7 @@ from .identity import (
     create_identity_provider,
     validate_identity_provider_startup,
 )
-from .ledger_service import LedgerBackedProductService
+from .service import ProductService
 from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
@@ -28,7 +28,7 @@ from .observability import (
 
 @dataclass(frozen=True, slots=True)
 class ProductComposition:
-    service: LedgerBackedProductService
+    service: ProductService
     audit_ledger: AuditLedger
     external_identity_service: GovernedExternalIdentityService
 
@@ -49,7 +49,7 @@ def install_composed_product_platform(
 
     root = (repository_root or Path.cwd()).resolve()
     product_logger = configure_product_logging(level=resolved_config.log_level)
-    service = LedgerBackedProductService(resolved_config)
+    service = ProductService(resolved_config)
     audit_ledger = service.audit_ledger
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,

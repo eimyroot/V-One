@@ -4,12 +4,13 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 
 from voodoo_product.api import install_product_platform
 from voodoo_product.composition import install_composed_product_platform
 from voodoo_product.config import ProductConfig
-from voodoo_product.ledger_service import LedgerBackedProductService
+from voodoo_product.service import ProductService
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,23 +46,48 @@ def test_audit_ledger_uses_only_central_statement_catalog() -> None:
     )
 
 
-def test_ledger_backed_service_delegates_without_database_statements() -> None:
-    source = ROOT / "voodoo_product" / "ledger_service.py"
+def test_product_service_delegates_complete_audit_surface() -> None:
+    source = ROOT / "voodoo_product" / "service.py"
     source_text = source.read_text(encoding="utf-8")
     tree = ast.parse(source_text, filename=str(source))
-    execute_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "execute"
-    ]
+    product_service = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProductService"
+    )
+    methods = {
+        node.name: node
+        for node in product_service.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in {"_append_audit", "list_audit_events", "verify_audit_chain"}
+    }
 
-    assert execute_calls == []
+    assert set(methods) == {"_append_audit", "list_audit_events", "verify_audit_chain"}
+    for method in methods.values():
+        assert not any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "execute"
+            for node in ast.walk(method)
+        )
     assert "self.audit_ledger.append" in source_text
     assert "self.audit_ledger.list_events" in source_text
     assert "self.audit_ledger.verify" in source_text
-    assert "super()._append_audit" not in source_text
+    assert "sql.SELECT_AUDIT_HEAD" not in source_text
+    assert "sql.INSERT_AUDIT_EVENT" not in source_text
+    assert "sql.LIST_AUDIT_EVENTS" not in source_text
+    assert "sql.LIST_AUDIT_EVENTS_FOR_VERIFICATION" not in source_text
+    assert not (ROOT / "voodoo_product" / "ledger_service.py").exists()
+
+
+def test_product_service_rejects_audit_ledger_from_another_database(tmp_path: Path) -> None:
+    first = ProductService(product_config(tmp_path, name="first"))
+    second = ProductService(product_config(tmp_path, name="second"))
+
+    with pytest.raises(ValueError, match="audit ledger must use the product service database"):
+        ProductService(
+            product_config(tmp_path, name="mismatch"),
+            database=first.db,
+            audit_ledger=second.audit_ledger,
+        )
 
 
 def test_composition_shares_database_and_audit_ledger_without_public_routes(
@@ -74,7 +100,7 @@ def test_composition_shares_database_and_audit_ledger_without_public_routes(
         repository_root=tmp_path,
     )
 
-    assert isinstance(composition.service, LedgerBackedProductService)
+    assert type(composition.service) is ProductService
     assert app.state.voodoo_product_service is composition.service
     assert app.state.voodoo_audit_ledger is composition.audit_ledger
     assert app.state.voodoo_external_identity_service is composition.external_identity_service
