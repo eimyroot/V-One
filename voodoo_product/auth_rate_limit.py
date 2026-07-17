@@ -1,28 +1,66 @@
 from __future__ import annotations
 
-from pathlib import Path
+import hashlib
+import hmac
+import time
+from collections.abc import Callable
 
-ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "voodoo_product" / "service.py"
-text = TARGET.read_text(encoding="utf-8")
-start_marker = "    def _login_rate_limit_keys(\n"
-end_marker = "    def get_active_user("
-start = text.find(start_marker)
-end = text.find(end_marker, start + 1)
-if start < 0 or end < 0:
-    raise SystemExit("authentication rate-limit helper anchor not found")
-expected = '''    def _login_rate_limit_keys(
-        self, username: str, source: str
-    ) -> tuple[tuple[str, str, int], ...]:
+from . import statements as sql
+from .config import ProductConfig
+from .persistence import ProductDatabaseAdapter
+
+Clock = Callable[[], float]
+RateLimitEntries = tuple[tuple[str, str, int], ...]
+
+
+class AuthRateLimitExceeded(Exception):
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, retry_after)
+        super().__init__("authentication temporarily rate limited")
+
+
+class AuthenticationRateLimitService:
+    """Database-bound authentication rate-limit state boundary."""
+
+    def __init__(
+        self,
+        *,
+        database: ProductDatabaseAdapter,
+        config: ProductConfig,
+        clock: Clock = time.time,
+    ) -> None:
+        self.db = database
+        self.config = config
+        self._clock = clock
+
+    def enforce_login_rate_limit(self, *, username: str, source: str) -> None:
+        self._enforce(self._login_keys(username, source))
+
+    def record_login_failure(self, *, username: str, source: str) -> None:
+        self._record_failure(self._login_keys(username, source))
+
+    def clear_login_rate_limit(self, *, username: str, source: str) -> None:
+        self._clear(self._login_keys(username, source))
+
+    def enforce_bootstrap_rate_limit(self, *, source: str) -> None:
+        self._enforce(self._bootstrap_keys(source))
+
+    def record_bootstrap_failure(self, *, source: str) -> None:
+        self._record_failure(self._bootstrap_keys(source))
+
+    def clear_bootstrap_rate_limit(self, *, source: str) -> None:
+        self._clear(self._bootstrap_keys(source))
+
+    def _login_keys(self, username: str, source: str) -> RateLimitEntries:
         return (
             ("login.account", username, self.config.auth_max_failures),
             ("login.source", source, self.config.auth_source_max_failures),
         )
 
-    def _bootstrap_rate_limit_keys(self, source: str) -> tuple[tuple[str, str, int], ...]:
+    def _bootstrap_keys(self, source: str) -> RateLimitEntries:
         return (("bootstrap.source", source, self.config.auth_max_failures),)
 
-    def _auth_rate_limit_key(self, *, scope: str, value: str) -> str:
+    def _key_hash(self, *, scope: str, value: str) -> str:
         normalized = value.strip().casefold()
         return hmac.new(
             self.config.session_signing_secret.encode("utf-8"),
@@ -30,12 +68,12 @@ expected = '''    def _login_rate_limit_keys(
             hashlib.sha256,
         ).hexdigest()
 
-    def _enforce_auth_rate_limits(self, entries: tuple[tuple[str, str, int], ...]) -> None:
-        now = int(time.time())
+    def _enforce(self, entries: RateLimitEntries) -> None:
+        now = int(self._clock())
         retry_after = 0
         with self.db.transaction() as connection:
             for scope, value, _ in entries:
-                key_hash = self._auth_rate_limit_key(scope=scope, value=value)
+                key_hash = self._key_hash(scope=scope, value=value)
                 row = connection.execute(
                     sql.SELECT_AUTH_RATE_LIMIT,
                     (scope, key_hash),
@@ -57,8 +95,8 @@ expected = '''    def _login_rate_limit_keys(
         if retry_after:
             raise AuthRateLimitExceeded(retry_after)
 
-    def _record_auth_failure(self, entries: tuple[tuple[str, str, int], ...]) -> None:
-        now = int(time.time())
+    def _record_failure(self, entries: RateLimitEntries) -> None:
+        now = int(self._clock())
         retry_after = 0
         retention = max(self.config.auth_window_seconds, self.config.auth_lockout_seconds) * 2
         with self.db.transaction() as connection:
@@ -67,7 +105,7 @@ expected = '''    def _login_rate_limit_keys(
                 (now - retention,),
             )
             for scope, value, maximum in entries:
-                key_hash = self._auth_rate_limit_key(scope=scope, value=value)
+                key_hash = self._key_hash(scope=scope, value=value)
                 row = connection.execute(
                     sql.SELECT_AUTH_RATE_LIMIT,
                     (scope, key_hash),
@@ -97,13 +135,10 @@ expected = '''    def _login_rate_limit_keys(
         if retry_after:
             raise AuthRateLimitExceeded(retry_after)
 
-    def _clear_auth_rate_limits(self, entries: tuple[tuple[str, str, int], ...]) -> None:
+    def _clear(self, entries: RateLimitEntries) -> None:
         with self.db.transaction() as connection:
             for scope, value, _ in entries:
                 connection.execute(
                     sql.DELETE_AUTH_RATE_LIMIT,
-                    (scope, self._auth_rate_limit_key(scope=scope, value=value)),
+                    (scope, self._key_hash(scope=scope, value=value)),
                 )
-
-'''
-TARGET.write_text(text[:start] + expected + text[end:], encoding="utf-8")
