@@ -29,6 +29,8 @@ jobs:
           ref: agent/operational-safety-composition-20260717
           persist-credentials: true
           fetch-depth: 1
+      - name: Apply assertion-bound transform
+        run: python3 scripts/apply_operational_safety_composition.py
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12.13"
@@ -36,8 +38,6 @@ jobs:
           cache-dependency-path: requirements-dev.lock
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
-      - name: Apply assertion-bound transform
-        run: python scripts/apply_operational_safety_composition.py
       - name: Normalize changed Python
         run: >-
           python -m ruff check --fix
