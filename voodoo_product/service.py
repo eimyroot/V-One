@@ -15,6 +15,7 @@ from .config import ProductConfig
 from .db import create_product_database
 from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from .execution import ExecutionService, timestamp_after, timestamp_expired
+from .operational_safety import OperationalSafetyService
 from .persistence import (
     DatabaseConnection,
     DatabaseError,
@@ -69,6 +70,7 @@ class ProductService:
         database: ProductDatabaseAdapter | None = None,
         audit_ledger: AuditLedger | None = None,
         receipt_ledger: ReceiptLedger | None = None,
+        operational_safety_service: OperationalSafetyService | None = None,
         execution_service: ExecutionService | None = None,
     ) -> None:
         self.config = config
@@ -85,6 +87,23 @@ class ProductService:
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_operational_safety_service = (
+            operational_safety_service
+            or OperationalSafetyService(
+                database=self.db,
+                audit_ledger=self.audit_ledger,
+                clock=lambda: utc_now(),
+            )
+        )
+        if resolved_operational_safety_service.db is not self.db:
+            raise ValueError(
+                "operational safety service must use the product service database"
+            )
+        if resolved_operational_safety_service.audit_ledger is not self.audit_ledger:
+            raise ValueError(
+                "operational safety service must use the product service audit ledger"
+            )
+        self.operational_safety_service = resolved_operational_safety_service
         resolved_receipt_ledger = receipt_ledger or ReceiptLedger(self.db)
         if resolved_receipt_ledger.db is not self.db:
             raise ValueError("receipt ledger must use the product service database")
@@ -94,6 +113,7 @@ class ProductService:
             config=self.config,
             audit_ledger=self.audit_ledger,
             receipt_ledger=self.receipt_ledger,
+            operational_safety_service=self.operational_safety_service,
             adapter_executor=lambda adapter, payload, *, context: execute_adapter(
                 adapter,
                 payload,
@@ -112,6 +132,13 @@ class ProductService:
             raise ValueError("execution service must use the product service audit ledger")
         if resolved_execution_service.receipt_ledger is not self.receipt_ledger:
             raise ValueError("execution service must use the product service receipt ledger")
+        if (
+            resolved_execution_service.operational_safety_service
+            is not self.operational_safety_service
+        ):
+            raise ValueError(
+                "execution service must use the product operational safety service"
+            )
         self.execution_service = resolved_execution_service
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
         self._dummy_password_hash = hash_password(
@@ -584,7 +611,7 @@ class ProductService:
                 row["risk"]: row["count"]
                 for row in connection.execute(sql.COUNT_CHANGE_REQUESTS_BY_RISK).fetchall()
             }
-            stop = self._emergency_stop(connection)
+            stop = self.operational_safety_service.is_active(connection)
         receipts = self.verify_receipt_chain()
         audit = self.verify_audit_chain()
         health = "INCIDENT" if stop or not receipts["valid"] or not audit["valid"] else "HEALTHY"
@@ -602,29 +629,17 @@ class ProductService:
         }
 
     def set_emergency_stop(self, *, actor_id: str, active: bool, reason: str) -> dict[str, Any]:
-        with self.db.transaction() as connection:
-            now = utc_now()
-            connection.execute(
-                sql.UPSERT_EMERGENCY_STOP,
-                ("true" if active else "false", actor_id, now),
-            )
-            self._append_audit(
-                connection,
-                actor_id=actor_id,
-                action="system.emergency_stop.activate"
-                if active
-                else "system.emergency_stop.clear",
-                target_type="system",
-                target_id="runtime",
-                payload={"reason": reason},
-            )
-        return {"emergency_stop": active, "reason": reason, "updated_at": now}
+        return self.operational_safety_service.set_emergency_stop(
+            actor_id=actor_id,
+            active=active,
+            reason=reason,
+        )
 
     def health(self) -> dict[str, Any]:
         try:
             with self.db.connect() as connection:
                 connection.execute(sql.HEALTH_CHECK).fetchone()
-                stop = self._emergency_stop(connection)
+                stop = self.operational_safety_service.is_active(connection)
             return {
                 "status": "EMERGENCY_STOP" if stop else "HEALTHY",
                 "database": "HEALTHY",
@@ -673,11 +688,6 @@ class ProductService:
             execution_id=execution_id,
             payload=payload,
         )
-
-    @staticmethod
-    def _emergency_stop(connection: DatabaseConnection) -> bool:
-        row = connection.execute(sql.SELECT_EMERGENCY_STOP).fetchone()
-        return bool(row and str(row["value"]).lower() == "true")
 
     @staticmethod
     def _require_workspace_environment(value: DatabaseRow) -> None:

@@ -45,7 +45,7 @@ def test_execution_service_uses_only_central_statement_catalog() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 12
+    assert len(execute_calls) == 11
     assert all(
         call.args
         and isinstance(call.args[0], ast.Attribute)
@@ -94,6 +94,7 @@ def test_product_service_delegates_complete_execution_surface() -> None:
     assert "self.execution_service.get_execution" in source_text
     for statement in EXECUTION_STATEMENTS:
         assert f"sql.{statement}" not in source_text
+    assert "sql.SELECT_EMERGENCY_STOP" not in source_text
 
 
 def test_execution_service_rejects_evidence_ledgers_from_other_database(
@@ -111,6 +112,7 @@ def test_execution_service_rejects_evidence_ledgers_from_other_database(
             config=first.config,
             audit_ledger=second.audit_ledger,
             receipt_ledger=first.receipt_ledger,
+            operational_safety_service=first.operational_safety_service,
         )
 
     with pytest.raises(
@@ -122,6 +124,7 @@ def test_execution_service_rejects_evidence_ledgers_from_other_database(
             config=first.config,
             audit_ledger=first.audit_ledger,
             receipt_ledger=second.receipt_ledger,
+            operational_safety_service=first.operational_safety_service,
         )
 
 

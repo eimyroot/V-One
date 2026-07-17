@@ -24,6 +24,7 @@ from .observability import (
     StructuredRequestLoggingMiddleware,
     configure_product_logging,
 )
+from .operational_safety import OperationalSafetyService
 from .receipt import ReceiptLedger
 from .service import ProductService
 
@@ -33,6 +34,7 @@ class ProductComposition:
     service: ProductService
     audit_ledger: AuditLedger
     receipt_ledger: ReceiptLedger
+    operational_safety_service: OperationalSafetyService
     execution_service: ExecutionService
     external_identity_service: GovernedExternalIdentityService
 
@@ -56,6 +58,7 @@ def install_composed_product_platform(
     service = ProductService(resolved_config)
     audit_ledger = service.audit_ledger
     receipt_ledger = service.receipt_ledger
+    operational_safety_service = service.operational_safety_service
     execution_service = service.execution_service
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
@@ -69,6 +72,7 @@ def install_composed_product_platform(
         service=service,
         audit_ledger=audit_ledger,
         receipt_ledger=receipt_ledger,
+        operational_safety_service=operational_safety_service,
         execution_service=execution_service,
         external_identity_service=external_identity_service,
     )
@@ -77,6 +81,7 @@ def install_composed_product_platform(
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
     app.state.voodoo_receipt_ledger = receipt_ledger
+    app.state.voodoo_operational_safety_service = operational_safety_service
     app.state.voodoo_execution_service = execution_service
     app.state.voodoo_external_identity_service = external_identity_service
     app.state.voodoo_product_composition = composition
