@@ -28,5 +28,5 @@ def canonical_json(value: Any) -> str:
 def chained_hash(previous_hash: str, payload: dict[str, Any]) -> str:
     """Hash one canonical payload against the preceding evidence hash."""
 
-    encoded = f"{previous_hash}\n{canonical_json(payload)}".encode("utf-8")
+    encoded = f"{previous_hash}\n{canonical_json(payload)}".encode()
     return hashlib.sha256(encoded).hexdigest()
