@@ -1,0 +1,128 @@
+name: branch change request service composition
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - agent/change-request-service-composition-20260717
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-change-request-service-composition
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: >-
+      github.repository == 'nulleimy/V-One' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.ref == 'agent/change-request-service-composition-20260717')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: agent/change-request-service-composition-20260717
+          persist-credentials: true
+          fetch-depth: 1
+          show-progress: false
+      - name: Apply assertion-bound transform
+        run: python3 scripts/apply_change_request_service_composition.py
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install locked dependencies
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Normalize changed Python
+        run: >-
+          python -m ruff check --fix
+          voodoo_product/change_request.py
+          voodoo_product/service.py
+          voodoo_product/composition.py
+          tests/system/test_change_request_service.py
+          tests/system/test_statement_catalog.py
+          scripts/product_readiness_gate.py
+          scripts/apply_change_request_service_composition.py
+      - name: Verify changed Python lint
+        run: >-
+          python -m ruff check
+          voodoo_product/change_request.py
+          voodoo_product/service.py
+          voodoo_product/composition.py
+          tests/system/test_change_request_service.py
+          tests/system/test_statement_catalog.py
+          scripts/product_readiness_gate.py
+          scripts/apply_change_request_service_composition.py
+      - name: Compile transformed source
+        run: python -m compileall -q voodoo_product scripts tests
+      - name: Verify transformed diff
+        run: git diff --check
+      - name: Change request governance gates
+        run: >-
+          python -m pytest -q
+          tests/system/test_change_request_service.py
+          tests/system/test_product_composition.py
+          tests/system/test_statement_catalog.py
+      - name: Execution compatibility gates
+        run: >-
+          python -m pytest -q
+          tests/system/test_execution_idempotency.py
+          tests/system/test_execution_recovery.py
+      - name: Product compatibility gate
+        run: python -m pytest -q tests/system/test_product_platform_rc1.py
+      - name: Product readiness gate
+        run: python scripts/product_readiness_gate.py
+      - name: Remove branch-only executor script
+        run: git rm -f scripts/apply_change_request_service_composition.py
+      - name: Verify exact scope and commit
+        shell: bash
+        run: |
+          git add -N \
+            docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md \
+            tests/system/test_change_request_service.py \
+            voodoo_product/change_request.py
+          python - <<'PY'
+          import subprocess
+
+          expected = {
+              "docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md",
+              "scripts/apply_change_request_service_composition.py",
+              "scripts/product_readiness_gate.py",
+              "tests/system/test_change_request_service.py",
+              "tests/system/test_statement_catalog.py",
+              "voodoo_product/change_request.py",
+              "voodoo_product/composition.py",
+              "voodoo_product/service.py",
+          }
+          worktree = set(
+              subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          )
+          index = set(
+              subprocess.check_output(
+                  ["git", "diff", "--cached", "--name-only"], text=True
+              ).splitlines()
+          )
+          actual = worktree | index
+          if actual != expected:
+              raise SystemExit(
+                  f"unexpected scope: missing={expected - actual}, extra={actual - expected}"
+              )
+          PY
+          git config user.name "VOODOO Governance Bot"
+          git config user.email "governance-bot@users.noreply.github.com"
+          git add \
+            docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md \
+            scripts/product_readiness_gate.py \
+            tests/system/test_change_request_service.py \
+            tests/system/test_statement_catalog.py \
+            voodoo_product/change_request.py \
+            voodoo_product/composition.py \
+            voodoo_product/service.py
+          git commit -m "architecture: add shared change request service boundary"
+          git push origin HEAD:agent/change-request-service-composition-20260717
