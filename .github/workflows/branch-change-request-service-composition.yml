@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: branch-change-request-service-composition
@@ -40,6 +41,8 @@ jobs:
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
       - name: Normalize changed Python
+        id: product_lint
+        continue-on-error: true
         run: >-
           python -m ruff check --fix
           voodoo_product/change_request.py
@@ -48,6 +51,26 @@ jobs:
           tests/system/test_change_request_service.py
           tests/system/test_statement_catalog.py
           scripts/product_readiness_gate.py
+          > ruff.log 2>&1
+      - name: Report product lint failure
+        if: steps.product_lint.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Product lint failure'
+            echo
+            echo '```text'
+            cat ruff.log
+            echo '```'
+          } > ruff-comment.md
+          gh pr comment 29 --repo nulleimy/V-One --body-file ruff-comment.md
+          exit 1
+      - name: Stop failed push lint
+        if: steps.product_lint.outcome == 'failure' && github.event_name == 'push'
+        run: |
+          cat ruff.log
+          exit 1
       - name: Verify changed Python lint
         run: >-
           python -m ruff check
