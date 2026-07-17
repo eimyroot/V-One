@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from .api import install_product_platform
+from .composition import install_composed_product_platform
 from .version import __version__
 
 app = FastAPI(
@@ -10,4 +10,4 @@ app = FastAPI(
     version=__version__,
     description="Governed AI operations control plane",
 )
-install_product_platform(app)
+install_composed_product_platform(app)

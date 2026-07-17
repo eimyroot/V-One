@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any
 
 from . import external_identity_statements as identity_sql
+from .audit import AuditLedgerWriter
 from .external_identity import ExternalIdentityKey
 from .persistence import (
     DatabaseConnection,
@@ -16,19 +16,6 @@ from .security import ROLE_PERMISSIONS
 from .service import new_id, utc_now
 
 
-class AuditWriter(Protocol):
-    def __call__(
-        self,
-        connection: DatabaseConnection,
-        *,
-        actor_id: str,
-        action: str,
-        target_type: str,
-        target_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]: ...
-
-
 class GovernedExternalIdentityService:
     """Internal-only lifecycle service for immutable external identity bindings."""
 
@@ -36,10 +23,10 @@ class GovernedExternalIdentityService:
         self,
         *,
         database: ProductDatabaseAdapter,
-        audit_writer: AuditWriter | Callable[..., dict[str, Any]],
+        audit_ledger: AuditLedgerWriter,
     ) -> None:
         self.db = database
-        self._audit_writer = audit_writer
+        self.audit_ledger = audit_ledger
 
     def create_binding(
         self,
@@ -77,7 +64,7 @@ class GovernedExternalIdentityService:
                 raise RuntimeError(
                     "external identity or internal user is already bound for this issuer"
                 ) from exc
-            self._audit_writer(
+            self.audit_ledger.append(
                 connection,
                 actor_id=actor_id,
                 action="external_identity_binding.create",
@@ -132,7 +119,7 @@ class GovernedExternalIdentityService:
             ).fetchone()
             if disabled is None:
                 raise RuntimeError("external identity binding changed during disablement")
-            self._audit_writer(
+            self.audit_ledger.append(
                 connection,
                 actor_id=actor_id,
                 action="external_identity_binding.disable",

@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 
 from voodoo_product.api import install_product_platform
+from voodoo_product.audit import AuditLedger
 from voodoo_product.config import ProductConfig
 from voodoo_product.external_identity_service import GovernedExternalIdentityService
 from voodoo_product.external_identity_statements import (
@@ -57,7 +58,7 @@ def build_services(
     )
     governed = GovernedExternalIdentityService(
         database=product.db,
-        audit_writer=product._append_audit,
+        audit_ledger=AuditLedger(product.db),
     )
     return product, governed, bootstrap, administrator, viewer
 
@@ -79,9 +80,10 @@ def test_external_identity_statement_catalog_is_unique_and_classified() -> None:
         assert statement.for_backend("sqlite") == statement.sqlite_sql
 
 
-def test_governed_service_database_calls_use_identity_catalog() -> None:
+def test_governed_service_database_calls_use_identity_catalog_and_audit_ledger() -> None:
     source = ROOT / "voodoo_product" / "external_identity_service.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    source_text = source.read_text(encoding="utf-8")
+    tree = ast.parse(source_text, filename=str(source))
     execute_calls = [
         node
         for node in ast.walk(tree)
@@ -98,6 +100,9 @@ def test_governed_service_database_calls_use_identity_catalog() -> None:
         and call.args[0].value.id == "identity_sql"
         for call in execute_calls
     )
+    assert "audit_writer" not in source_text
+    assert "_append_audit" not in source_text
+    assert "audit_ledger.append" in source_text
 
 
 def test_administrator_creates_and_resolves_binding_with_valid_audit_chain(

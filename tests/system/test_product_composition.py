@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import ast
+import json
+from pathlib import Path
+
+from fastapi import FastAPI
+
+from voodoo_product.composition import install_composed_product_platform
+from voodoo_product.config import ProductConfig
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def product_config(tmp_path: Path) -> ProductConfig:
+    return ProductConfig(
+        environment="test",
+        database_path=tmp_path / "product.sqlite3",
+        sandbox_root=tmp_path / "sandboxes",
+        session_signing_secret="s" * 64,
+        bootstrap_token="b" * 48,
+    )
+
+
+def test_audit_ledger_uses_only_central_statement_catalog() -> None:
+    source = ROOT / "voodoo_product" / "audit.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    execute_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "execute"
+    ]
+
+    assert len(execute_calls) == 4
+    assert all(
+        call.args
+        and isinstance(call.args[0], ast.Attribute)
+        and isinstance(call.args[0].value, ast.Name)
+        and call.args[0].value.id == "sql"
+        for call in execute_calls
+    )
+
+
+def test_composition_shares_database_and_audit_ledger_without_public_routes(
+    tmp_path: Path,
+) -> None:
+    app = FastAPI()
+    composition = install_composed_product_platform(
+        app,
+        config=product_config(tmp_path),
+        repository_root=tmp_path,
+    )
+
+    assert app.state.voodoo_product_service is composition.service
+    assert app.state.voodoo_audit_ledger is composition.audit_ledger
+    assert app.state.voodoo_external_identity_service is composition.external_identity_service
+    assert app.state.voodoo_product_composition is composition
+    assert composition.audit_ledger.db is composition.service.db
+    assert composition.external_identity_service.db is composition.service.db
+    assert composition.external_identity_service.audit_ledger is composition.audit_ledger
+
+    bootstrap = composition.service.bootstrap_admin(
+        username="bootstrap-admin",
+        password="VeryStrongBootstrapPassword1!",
+        token="b" * 48,
+    )
+    administrator = composition.service.create_user(
+        actor_id=str(bootstrap["user_id"]),
+        username="identity-admin",
+        password="VeryStrongIdentityAdminPassword1!",
+        role="administrator",
+    )
+    viewer = composition.service.create_user(
+        actor_id=str(bootstrap["user_id"]),
+        username="bound-viewer",
+        password="VeryStrongBoundViewerPassword1!",
+        role="viewer",
+    )
+    raw_subject = "composition-subject"
+    composition.external_identity_service.create_binding(
+        actor_id=str(administrator["id"]),
+        user_id=str(viewer["id"]),
+        provider="oidc",
+        issuer="https://identity.example.com",
+        subject=raw_subject,
+        reason="Approved composition-bound identity enrollment",
+    )
+
+    assert composition.audit_ledger.verify()["valid"] is True
+    assert composition.service.verify_audit_chain()["valid"] is True
+    events = composition.audit_ledger.list_events()
+    assert events[0]["action"] == "external_identity_binding.create"
+    assert "system.bootstrap" in {event["action"] for event in events}
+    assert raw_subject not in json.dumps(events, sort_keys=True)
+
+    paths = app.openapi()["paths"]
+    assert all("external-identity" not in path for path in paths)
+    assert all("identity-bindings" not in path for path in paths)
+
+
+def test_product_entrypoint_uses_composed_installer() -> None:
+    source = (ROOT / "voodoo_product" / "main.py").read_text(encoding="utf-8")
+    assert "from .composition import install_composed_product_platform" in source
+    assert "install_composed_product_platform(app)" in source
+    assert "from .api import install_product_platform" not in source
