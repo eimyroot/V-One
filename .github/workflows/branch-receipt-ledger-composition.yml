@@ -1,10 +1,12 @@
 name: branch receipt ledger composition
 
-# Existing-workflow trigger for the governed branch transform.
 on:
   push:
     branches:
       - agent/receipt-ledger-composition-20260717
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -15,12 +17,16 @@ concurrency:
 
 jobs:
   apply:
-    if: github.repository == 'nulleimy/V-One'
+    if: >-
+      github.repository == 'nulleimy/V-One' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.ref == 'agent/receipt-ledger-composition-20260717')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          ref: agent/receipt-ledger-composition-20260717
           persist-credentials: true
           fetch-depth: 1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -88,4 +94,4 @@ jobs:
           git config user.email "governance-bot@users.noreply.github.com"
           git add -A
           git commit -m "architecture: add shared receipt ledger boundary"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin HEAD:agent/receipt-ledger-composition-20260717
