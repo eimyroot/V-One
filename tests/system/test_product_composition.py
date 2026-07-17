@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+
 from voodoo_product.api import install_product_platform
 from voodoo_product.composition import install_composed_product_platform
 from voodoo_product.config import ProductConfig
