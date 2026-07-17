@@ -1,5 +1,6 @@
 name: branch receipt ledger composition
 
+# Existing-workflow trigger for the governed branch transform.
 on:
   push:
     branches:
