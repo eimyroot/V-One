@@ -111,10 +111,8 @@ jobs:
         run: python -m pytest -q tests/system/test_statement_catalog.py
       - name: Product RC1 gate
         run: python -m pytest -q tests/system/test_product_platform_rc1.py
-      - name: Remove branch-only executor
-        run: |
-          git rm scripts/apply_receipt_ledger_composition.py
-          git rm .github/workflows/branch-receipt-ledger-composition.yml
+      - name: Remove branch-only executor script
+        run: git rm scripts/apply_receipt_ledger_composition.py
       - name: Verify exact scope and commit
         shell: bash
         run: |
@@ -126,7 +124,6 @@ jobs:
           import subprocess
 
           expected = {
-              ".github/workflows/branch-receipt-ledger-composition.yml",
               ".github/workflows/ci.yml",
               "docs/product/RECEIPT_LEDGER_COMPOSITION_BOUNDARY.md",
               "scripts/apply_receipt_ledger_composition.py",
