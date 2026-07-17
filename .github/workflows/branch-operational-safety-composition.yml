@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: branch-operational-safety-composition
@@ -29,8 +30,30 @@ jobs:
           ref: agent/operational-safety-composition-20260717
           persist-credentials: true
           fetch-depth: 1
+          show-progress: false
       - name: Apply assertion-bound transform
-        run: python3 scripts/apply_operational_safety_composition.py
+        id: transform
+        continue-on-error: true
+        run: python3 scripts/apply_operational_safety_composition.py > transform.log 2>&1
+      - name: Report assertion failure
+        if: steps.transform.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Branch transform assertion failure'
+            echo
+            echo '```text'
+            cat transform.log
+            echo '```'
+          } > transform-comment.md
+          gh pr comment 28 --repo nulleimy/V-One --body-file transform-comment.md
+          exit 1
+      - name: Stop failed push transform
+        if: steps.transform.outcome == 'failure' && github.event_name == 'push'
+        run: |
+          cat transform.log
+          exit 1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12.13"
