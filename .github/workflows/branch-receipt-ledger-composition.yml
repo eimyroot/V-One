@@ -111,6 +111,8 @@ jobs:
         run: python -m pytest -q tests/system/test_statement_catalog.py
       - name: Product RC1 gate
         run: python -m pytest -q tests/system/test_product_platform_rc1.py
+      - name: Restore connector-managed CI workflow
+        run: git checkout -- .github/workflows/ci.yml
       - name: Remove branch-only executor script
         run: git rm scripts/apply_receipt_ledger_composition.py
       - name: Verify exact scope and commit
@@ -124,7 +126,6 @@ jobs:
           import subprocess
 
           expected = {
-              ".github/workflows/ci.yml",
               "docs/product/RECEIPT_LEDGER_COMPOSITION_BOUNDARY.md",
               "scripts/apply_receipt_ledger_composition.py",
               "scripts/product_readiness_gate.py",
@@ -151,7 +152,6 @@ jobs:
           git config user.name "VOODOO Governance Bot"
           git config user.email "governance-bot@users.noreply.github.com"
           git add \
-            .github/workflows/ci.yml \
             docs/product/RECEIPT_LEDGER_COMPOSITION_BOUNDARY.md \
             scripts/product_readiness_gate.py \
             tests/system/test_product_composition.py \
