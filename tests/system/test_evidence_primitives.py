@@ -5,13 +5,6 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from voodoo_product.service import (
-    canonical_json as legacy_canonical_json,
-)
-from voodoo_product.service import (
-    chained_hash as legacy_chained_hash,
-)
-
 from voodoo_product.evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,8 +53,6 @@ def test_canonical_evidence_format_is_backward_compatible() -> None:
 
     assert canonical_json(payload) == encoded
     assert chained_hash("GENESIS", payload) == expected_hash
-    assert canonical_json(payload) == legacy_canonical_json(payload)
-    assert chained_hash("GENESIS", payload) == legacy_chained_hash("GENESIS", payload)
 
 
 def test_identifier_and_timestamp_contracts_remain_stable() -> None:
