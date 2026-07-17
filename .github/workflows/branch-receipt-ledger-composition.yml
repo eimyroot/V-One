@@ -38,6 +38,31 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev.lock
       - name: Apply assertion-bound transform
         run: python scripts/apply_receipt_ledger_composition.py
+      - name: Move receipt monkeypatch ownership
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/system/test_product_platform_rc1.py")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "import voodoo_product.service as service_module\n": (
+                  "import voodoo_product.receipt as receipt_module\n"
+              ),
+              "original_new_id = service_module.new_id": "original_new_id = receipt_module.new_id",
+              "        service_module,\n        \"utc_now\",": (
+                  "        receipt_module,\n        \"utc_now\","
+              ),
+              "monkeypatch.setattr(service_module, \"new_id\", controlled_new_id)": (
+                  "monkeypatch.setattr(receipt_module, \"new_id\", controlled_new_id)"
+              ),
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one RC1 ownership match: {old!r}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Normalize transformed file endings
         run: >-
           python -c "from pathlib import Path;
@@ -51,6 +76,7 @@ jobs:
           voodoo_product/composition.py
           tests/system/test_receipt_ledger.py
           tests/system/test_product_composition.py
+          tests/system/test_product_platform_rc1.py
           tests/system/test_statement_catalog.py
           scripts/product_readiness_gate.py
           scripts/apply_receipt_ledger_composition.py
@@ -62,6 +88,7 @@ jobs:
           voodoo_product/composition.py
           tests/system/test_receipt_ledger.py
           tests/system/test_product_composition.py
+          tests/system/test_product_platform_rc1.py
           tests/system/test_statement_catalog.py
           scripts/product_readiness_gate.py
           scripts/apply_receipt_ledger_composition.py
@@ -101,6 +128,7 @@ jobs:
               "scripts/apply_receipt_ledger_composition.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_product_composition.py",
+              "tests/system/test_product_platform_rc1.py",
               "tests/system/test_receipt_ledger.py",
               "tests/system/test_statement_catalog.py",
               "voodoo_product/composition.py",
