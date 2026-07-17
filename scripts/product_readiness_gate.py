@@ -39,6 +39,7 @@ REQUIRED = [
     "voodoo_product/statements.py",
     "voodoo_product/security.py",
     "voodoo_product/version.py",
+    "voodoo_product/workspace.py",
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
     "tests/system/test_change_request_service.py",
@@ -60,6 +61,7 @@ REQUIRED = [
     "tests/system/test_release_supply_chain.py",
     "tests/system/test_statement_catalog.py",
     "tests/system/test_token_security.py",
+    "tests/system/test_workspace_service.py",
     "scripts/smoke_product_image.sh",
     "scripts/validate_release_candidate.py",
     ".env.product.example",
@@ -81,6 +83,7 @@ REQUIRED = [
     "docs/product/PERSISTENCE_BOUNDARY.md",
     "docs/product/RECEIPT_LEDGER_COMPOSITION_BOUNDARY.md",
     "docs/product/STATEMENT_CATALOG.md",
+    "docs/product/WORKSPACE_SERVICE_COMPOSITION_BOUNDARY.md",
 ]
 
 

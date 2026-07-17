@@ -28,12 +28,14 @@ from .observability import (
 from .operational_safety import OperationalSafetyService
 from .receipt import ReceiptLedger
 from .service import ProductService
+from .workspace import WorkspaceService
 
 
 @dataclass(frozen=True, slots=True)
 class ProductComposition:
     service: ProductService
     audit_ledger: AuditLedger
+    workspace_service: WorkspaceService
     change_request_service: ChangeRequestService
     receipt_ledger: ReceiptLedger
     operational_safety_service: OperationalSafetyService
@@ -59,6 +61,7 @@ def install_composed_product_platform(
     product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
     audit_ledger = service.audit_ledger
+    workspace_service = service.workspace_service
     change_request_service = service.change_request_service
     receipt_ledger = service.receipt_ledger
     operational_safety_service = service.operational_safety_service
@@ -74,6 +77,7 @@ def install_composed_product_platform(
     composition = ProductComposition(
         service=service,
         audit_ledger=audit_ledger,
+        workspace_service=workspace_service,
         change_request_service=change_request_service,
         receipt_ledger=receipt_ledger,
         operational_safety_service=operational_safety_service,
@@ -84,6 +88,7 @@ def install_composed_product_platform(
     app.state.voodoo_product_service = service
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
+    app.state.voodoo_workspace_service = workspace_service
     app.state.voodoo_change_request_service = change_request_service
     app.state.voodoo_receipt_ledger = receipt_ledger
     app.state.voodoo_operational_safety_service = operational_safety_service

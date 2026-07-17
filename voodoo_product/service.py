@@ -25,6 +25,7 @@ from .persistence import (
 )
 from .receipt import ReceiptLedger
 from .security import hash_password, verify_password
+from .workspace import WorkspaceService
 
 __all__ = [
     "ProductService",
@@ -69,6 +70,7 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         audit_ledger: AuditLedger | None = None,
+        workspace_service: WorkspaceService | None = None,
         change_request_service: ChangeRequestService | None = None,
         receipt_ledger: ReceiptLedger | None = None,
         operational_safety_service: OperationalSafetyService | None = None,
@@ -88,6 +90,21 @@ class ProductService:
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_workspace_service = workspace_service or WorkspaceService(
+            database=self.db,
+            audit_ledger=self.audit_ledger,
+            id_factory=lambda prefix: new_id(prefix),
+            clock=lambda: utc_now(),
+        )
+        if resolved_workspace_service.db is not self.db:
+            raise ValueError(
+                "workspace service must use the product service database"
+            )
+        if resolved_workspace_service.audit_ledger is not self.audit_ledger:
+            raise ValueError(
+                "workspace service must use the product service audit ledger"
+            )
+        self.workspace_service = resolved_workspace_service
         resolved_change_request_service = (
             change_request_service
             or ChangeRequestService(
@@ -384,29 +401,14 @@ class ProductService:
         return {"id": user_id, "username": username, "role": role, "active": True}
 
     def list_workspaces(self) -> list[dict[str, Any]]:
-        with self.db.connect() as connection:
-            rows = connection.execute(sql.LIST_WORKSPACES).fetchall()
-        return [dict(row) for row in rows]
+        return self.workspace_service.list_workspaces()
 
     def create_workspace(self, *, actor_id: str, name: str, environment: str) -> dict[str, Any]:
-        if environment not in VALID_ENVIRONMENTS:
-            raise ValueError("unknown environment")
-        workspace_id = new_id("wrk")
-        now = utc_now()
-        with self.db.transaction() as connection:
-            connection.execute(
-                sql.INSERT_WORKSPACE,
-                (workspace_id, name.strip(), environment, now),
-            )
-            self._append_audit(
-                connection,
-                actor_id=actor_id,
-                action="workspace.create",
-                target_type="workspace",
-                target_id=workspace_id,
-                payload={"name": name, "environment": environment},
-            )
-        return {"id": workspace_id, "name": name, "environment": environment, "created_at": now}
+        return self.workspace_service.create_workspace(
+            actor_id=actor_id,
+            name=name,
+            environment=environment,
+        )
 
     def create_change_request(
         self,
