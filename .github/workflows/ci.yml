@@ -53,6 +53,8 @@ jobs:
           tests/system/test_token_security.py
       - name: User account governance gate
         run: python -m pytest -q tests/system/test_user_account_service.py
+      - name: Platform status governance gate
+        run: python -m pytest -q tests/system/test_platform_status_service.py
       - name: Workspace governance gate
         run: python -m pytest -q tests/system/test_workspace_service.py
       - name: Change request governance gate

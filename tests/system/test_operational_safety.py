@@ -48,12 +48,16 @@ def test_product_and_execution_services_delegate_emergency_stop_sql() -> None:
     execution_source = (ROOT / "voodoo_product" / "execution.py").read_text(
         encoding="utf-8"
     )
+    platform_status_source = (ROOT / "voodoo_product" / "platform_status.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "sql.SELECT_EMERGENCY_STOP" not in product_source
     assert "sql.UPSERT_EMERGENCY_STOP" not in product_source
     assert "sql.SELECT_EMERGENCY_STOP" not in execution_source
     assert "self.operational_safety_service.set_emergency_stop" in product_source
-    assert "self.operational_safety_service.is_active" in product_source
+    assert "self.operational_safety_service.is_active" not in product_source
+    assert "self.operational_safety_service.is_active" in platform_status_source
     assert "self.operational_safety_service.is_active" in execution_source
 
 

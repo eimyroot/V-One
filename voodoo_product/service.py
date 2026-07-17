@@ -16,12 +16,8 @@ from .db import create_product_database
 from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from .execution import ExecutionService, timestamp_after, timestamp_expired
 from .operational_safety import OperationalSafetyService
-from .persistence import (
-    DatabaseConnection,
-    DatabaseError,
-    DatabaseRow,
-    ProductDatabaseAdapter,
-)
+from .persistence import DatabaseConnection, DatabaseRow, ProductDatabaseAdapter
+from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
 from .security import hash_password, verify_password
 from .user_account import UserAccountService
@@ -76,6 +72,7 @@ class ProductService:
         receipt_ledger: ReceiptLedger | None = None,
         operational_safety_service: OperationalSafetyService | None = None,
         execution_service: ExecutionService | None = None,
+        platform_status_service: PlatformStatusService | None = None,
     ) -> None:
         self.config = config
         self.db = (
@@ -193,6 +190,29 @@ class ProductService:
                 "execution service must use the product operational safety service"
             )
         self.execution_service = resolved_execution_service
+        resolved_platform_status_service = platform_status_service or PlatformStatusService(
+            database=self.db,
+            config=self.config,
+            audit_ledger=self.audit_ledger,
+            receipt_ledger=self.receipt_ledger,
+            operational_safety_service=self.operational_safety_service,
+        )
+        if resolved_platform_status_service.db is not self.db:
+            raise ValueError("platform status service must use the product service database")
+        if resolved_platform_status_service.config is not self.config:
+            raise ValueError("platform status service must use the product service configuration")
+        if resolved_platform_status_service.audit_ledger is not self.audit_ledger:
+            raise ValueError("platform status service must use the product service audit ledger")
+        if resolved_platform_status_service.receipt_ledger is not self.receipt_ledger:
+            raise ValueError("platform status service must use the product service receipt ledger")
+        if (
+            resolved_platform_status_service.operational_safety_service
+            is not self.operational_safety_service
+        ):
+            raise ValueError(
+                "platform status service must use the product operational safety service"
+            )
+        self.platform_status_service = resolved_platform_status_service
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
         self._dummy_password_hash = hash_password(
             f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
@@ -499,35 +519,7 @@ class ProductService:
         return self.audit_ledger.verify()
 
     def command_center(self) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            statuses = {
-                row["status"]: row["count"]
-                for row in connection.execute(sql.COUNT_CHANGE_REQUESTS_BY_STATUS).fetchall()
-            }
-            executions = {
-                row["status"]: row["count"]
-                for row in connection.execute(sql.COUNT_EXECUTIONS_BY_STATUS).fetchall()
-            }
-            risks = {
-                row["risk"]: row["count"]
-                for row in connection.execute(sql.COUNT_CHANGE_REQUESTS_BY_RISK).fetchall()
-            }
-            stop = self.operational_safety_service.is_active(connection)
-        receipts = self.verify_receipt_chain()
-        audit = self.verify_audit_chain()
-        health = "INCIDENT" if stop or not receipts["valid"] or not audit["valid"] else "HEALTHY"
-        return {
-            "trust_state": health,
-            "emergency_stop": stop,
-            "change_requests": statuses,
-            "executions": executions,
-            "risk": risks,
-            "pending_approvals": statuses.get("REVIEW_REQUIRED", 0),
-            "receipt_integrity": receipts,
-            "audit_integrity": audit,
-            "production_effects_enabled": self.config.production_effects_enabled,
-            "environment": self.config.environment,
-        }
+        return self.platform_status_service.command_center()
 
     def set_emergency_stop(self, *, actor_id: str, active: bool, reason: str) -> dict[str, Any]:
         return self.operational_safety_service.set_emergency_stop(
@@ -537,26 +529,7 @@ class ProductService:
         )
 
     def health(self) -> dict[str, Any]:
-        try:
-            with self.db.connect() as connection:
-                connection.execute(sql.HEALTH_CHECK).fetchone()
-                stop = self.operational_safety_service.is_active(connection)
-            return {
-                "status": "EMERGENCY_STOP" if stop else "HEALTHY",
-                "database": "HEALTHY",
-                "database_backend": self.db.backend_name,
-                "schema_version": self.db.schema_version(),
-                "evidence_integrity": "NOT_CHECKED_BY_LIVENESS",
-                "production_effects": "ENABLED"
-                if self.config.production_effects_enabled
-                else "DISABLED",
-            }
-        except DatabaseError:
-            return {
-                "status": "UNAVAILABLE",
-                "database": "UNAVAILABLE",
-                "database_backend": self.db.backend_name,
-            }
+        return self.platform_status_service.health()
 
     def _append_audit(
         self,
