@@ -51,6 +51,8 @@ jobs:
           tests/system/test_http_security.py
           tests/system/test_identity_provider.py
           tests/system/test_token_security.py
+      - name: Change request governance gate
+        run: python -m pytest -q tests/system/test_change_request_service.py
       - name: Execution and persistence gate
         run: >-
           python -m pytest -q

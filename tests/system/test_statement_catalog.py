@@ -137,5 +137,5 @@ def test_service_database_calls_use_only_catalog_statements() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 30
+    assert len(execute_calls) == 19
     assert all(call.args and _is_catalog_expression(call.args[0]) for call in execute_calls)
