@@ -39,6 +39,9 @@ jobs:
       - name: Normalize assertion anchor
         if: steps.transform.outputs.pending == 'true'
         run: python3 scripts/normalize_authentication_rate_limit_transform_anchor.py
+      - name: Label assertion diagnostics
+        if: steps.transform.outputs.pending == 'true'
+        run: python3 scripts/label_authentication_rate_limit_transform_assertions.py
       - name: Apply assertion-bound transform
         if: steps.transform.outputs.pending == 'true'
         shell: bash
@@ -119,6 +122,7 @@ jobs:
           git rm -f
           scripts/apply_authentication_rate_limit_service_composition.py
           scripts/normalize_authentication_rate_limit_transform_anchor.py
+          scripts/label_authentication_rate_limit_transform_assertions.py
       - name: Verify exact scope and commit
         if: steps.transform.outputs.pending == 'true'
         shell: bash
@@ -134,6 +138,7 @@ jobs:
               "docs/product/AUTHENTICATION_RATE_LIMIT_SERVICE_COMPOSITION_BOUNDARY.md",
               "scripts/apply_authentication_rate_limit_service_composition.py",
               "scripts/normalize_authentication_rate_limit_transform_anchor.py",
+              "scripts/label_authentication_rate_limit_transform_assertions.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_authentication_rate_limit_service.py",
               "tests/system/test_statement_catalog.py",
