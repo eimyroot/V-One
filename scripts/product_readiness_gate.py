@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 REQUIRED = [
     "voodoo_product/api.py",
     "voodoo_product/audit.py",
+    "voodoo_product/auth_rate_limit.py",
     "voodoo_product/change_request.py",
     "voodoo_product/composition.py",
     "voodoo_product/db.py",
@@ -44,6 +45,7 @@ REQUIRED = [
     "voodoo_product/workspace.py",
     "voodoo_product/static/index.html",
     "tests/system/test_auth_rate_limiting.py",
+    "tests/system/test_authentication_rate_limit_service.py",
     "tests/system/test_change_request_service.py",
     "tests/system/test_database_migrations.py",
     "tests/system/test_evidence_primitives.py",
@@ -77,6 +79,7 @@ REQUIRED = [
     ".github/workflows/release-candidate.yml",
     "SECURITY.md",
     "docs/product/AUDIT_LEDGER_COMPOSITION_BOUNDARY.md",
+    "docs/product/AUTHENTICATION_RATE_LIMIT_SERVICE_COMPOSITION_BOUNDARY.md",
     "docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md",
     "docs/product/DATABASE_MIGRATIONS.md",
     "docs/product/EXECUTION_SERVICE_COMPOSITION_BOUNDARY.md",
