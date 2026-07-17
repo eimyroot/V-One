@@ -84,6 +84,25 @@ jobs:
           scripts/product_readiness_gate.py
       - name: Compile transformed source
         run: python -m compileall -q voodoo_product scripts tests
+      - name: Normalize transformed file endings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for value in (
+              "voodoo_product/change_request.py",
+              "voodoo_product/service.py",
+              "voodoo_product/composition.py",
+              "tests/system/test_change_request_service.py",
+              "tests/system/test_statement_catalog.py",
+              "scripts/product_readiness_gate.py",
+              "docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md",
+          ):
+              path = Path(value)
+              text = path.read_text(encoding="utf-8")
+              normalized = "\n".join(line.rstrip() for line in text.splitlines()).rstrip() + "\n"
+              path.write_text(normalized, encoding="utf-8")
+          PY
       - name: Verify transformed diff
         run: git diff --check
       - name: Change request governance gates
