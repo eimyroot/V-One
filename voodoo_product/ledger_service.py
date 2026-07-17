@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .audit import AuditLedger, AuditLedgerWriter
+from .audit import AuditLedger
 from .config import ProductConfig
 from .persistence import DatabaseConnection, ProductDatabaseAdapter
 from .service import ProductService
@@ -22,7 +22,7 @@ class LedgerBackedProductService(ProductService):
         resolved_ledger = audit_ledger or AuditLedger(self.db)
         if resolved_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
-        self.audit_ledger: AuditLedgerWriter & AuditLedger = resolved_ledger
+        self.audit_ledger: AuditLedger = resolved_ledger
 
     def _append_audit(
         self,
