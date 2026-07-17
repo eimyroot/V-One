@@ -69,16 +69,21 @@ jobs:
         run: python -m compileall -q voodoo_product scripts tests
       - name: Verify transformed diff
         run: git diff --check
-      - name: Run focused evidence and execution gates
+      - name: Evidence ledger gates
         run: >-
           python -m pytest -q
           tests/system/test_evidence_primitives.py
           tests/system/test_receipt_ledger.py
           tests/system/test_product_composition.py
+      - name: Execution and recovery gates
+        run: >-
+          python -m pytest -q
           tests/system/test_execution_idempotency.py
           tests/system/test_execution_recovery.py
-          tests/system/test_statement_catalog.py
-          tests/system/test_product_platform_rc1.py
+      - name: Statement catalog gate
+        run: python -m pytest -q tests/system/test_statement_catalog.py
+      - name: Product RC1 gate
+        run: python -m pytest -q tests/system/test_product_platform_rc1.py
       - name: Remove branch-only executor
         run: |
           git rm scripts/apply_receipt_ledger_composition.py
