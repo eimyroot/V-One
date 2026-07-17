@@ -33,6 +33,22 @@ jobs:
           show-progress: false
       - name: Apply assertion-bound transform
         run: python3 scripts/apply_change_request_service_composition.py
+      - name: Normalize AST type assertion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/system/test_change_request_service.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''            isinstance(call.args[0], ast.Attribute)
+              or isinstance(call.args[0], ast.IfExp)
+'''
+          new = '''            isinstance(call.args[0], (ast.Attribute, ast.IfExp))
+'''
+          if text.count(old) != 1:
+              raise SystemExit("expected one split AST type assertion")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12.13"
