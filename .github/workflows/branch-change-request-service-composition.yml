@@ -34,21 +34,7 @@ jobs:
       - name: Apply assertion-bound transform
         run: python3 scripts/apply_change_request_service_composition.py
       - name: Normalize AST type assertion
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("tests/system/test_change_request_service.py")
-          text = path.read_text(encoding="utf-8")
-          old = '''            isinstance(call.args[0], ast.Attribute)
-              or isinstance(call.args[0], ast.IfExp)
-'''
-          new = '''            isinstance(call.args[0], (ast.Attribute, ast.IfExp))
-'''
-          if text.count(old) != 1:
-              raise SystemExit("expected one split AST type assertion")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
+        run: python3 scripts/fix_change_request_test_lint.py
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12.13"
@@ -115,8 +101,11 @@ jobs:
         run: python -m pytest -q tests/system/test_product_platform_rc1.py
       - name: Product readiness gate
         run: python scripts/product_readiness_gate.py
-      - name: Remove branch-only executor script
-        run: git rm -f scripts/apply_change_request_service_composition.py
+      - name: Remove branch-only executor scripts
+        run: >-
+          git rm -f
+          scripts/apply_change_request_service_composition.py
+          scripts/fix_change_request_test_lint.py
       - name: Verify exact scope and commit
         shell: bash
         run: |
@@ -130,6 +119,7 @@ jobs:
           expected = {
               "docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md",
               "scripts/apply_change_request_service_composition.py",
+              "scripts/fix_change_request_test_lint.py",
               "scripts/product_readiness_gate.py",
               "tests/system/test_change_request_service.py",
               "tests/system/test_statement_catalog.py",
