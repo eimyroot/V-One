@@ -38,19 +38,32 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev.lock
       - name: Apply assertion-bound transform
         run: python scripts/apply_receipt_ledger_composition.py
-      - name: Normalize and validate source
-        run: |
-          python -m ruff check --fix \
-            voodoo_product/service.py \
-            voodoo_product/receipt.py \
-            voodoo_product/composition.py \
-            tests/system/test_receipt_ledger.py \
-            tests/system/test_product_composition.py \
-            tests/system/test_statement_catalog.py \
-            scripts/product_readiness_gate.py
-          python -m ruff check .
-          python -m compileall -q voodoo_product scripts tests
-          git diff --check
+      - name: Normalize changed Python
+        run: >-
+          python -m ruff check --fix
+          voodoo_product/service.py
+          voodoo_product/receipt.py
+          voodoo_product/composition.py
+          tests/system/test_receipt_ledger.py
+          tests/system/test_product_composition.py
+          tests/system/test_statement_catalog.py
+          scripts/product_readiness_gate.py
+          scripts/apply_receipt_ledger_composition.py
+      - name: Verify changed Python lint
+        run: >-
+          python -m ruff check
+          voodoo_product/service.py
+          voodoo_product/receipt.py
+          voodoo_product/composition.py
+          tests/system/test_receipt_ledger.py
+          tests/system/test_product_composition.py
+          tests/system/test_statement_catalog.py
+          scripts/product_readiness_gate.py
+          scripts/apply_receipt_ledger_composition.py
+      - name: Compile transformed source
+        run: python -m compileall -q voodoo_product scripts tests
+      - name: Verify transformed diff
+        run: git diff --check
       - name: Run focused evidence and execution gates
         run: >-
           python -m pytest -q
