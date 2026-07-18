@@ -8,7 +8,7 @@ Implemented as the canonical database-bound authentication throttling state boun
 
 `AuthenticationRateLimitService` owns login and bootstrap rate-limit key derivation, persistent counters, expiry cleanup, lockout calculation and clearing. `ProductService` preserves the existing public method surface while delegating all six rate-limit operations.
 
-Password lookup, dummy-hash timing protection, password verification, bootstrap authorization and credential decisions intentionally remain in `ProductService` and the identity boundary.
+Password lookup, dummy-hash timing protection and password verification belong to `CredentialAuthenticationService`. Bootstrap authorization and session identity remain separate boundaries.
 
 ## Runtime composition
 

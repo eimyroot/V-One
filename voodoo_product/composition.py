@@ -15,6 +15,7 @@ from .auth_rate_limit import AuthenticationRateLimitService
 from .bootstrap import BootstrapService
 from .change_request import ChangeRequestService
 from .config import ProductConfig
+from .credential_authentication import CredentialAuthenticationService
 from .execution import ExecutionService
 from .external_identity_service import GovernedExternalIdentityService
 from .http_security import SecurityHeadersMiddleware
@@ -39,6 +40,7 @@ from .workspace import WorkspaceService
 class ProductComposition:
     service: ProductService
     authentication_rate_limit_service: AuthenticationRateLimitService
+    credential_authentication_service: CredentialAuthenticationService
     bootstrap_service: BootstrapService
     audit_ledger: AuditLedger
     user_account_service: UserAccountService
@@ -69,6 +71,7 @@ def install_composed_product_platform(
     product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
     authentication_rate_limit_service = service.authentication_rate_limit_service
+    credential_authentication_service = service.credential_authentication_service
     bootstrap_service = service.bootstrap_service
     audit_ledger = service.audit_ledger
     user_account_service = service.user_account_service
@@ -89,6 +92,7 @@ def install_composed_product_platform(
     composition = ProductComposition(
         service=service,
         authentication_rate_limit_service=authentication_rate_limit_service,
+        credential_authentication_service=credential_authentication_service,
         bootstrap_service=bootstrap_service,
         audit_ledger=audit_ledger,
         user_account_service=user_account_service,
@@ -103,6 +107,7 @@ def install_composed_product_platform(
 
     app.state.voodoo_product_service = service
     app.state.voodoo_authentication_rate_limit_service = authentication_rate_limit_service
+    app.state.voodoo_credential_authentication_service = credential_authentication_service
     app.state.voodoo_bootstrap_service = bootstrap_service
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger

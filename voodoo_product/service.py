@@ -5,13 +5,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import statements as sql
 from .adapters import execute_adapter
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService, AuthRateLimitExceeded
 from .bootstrap import BootstrapService
 from .change_request import ChangeRequestService
 from .config import ProductConfig
+from .credential_authentication import CredentialAuthenticationService
 from .db import create_product_database
 from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from .execution import ExecutionService, timestamp_after, timestamp_expired
@@ -57,6 +57,7 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         authentication_rate_limit_service: AuthenticationRateLimitService | None = None,
+        credential_authentication_service: CredentialAuthenticationService | None = None,
         bootstrap_service: BootstrapService | None = None,
         audit_ledger: AuditLedger | None = None,
         user_account_service: UserAccountService | None = None,
@@ -94,6 +95,22 @@ class ProductService:
                 "authentication rate-limit service must use the product service configuration"
             )
         self.authentication_rate_limit_service = resolved_authentication_rate_limit_service
+        resolved_credential_authentication_service = (
+            credential_authentication_service
+            or CredentialAuthenticationService(
+                database=self.db,
+                password_hasher=lambda password: hash_password(password),
+                password_verifier=lambda password, encoded: verify_password(
+                    password,
+                    encoded,
+                ),
+            )
+        )
+        if resolved_credential_authentication_service.db is not self.db:
+            raise ValueError(
+                "credential authentication service must use the product service database"
+            )
+        self.credential_authentication_service = resolved_credential_authentication_service
         resolved_audit_ledger = audit_ledger or AuditLedger(self.db)
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
@@ -243,9 +260,6 @@ class ProductService:
             )
         self.platform_status_service = resolved_platform_status_service
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
-        self._dummy_password_hash = hash_password(
-            f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
-        )
 
     def has_users(self) -> bool:
         return self.bootstrap_service.has_users()
@@ -285,18 +299,10 @@ class ProductService:
         self.authentication_rate_limit_service.clear_bootstrap_rate_limit(source=source)
 
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            row = connection.execute(
-                sql.SELECT_USER_FOR_AUTH,
-                (username.strip(),),
-            ).fetchone()
-        encoded_password = (
-            str(row["password_hash"]) if row is not None else self._dummy_password_hash
+        return self.credential_authentication_service.authenticate(
+            username=username,
+            password=password,
         )
-        password_valid = verify_password(password, encoded_password)
-        if row is None or not int(row["active"]) or not password_valid:
-            raise PermissionError("invalid credentials")
-        return {"id": row["id"], "username": row["username"], "role": row["role"]}
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         return self.user_account_service.get_active_user(user_id)

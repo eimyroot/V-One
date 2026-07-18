@@ -110,22 +110,6 @@ def test_approval_catalog_variants_preserve_pending_filter(tmp_path: Path) -> No
     ]
 
 
-def _is_catalog_reference(node: ast.expr) -> bool:
-    return (
-        isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "sql"
-    )
-
-
-def _is_catalog_expression(node: ast.expr) -> bool:
-    return _is_catalog_reference(node) or (
-        isinstance(node, ast.IfExp)
-        and _is_catalog_reference(node.body)
-        and _is_catalog_reference(node.orelse)
-    )
-
-
 def test_service_database_calls_use_only_catalog_statements() -> None:
     source = ROOT / "voodoo_product" / "service.py"
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
@@ -137,5 +121,4 @@ def test_service_database_calls_use_only_catalog_statements() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 1
-    assert all(call.args and _is_catalog_expression(call.args[0]) for call in execute_calls)
+    assert execute_calls == []

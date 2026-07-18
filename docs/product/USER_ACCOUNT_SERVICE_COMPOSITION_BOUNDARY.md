@@ -24,7 +24,7 @@ The service uses the exact product database and audit ledger instances. Mismatch
 - existing method signatures, response fields and error behavior remain unchanged;
 - `new_id` and password-hasher monkeypatch bridges remain compatible.
 
-Bootstrap user creation, password authentication, dummy-hash timing protection and authentication rate limiting intentionally remain in `ProductService`.
+Bootstrap user creation and authentication rate limiting remain separate composition boundaries. Password lookup, verification and dummy-hash timing protection belong to `CredentialAuthenticationService`.
 
 No database migration or stored-data transformation is required.
 
