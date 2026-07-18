@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ast
+import secrets
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
@@ -10,7 +13,9 @@ from fastapi import FastAPI
 from voodoo_product.bootstrap import BootstrapService
 from voodoo_product.composition import install_composed_product_platform
 from voodoo_product.config import ProductConfig
+from voodoo_product.persistence import DatabaseIntegrityError
 from voodoo_product.service import ProductService
+from voodoo_product.statements import INSERT_WORKSPACE
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -178,6 +183,92 @@ def test_bootstrap_service_rolls_back_user_and_workspace_when_audit_fails(
     assert users["count"] == 0
     assert workspaces["count"] == 0
     assert audits["count"] == 0
+
+
+def test_bootstrap_service_rolls_back_user_when_workspace_insert_fails(
+    tmp_path: Path,
+) -> None:
+    product = ProductService(product_config(tmp_path))
+    service = bootstrap_service(product)
+    with product.db.connect() as connection:
+        connection.execute(
+            INSERT_WORKSPACE,
+            ("wrk-fixed", "Existing workspace", "local", "2026-07-17T11:00:00+00:00"),
+        )
+        connection.commit()
+
+    with pytest.raises(DatabaseIntegrityError, match="database integrity constraint failed"):
+        service.bootstrap_admin(
+            username="admin",
+            password="secret",
+            token=product.config.bootstrap_token,
+        )
+
+    with product.db.connect() as connection:
+        users = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+        workspaces = connection.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()
+        audits = connection.execute("SELECT COUNT(*) AS count FROM audit_events").fetchone()
+
+    assert users["count"] == 0
+    assert workspaces["count"] == 1
+    assert audits["count"] == 0
+
+
+def test_concurrent_bootstrap_attempts_create_exactly_one_administrator(
+    tmp_path: Path,
+) -> None:
+    product = ProductService(product_config(tmp_path))
+    start = Barrier(2)
+
+    def make_service(suffix: str) -> BootstrapService:
+        identifiers = iter((f"usr-{suffix}", f"wrk-{suffix}"))
+
+        def synchronized_token_comparator(supplied: str, expected: str) -> bool:
+            valid = secrets.compare_digest(supplied, expected)
+            start.wait(timeout=5)
+            return valid
+
+        return BootstrapService(
+            database=product.db,
+            config=product.config,
+            audit_ledger=product.audit_ledger,
+            id_factory=lambda _prefix: next(identifiers),
+            clock=lambda: "2026-07-17T12:00:00+00:00",
+            password_hasher=lambda password: f"hashed:{password}",
+            token_comparator=synchronized_token_comparator,
+        )
+
+    services = (make_service("first"), make_service("second"))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                service.bootstrap_admin,
+                username=f"admin-{index}",
+                password="secret",
+                token=product.config.bootstrap_token,
+            )
+            for index, service in enumerate(services)
+        ]
+
+    successes: list[dict[str, Any]] = []
+    failures: list[Exception] = []
+    for future in futures:
+        try:
+            successes.append(future.result())
+        except Exception as exc:  # noqa: BLE001 - outcomes are asserted below
+            failures.append(exc)
+
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert isinstance(failures[0], RuntimeError)
+    assert str(failures[0]) == "bootstrap is already closed"
+    with product.db.connect() as connection:
+        users = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+        workspaces = connection.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()
+        audits = connection.execute("SELECT COUNT(*) AS count FROM audit_events").fetchone()
+    assert users["count"] == 1
+    assert workspaces["count"] == 1
+    assert audits["count"] == 1
 
 
 def test_bootstrap_service_closes_after_first_success(tmp_path: Path) -> None:
