@@ -44,6 +44,10 @@ def test_workspace_service_uses_only_central_statement_catalog() -> None:
         and call.args[0].value.id == "sql"
         for call in execute_calls
     )
+    assert {call.args[0].attr for call in execute_calls} == {
+        "INSERT_WORKSPACE",
+        "LIST_WORKSPACES",
+    }
 
 
 def test_product_service_delegates_workspace_surface() -> None:
@@ -71,7 +75,7 @@ def test_product_service_delegates_workspace_surface() -> None:
     assert "self.workspace_service.list_workspaces" in source_text
     assert "self.workspace_service.create_workspace" in source_text
     assert "sql.LIST_WORKSPACES" not in source_text
-    assert "sql.INSERT_WORKSPACE" in source_text
+    assert "sql.INSERT_WORKSPACE" not in source_text
 
 
 def test_workspace_service_rejects_audit_ledger_from_another_database(tmp_path: Path) -> None:
