@@ -53,6 +53,8 @@ jobs:
           tests/system/test_token_security.py
       - name: Authentication rate-limit governance gate
         run: python -m pytest -q tests/system/test_authentication_rate_limit_service.py
+      - name: Bootstrap governance gate
+        run: python -m pytest -q tests/system/test_bootstrap_service.py
       - name: User account governance gate
         run: python -m pytest -q tests/system/test_user_account_service.py
       - name: Platform status governance gate
