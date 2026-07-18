@@ -11,12 +11,18 @@ from .security import Principal, issue_token, verify_token
 _CLAIM_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
 
 
-class IdentityService(Protocol):
+class CredentialAuthenticator(Protocol):
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
         ...
 
+
+class ActiveUserLookup(Protocol):
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         ...
+
+
+class IdentityService(CredentialAuthenticator, ActiveUserLookup, Protocol):
+    """Compatibility protocol for callers that still expose both identity ports."""
 
 
 class IdentityProvider(Protocol):
@@ -94,16 +100,32 @@ def validate_identity_provider_startup(config: ProductConfig) -> None:
 class LocalIdentityProvider:
     name = "local"
 
-    def __init__(self, *, config: ProductConfig, service: IdentityService):
+    def __init__(
+        self,
+        *,
+        config: ProductConfig,
+        service: IdentityService | None = None,
+        credential_authenticator: CredentialAuthenticator | None = None,
+        active_user_lookup: ActiveUserLookup | None = None,
+    ) -> None:
         self._config = config
-        self._service = service
+        self._credential_authenticator, self._active_user_lookup = (
+            _resolve_identity_dependencies(
+                service=service,
+                credential_authenticator=credential_authenticator,
+                active_user_lookup=active_user_lookup,
+            )
+        )
 
     def authenticate_password(self, *, username: str, password: str) -> dict[str, Any]:
-        return self._service.authenticate(username=username, password=password)
+        return self._credential_authenticator.authenticate(
+            username=username,
+            password=password,
+        )
 
     def authenticate_bearer(self, token: str) -> Principal:
         token_principal = verify_token(secret=self._config.session_signing_secret, token=token)
-        active_user = self._service.get_active_user(token_principal.user_id)
+        active_user = self._active_user_lookup.get_active_user(token_principal.user_id)
         return Principal(
             user_id=str(active_user["id"]),
             username=str(active_user["username"]),
@@ -120,8 +142,36 @@ class LocalIdentityProvider:
         )
 
 
+def _resolve_identity_dependencies(
+    *,
+    service: IdentityService | None,
+    credential_authenticator: CredentialAuthenticator | None,
+    active_user_lookup: ActiveUserLookup | None,
+) -> tuple[CredentialAuthenticator, ActiveUserLookup]:
+    if service is not None:
+        if credential_authenticator is not None or active_user_lookup is not None:
+            raise ValueError(
+                "identity service compatibility input cannot be mixed with explicit ports"
+            )
+        return service, service
+    if credential_authenticator is None or active_user_lookup is None:
+        raise ValueError(
+            "credential authenticator and active-user lookup must both be configured"
+        )
+    return credential_authenticator, active_user_lookup
+
+
 def create_identity_provider(
-    *, config: ProductConfig, service: IdentityService
+    *,
+    config: ProductConfig,
+    service: IdentityService | None = None,
+    credential_authenticator: CredentialAuthenticator | None = None,
+    active_user_lookup: ActiveUserLookup | None = None,
 ) -> IdentityProvider:
     validate_identity_provider_startup(config)
-    return LocalIdentityProvider(config=config, service=service)
+    return LocalIdentityProvider(
+        config=config,
+        service=service,
+        credential_authenticator=credential_authenticator,
+        active_user_lookup=active_user_lookup,
+    )

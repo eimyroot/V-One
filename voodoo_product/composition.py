@@ -83,7 +83,8 @@ def install_composed_product_platform(
     platform_status_service = service.platform_status_service
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
-        service=service,
+        credential_authenticator=credential_authentication_service,
+        active_user_lookup=user_account_service,
     )
     external_identity_service = GovernedExternalIdentityService(
         database=service.db,

@@ -57,6 +57,23 @@ class FakeIdentityService:
         return {"id": user_id, "username": "operator", "role": self.role}
 
 
+class FakeCredentialAuthenticator:
+    def authenticate(self, *, username: str, password: str) -> dict[str, object]:
+        if (username, password) != ("operator", "correct-password"):
+            raise PermissionError("invalid credentials")
+        return {"id": "usr_operator", "username": username, "role": "operator"}
+
+
+class FakeActiveUserLookup:
+    def __init__(self) -> None:
+        self.role = "operator"
+
+    def get_active_user(self, user_id: str) -> dict[str, object]:
+        if user_id != "usr_operator":
+            raise PermissionError("account is inactive")
+        return {"id": user_id, "username": "operator", "role": self.role}
+
+
 def test_local_provider_owns_password_session_and_live_role_revalidation(
     tmp_path: Path,
 ) -> None:
@@ -82,6 +99,75 @@ def test_factory_returns_only_configured_local_provider(tmp_path: Path) -> None:
     )
 
     assert provider.name == "local"
+
+
+def test_local_provider_accepts_separate_least_privilege_identity_ports(
+    tmp_path: Path,
+) -> None:
+    active_users = FakeActiveUserLookup()
+    provider = LocalIdentityProvider(
+        config=build_config(tmp_path),
+        credential_authenticator=FakeCredentialAuthenticator(),
+        active_user_lookup=active_users,
+    )
+    user = provider.authenticate_password(
+        username="operator",
+        password="correct-password",
+    )
+    token = provider.issue_session(
+        user_id=str(user["id"]),
+        username=str(user["username"]),
+        role=str(user["role"]),
+    )
+
+    active_users.role = "auditor"
+
+    assert provider.authenticate_bearer(token).role == "auditor"
+
+
+def test_identity_dependency_configuration_fails_closed(tmp_path: Path) -> None:
+    config = build_config(tmp_path)
+    combined = FakeIdentityService()
+    credentials = FakeCredentialAuthenticator()
+    active_users = FakeActiveUserLookup()
+
+    with pytest.raises(ValueError, match="cannot be mixed"):
+        LocalIdentityProvider(
+            config=config,
+            service=combined,
+            credential_authenticator=credentials,
+            active_user_lookup=active_users,
+        )
+    with pytest.raises(ValueError, match="must both be configured"):
+        LocalIdentityProvider(
+            config=config,
+            credential_authenticator=credentials,
+        )
+    with pytest.raises(ValueError, match="must both be configured"):
+        LocalIdentityProvider(
+            config=config,
+            active_user_lookup=active_users,
+        )
+
+
+def test_runtime_installers_use_canonical_narrow_identity_dependencies() -> None:
+    composition_source = (
+        Path(__file__).resolve().parents[2] / "voodoo_product" / "composition.py"
+    ).read_text(encoding="utf-8")
+    compatibility_source = (
+        Path(__file__).resolve().parents[2] / "voodoo_product" / "api.py"
+    ).read_text(encoding="utf-8")
+
+    assert "credential_authenticator=credential_authentication_service" in composition_source
+    assert "active_user_lookup=user_account_service" in composition_source
+    assert (
+        "credential_authenticator=service.credential_authentication_service"
+        in compatibility_source
+    )
+    assert "active_user_lookup=service.user_account_service" in compatibility_source
+    assert "create_identity_provider(\n        config=resolved_config,\n        service=service" not in (
+        composition_source + compatibility_source
+    )
 
 
 def test_local_mode_rejects_stray_oidc_settings(tmp_path: Path) -> None:

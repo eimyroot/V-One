@@ -442,7 +442,8 @@ def install_product_platform(
     service = ProductService(resolved_config)
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
-        service=service,
+        credential_authenticator=service.credential_authentication_service,
+        active_user_lookup=service.user_account_service,
     )
     app.state.voodoo_product_service = service
     app.state.voodoo_identity_provider = resolved_identity_provider

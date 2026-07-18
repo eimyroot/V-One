@@ -54,11 +54,13 @@ upgrade, so operators must expect all existing console and API sessions to authe
 runtime still revalidates active account state and the current database role on every request.
 
 FastAPI authentication routes now depend on an explicit identity-provider contract. The released
-`local` provider owns password verification, session issuance, bearer verification and live account
-revalidation. OIDC configuration requires exact HTTPS issuer and JWKS endpoints, audience and
-distinct identity claim names, but OIDC execution remains unavailable. Selecting it aborts startup
-before persistence initialization and never falls back to local passwords. External groups must not
-become internal roles until a separate allowlisted mapping and integration gate are released.
+`local` provider owns session issuance and bearer verification while depending on separate canonical
+credential-authentication and active-user lookup ports. Production composition does not inject the
+broad product compatibility facade. OIDC configuration requires exact HTTPS issuer and JWKS
+endpoints, audience and distinct identity claim names, but OIDC execution remains unavailable.
+Selecting it aborts startup before persistence initialization and never falls back to local
+passwords. External groups must not become internal roles until a separate allowlisted mapping and
+integration gate are released.
 
 The application derives the authentication source from the ASGI server's client address and does
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a

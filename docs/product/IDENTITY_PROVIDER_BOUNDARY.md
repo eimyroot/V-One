@@ -2,10 +2,14 @@
 
 ## Released mode
 
-`VOODOO_IDENTITY_PROVIDER=local` is the only released identity mode. The local provider owns password
-verification, v2 session issuance, bearer-token verification and live database revalidation of account
-status and role. FastAPI routes depend on the provider contract and do not directly sign or verify
-sessions.
+`VOODOO_IDENTITY_PROVIDER=local` is the only released identity mode. The local provider owns v2
+session issuance and bearer-token verification. It depends on two least-privilege ports:
+`CredentialAuthenticationService` for password decisions and `UserAccountService` for live account
+and role revalidation. Production composition never injects the broad `ProductService` compatibility
+facade. FastAPI routes depend on the provider contract and do not directly sign or verify sessions.
+
+The previous combined `IdentityService` input remains accepted only as a compatibility path. Mixing
+that input with either explicit port, or configuring only one explicit port, fails closed.
 
 Authentication throttling remains an HTTP/service concern because it is bound to both the submitted
 account name and the trusted ASGI client source. Successful and failed authentication events continue
@@ -46,5 +50,5 @@ independently of identity-provider selection.
 ## Rollback
 
 This boundary does not change the database schema or stored identities. Reverting the source restores
-the previous direct local-authentication wiring. Existing local v2 sessions remain cryptographically
-compatible because their token format and signing context are unchanged.
+the previous dependency wiring. Existing local v2 sessions remain cryptographically compatible
+because their token format and signing context are unchanged.
