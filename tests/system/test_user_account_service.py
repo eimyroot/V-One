@@ -44,6 +44,10 @@ def test_user_account_service_uses_only_central_statement_catalog() -> None:
         and call.args[0].value.id == "sql"
         for call in execute_calls
     )
+    assert {call.args[0].attr for call in execute_calls} == {
+        "INSERT_USER",
+        "SELECT_ACTIVE_USER",
+    }
 
 
 def test_product_service_delegates_user_account_surface() -> None:
@@ -71,7 +75,7 @@ def test_product_service_delegates_user_account_surface() -> None:
     assert "self.user_account_service.get_active_user" in source_text
     assert "self.user_account_service.create_user" in source_text
     assert "sql.SELECT_ACTIVE_USER" not in source_text
-    assert "sql.INSERT_USER" in source_text
+    assert "sql.INSERT_USER" not in source_text
 
 
 def test_user_account_service_rejects_audit_ledger_from_another_database(
