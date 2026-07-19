@@ -20,9 +20,11 @@ The `active_sessions` table stores only:
 - issue and expiry timestamps.
 
 It never stores bearer tokens, signatures or raw nonces. Rows are immutable. Expired rows are removed
-during subsequent session issuance; explicit logout deletes only the caller's current row. Session
-issue and revoke operations append hash-chained audit events in the same transaction as the allowlist
-change. Audit targets contain the HMAC reference, not credential material.
+during subsequent session issuance; explicit logout deletes only the caller's current row. An
+administrator can revoke every active local session for one user through the incident endpoint.
+Session issue and revoke operations append hash-chained audit events in the same transaction as the
+allowlist change. Audit targets contain either the HMAC reference or internal user ID, never credential
+material. Revoke-all evidence includes only the normalized reason and affected-row count.
 
 ## Upgrade and failure semantics
 
@@ -38,8 +40,9 @@ a token-format change.
   operator that server-side revocation could not be confirmed;
 - role and active-account checks still run after session validation on every request.
 
-The initial release supports current-session logout. Administrative revoke-all, bounded session
-inventory and OIDC back-channel logout remain separate release slices.
+The initial release supports current-session logout and administrator-only, idempotent revoke-all via
+`POST /api/v1/users/{user_id}/sessions/revoke`. Bounded session inventory and OIDC back-channel logout
+remain separate release slices.
 
 ## Rollback
 

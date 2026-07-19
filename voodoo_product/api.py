@@ -45,6 +45,10 @@ class UserCreateRequest(BaseModel):
     role: str = Field(min_length=3, max_length=40)
 
 
+class SessionRevocationRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=200)
+
+
 class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     environment: str = Field(min_length=4, max_length=20)
@@ -254,6 +258,27 @@ def create_product_router(
                 password=body.password,
                 role=body.role,
             )
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+
+    @router.post("/users/{user_id}/sessions/revoke")
+    def revoke_user_sessions(
+        user_id: str,
+        body: SessionRevocationRequest,
+        principal: Principal = Depends(require_permission("*")),
+    ) -> dict[str, object]:
+        try:
+            result = service.revoke_all_sessions(
+                user_id=user_id,
+                actor_id=principal.user_id,
+                reason=body.reason,
+            )
+            log_event(
+                "auth.sessions.revoked",
+                auth_scope="administrative_revocation",
+                revoked_count=result["revoked_count"],
+            )
+            return result
         except Exception as exc:
             raise _translate_error(exc) from exc
 

@@ -67,7 +67,7 @@ def test_session_lifecycle_service_uses_only_central_statement_catalog() -> None
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 4
+    assert len(execute_calls) == 6
     assert all(
         call.args
         and isinstance(call.args[0], ast.Attribute)
@@ -259,3 +259,158 @@ def test_session_registration_rolls_back_when_audit_append_fails(tmp_path: Path)
     with product.db.connect() as connection:
         count = connection.execute("SELECT COUNT(*) FROM active_sessions").fetchone()
     assert int(count[0]) == 0
+
+
+def test_administrator_revokes_all_target_sessions_atomically(tmp_path: Path) -> None:
+    client = build_client(tmp_path)
+    admin = bootstrap(client)
+    created = client.post(
+        "/api/v1/users",
+        headers=authorization(admin),
+        json={
+            "username": "operator",
+            "password": "VeryStrongOperatorPassword1!",
+            "role": "operator",
+        },
+    )
+    assert created.status_code == 201, created.text
+    user_id = str(created.json()["id"])
+    tokens = []
+    for _ in range(2):
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "operator", "password": "VeryStrongOperatorPassword1!"},
+        )
+        assert login.status_code == 200, login.text
+        tokens.append(str(login.json()["token"]))
+
+    revoked = client.post(
+        f"/api/v1/users/{user_id}/sessions/revoke",
+        headers=authorization(admin),
+        json={"reason": "suspected credential compromise"},
+    )
+
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json() == {"user_id": user_id, "revoked_count": 2}
+    assert all(
+        client.get("/api/v1/me", headers=authorization(token)).status_code == 401
+        for token in tokens
+    )
+    assert client.get("/api/v1/me", headers=authorization(admin)).status_code == 200
+    event = next(
+        item
+        for item in client.app.state.voodoo_product_service.list_audit_events()
+        if item["action"] == "session.revoke_all"
+    )
+    assert event["target_id"] == user_id
+    assert event["payload"] == {
+        "reason": "suspected credential compromise",
+        "revoked_count": 2,
+    }
+    assert all(token not in json.dumps(event) for token in tokens)
+
+
+def test_revoke_all_is_admin_only_and_idempotent(tmp_path: Path) -> None:
+    client = build_client(tmp_path)
+    admin = bootstrap(client)
+    created = client.post(
+        "/api/v1/users",
+        headers=authorization(admin),
+        json={
+            "username": "viewer",
+            "password": "VeryStrongViewerPassword1!",
+            "role": "viewer",
+        },
+    )
+    user_id = str(created.json()["id"])
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "viewer", "password": "VeryStrongViewerPassword1!"},
+    )
+    viewer = str(login.json()["token"])
+
+    denied = client.post(
+        f"/api/v1/users/{user_id}/sessions/revoke",
+        headers=authorization(viewer),
+        json={"reason": "operator requested revocation"},
+    )
+    assert denied.status_code == 403
+    assert client.get("/api/v1/me", headers=authorization(viewer)).status_code == 200
+
+    first = client.post(
+        f"/api/v1/users/{user_id}/sessions/revoke",
+        headers=authorization(admin),
+        json={"reason": "operator requested revocation"},
+    )
+    second = client.post(
+        f"/api/v1/users/{user_id}/sessions/revoke",
+        headers=authorization(admin),
+        json={"reason": "confirm incident containment"},
+    )
+
+    assert first.json()["revoked_count"] == 1
+    assert second.json()["revoked_count"] == 0
+    missing = client.post(
+        "/api/v1/users/usr_missing/sessions/revoke",
+        headers=authorization(admin),
+        json={"reason": "confirm incident containment"},
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "user not found"}
+
+
+def test_revoke_all_rolls_back_when_audit_append_fails(tmp_path: Path) -> None:
+    config = ProductConfig(
+        environment="test",
+        database_path=tmp_path / "product.sqlite3",
+        sandbox_root=tmp_path / "sandboxes",
+        session_signing_secret="s" * 64,
+        bootstrap_token="b" * 48,
+    )
+    product = ProductService(config)
+    user_id = str(
+        product.bootstrap_admin(
+            username="admin",
+            password="VeryStrongAdminPassword1!",
+            token="b" * 48,
+        )["user_id"]
+    )
+    lifecycle = SessionLifecycleService(
+        database=product.db,
+        audit_ledger=product.audit_ledger,
+        session_reference_factory=lambda session_id: session_reference(
+            secret=config.session_signing_secret,
+            session_id=session_id,
+        ),
+        clock=lambda: 100,
+    )
+    lifecycle.register_session(
+        session_id="incident-session-0004",
+        user_id=user_id,
+        issued_at=90,
+        expires_at=190,
+    )
+
+    class FailingAuditLedger:
+        db = product.db
+
+        def append(self, *_: object, **__: object) -> dict[str, object]:
+            raise RuntimeError("audit unavailable")
+
+    failing = SessionLifecycleService(
+        database=product.db,
+        audit_ledger=FailingAuditLedger(),  # type: ignore[arg-type]
+        session_reference_factory=lambda session_id: session_reference(
+            secret=config.session_signing_secret,
+            session_id=session_id,
+        ),
+    )
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        failing.revoke_all_sessions(
+            user_id=user_id,
+            actor_id=user_id,
+            reason="incident containment",
+        )
+    with product.db.connect() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM active_sessions").fetchone()
+    assert int(count[0]) == 1

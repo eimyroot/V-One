@@ -115,6 +115,37 @@ class SessionLifecycleService:
                 payload={"reason": normalized_reason},
             )
 
+    def revoke_all_sessions(
+        self,
+        *,
+        user_id: str,
+        actor_id: str,
+        reason: str,
+    ) -> int:
+        if not 1 <= len(user_id) <= 128 or not 1 <= len(actor_id) <= 128:
+            raise ValueError("session revocation identity is invalid")
+        normalized_reason = reason.strip()
+        if not 3 <= len(normalized_reason) <= 200:
+            raise ValueError("session revocation reason is invalid")
+        with self.db.transaction() as connection:
+            target = connection.execute(sql.SELECT_USER_BY_ID, (user_id,)).fetchone()
+            if target is None:
+                raise LookupError("user not found")
+            removed = connection.execute(
+                sql.DELETE_ACTIVE_SESSIONS_FOR_USER,
+                (user_id,),
+            ).fetchall()
+            revoked_count = len(removed)
+            self.audit_ledger.append(
+                connection,
+                actor_id=actor_id,
+                action="session.revoke_all",
+                target_type="user",
+                target_id=user_id,
+                payload={"reason": normalized_reason, "revoked_count": revoked_count},
+            )
+        return revoked_count
+
     def _reference(self, session_id: str) -> str:
         reference = self._session_reference_factory(session_id)
         if _SESSION_REFERENCE_PATTERN.fullmatch(reference) is None:

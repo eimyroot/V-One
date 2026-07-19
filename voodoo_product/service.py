@@ -375,6 +375,16 @@ class ProductService:
             reason=reason,
         )
 
+    def revoke_all_sessions(
+        self, *, user_id: str, actor_id: str, reason: str
+    ) -> dict[str, object]:
+        revoked_count = self.session_lifecycle_service.revoke_all_sessions(
+            user_id=user_id,
+            actor_id=actor_id,
+            reason=reason,
+        )
+        return {"user_id": user_id, "revoked_count": revoked_count}
+
     def create_user(
         self, *, actor_id: str, username: str, password: str, role: str
     ) -> dict[str, Any]:

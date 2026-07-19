@@ -26,6 +26,10 @@ SELECT_ACTIVE_USER = _read(
     "users.select_active",
     "SELECT id, username, role, active FROM users WHERE id = ?",
 )
+SELECT_USER_BY_ID = _read(
+    "users.select_by_id",
+    "SELECT id FROM users WHERE id = ?",
+)
 
 INSERT_ACTIVE_SESSION = _write(
     "active_sessions.insert",
@@ -47,6 +51,14 @@ DELETE_ACTIVE_SESSION = _write(
     """
     DELETE FROM active_sessions
     WHERE session_reference = ? AND user_id = ?
+    RETURNING session_reference
+    """,
+)
+DELETE_ACTIVE_SESSIONS_FOR_USER = _write(
+    "active_sessions.delete_for_user",
+    """
+    DELETE FROM active_sessions
+    WHERE user_id = ?
     RETURNING session_reference
     """,
 )
@@ -353,9 +365,11 @@ ALL_STATEMENTS = (
     INSERT_USER,
     SELECT_USER_FOR_AUTH,
     SELECT_ACTIVE_USER,
+    SELECT_USER_BY_ID,
     INSERT_ACTIVE_SESSION,
     SELECT_ACTIVE_SESSION,
     DELETE_ACTIVE_SESSION,
+    DELETE_ACTIVE_SESSIONS_FOR_USER,
     DELETE_EXPIRED_ACTIVE_SESSIONS,
     INSERT_WORKSPACE,
     LIST_WORKSPACES,
