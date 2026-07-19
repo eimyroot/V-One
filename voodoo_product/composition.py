@@ -32,6 +32,7 @@ from .operational_safety import OperationalSafetyService
 from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
 from .service import ProductService
+from .session_lifecycle import SessionLifecycleService
 from .user_account import UserAccountService
 from .workspace import WorkspaceService
 
@@ -44,6 +45,7 @@ class ProductComposition:
     bootstrap_service: BootstrapService
     audit_ledger: AuditLedger
     user_account_service: UserAccountService
+    session_lifecycle_service: SessionLifecycleService
     workspace_service: WorkspaceService
     change_request_service: ChangeRequestService
     receipt_ledger: ReceiptLedger
@@ -75,6 +77,7 @@ def install_composed_product_platform(
     bootstrap_service = service.bootstrap_service
     audit_ledger = service.audit_ledger
     user_account_service = service.user_account_service
+    session_lifecycle_service = service.session_lifecycle_service
     workspace_service = service.workspace_service
     change_request_service = service.change_request_service
     receipt_ledger = service.receipt_ledger
@@ -85,6 +88,7 @@ def install_composed_product_platform(
         config=resolved_config,
         credential_authenticator=credential_authentication_service,
         active_user_lookup=user_account_service,
+        session_lifecycle=session_lifecycle_service,
     )
     external_identity_service = GovernedExternalIdentityService(
         database=service.db,
@@ -97,6 +101,7 @@ def install_composed_product_platform(
         bootstrap_service=bootstrap_service,
         audit_ledger=audit_ledger,
         user_account_service=user_account_service,
+        session_lifecycle_service=session_lifecycle_service,
         workspace_service=workspace_service,
         change_request_service=change_request_service,
         receipt_ledger=receipt_ledger,
@@ -113,6 +118,7 @@ def install_composed_product_platform(
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
     app.state.voodoo_user_account_service = user_account_service
+    app.state.voodoo_session_lifecycle_service = session_lifecycle_service
     app.state.voodoo_workspace_service = workspace_service
     app.state.voodoo_change_request_service = change_request_service
     app.state.voodoo_receipt_ledger = receipt_ledger

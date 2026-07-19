@@ -108,17 +108,23 @@ def create_product_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["VOODOO One Product"])
 
-    def current_principal(
+    def bearer_token(
         authorization: str | None = Header(default=None),
-    ) -> Principal:
+    ) -> str:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="authentication required")
         if len(authorization) > 4096:
             raise HTTPException(status_code=401, detail="invalid authentication token")
+        token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="invalid authentication token")
+        return token
+
+    def current_principal(
+        token: str = Depends(bearer_token),
+    ) -> Principal:
         try:
-            return identity_provider.authenticate_bearer(
-                authorization.removeprefix("Bearer ").strip()
-            )
+            return identity_provider.authenticate_bearer(token)
         except (PermissionError, ValueError) as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
 
@@ -224,6 +230,17 @@ def create_product_router(
     @router.get("/me")
     def me(principal: Principal = Depends(current_principal)) -> dict[str, Any]:
         return {"id": principal.user_id, "username": principal.username, "role": principal.role}
+
+    @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+    def logout(
+        token: str = Depends(bearer_token),
+        principal: Principal = Depends(current_principal),
+    ) -> None:
+        try:
+            identity_provider.revoke_session(token, actor_id=principal.user_id)
+            log_event("auth.logout.succeeded", auth_scope="logout")
+        except Exception as exc:
+            raise _translate_error(exc) from exc
 
     @router.post("/users", status_code=status.HTTP_201_CREATED)
     def create_user(
@@ -444,6 +461,7 @@ def install_product_platform(
         config=resolved_config,
         credential_authenticator=service.credential_authentication_service,
         active_user_lookup=service.user_account_service,
+        session_lifecycle=service.session_lifecycle_service,
     )
     app.state.voodoo_product_service = service
     app.state.voodoo_identity_provider = resolved_identity_provider

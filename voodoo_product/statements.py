@@ -27,6 +27,34 @@ SELECT_ACTIVE_USER = _read(
     "SELECT id, username, role, active FROM users WHERE id = ?",
 )
 
+INSERT_ACTIVE_SESSION = _write(
+    "active_sessions.insert",
+    """
+    INSERT INTO active_sessions(session_reference, user_id, issued_at, expires_at)
+    VALUES (?, ?, ?, ?)
+    """,
+)
+SELECT_ACTIVE_SESSION = _read(
+    "active_sessions.select_active",
+    """
+    SELECT user_id, issued_at, expires_at
+    FROM active_sessions
+    WHERE session_reference = ? AND expires_at > ?
+    """,
+)
+DELETE_ACTIVE_SESSION = _write(
+    "active_sessions.delete",
+    """
+    DELETE FROM active_sessions
+    WHERE session_reference = ? AND user_id = ?
+    RETURNING session_reference
+    """,
+)
+DELETE_EXPIRED_ACTIVE_SESSIONS = _write(
+    "active_sessions.delete_expired",
+    "DELETE FROM active_sessions WHERE expires_at <= ?",
+)
+
 INSERT_WORKSPACE = _write(
     "workspaces.insert",
     "INSERT INTO workspaces(id, name, environment, created_at) VALUES (?, ?, ?, ?)",
@@ -325,6 +353,10 @@ ALL_STATEMENTS = (
     INSERT_USER,
     SELECT_USER_FOR_AUTH,
     SELECT_ACTIVE_USER,
+    INSERT_ACTIVE_SESSION,
+    SELECT_ACTIVE_SESSION,
+    DELETE_ACTIVE_SESSION,
+    DELETE_EXPIRED_ACTIVE_SESSIONS,
     INSERT_WORKSPACE,
     LIST_WORKSPACES,
     SELECT_WORKSPACE_CONTEXT,

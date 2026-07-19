@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_statement_catalog_is_complete_unique_and_classified() -> None:
-    assert len(ALL_STATEMENTS) == 46
+    assert len(ALL_STATEMENTS) == 50
     assert tuple(STATEMENTS_BY_NAME) == tuple(statement.name for statement in ALL_STATEMENTS)
     assert tuple(STATEMENTS_BY_NAME.values()) == ALL_STATEMENTS
 

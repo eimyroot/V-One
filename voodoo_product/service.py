@@ -19,7 +19,8 @@ from .operational_safety import OperationalSafetyService
 from .persistence import DatabaseConnection, DatabaseRow, ProductDatabaseAdapter
 from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
-from .security import hash_password, verify_password
+from .security import hash_password, session_reference, verify_password
+from .session_lifecycle import SessionLifecycleService
 from .user_account import UserAccountService
 from .workspace import WorkspaceService
 
@@ -61,6 +62,7 @@ class ProductService:
         bootstrap_service: BootstrapService | None = None,
         audit_ledger: AuditLedger | None = None,
         user_account_service: UserAccountService | None = None,
+        session_lifecycle_service: SessionLifecycleService | None = None,
         workspace_service: WorkspaceService | None = None,
         change_request_service: ChangeRequestService | None = None,
         receipt_ledger: ReceiptLedger | None = None,
@@ -150,6 +152,27 @@ class ProductService:
                 "user account service must use the product service audit ledger"
             )
         self.user_account_service = resolved_user_account_service
+        resolved_session_lifecycle_service = (
+            session_lifecycle_service
+            or SessionLifecycleService(
+                database=self.db,
+                audit_ledger=self.audit_ledger,
+                session_reference_factory=lambda session_id: session_reference(
+                    secret=self.config.session_signing_secret,
+                    session_id=session_id,
+                ),
+                clock=lambda: time.time(),
+            )
+        )
+        if resolved_session_lifecycle_service.db is not self.db:
+            raise ValueError(
+                "session lifecycle service must use the product service database"
+            )
+        if resolved_session_lifecycle_service.audit_ledger is not self.audit_ledger:
+            raise ValueError(
+                "session lifecycle service must use the product service audit ledger"
+            )
+        self.session_lifecycle_service = resolved_session_lifecycle_service
         resolved_workspace_service = workspace_service or WorkspaceService(
             database=self.db,
             audit_ledger=self.audit_ledger,
@@ -306,6 +329,51 @@ class ProductService:
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         return self.user_account_service.get_active_user(user_id)
+
+    def register_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None:
+        self.session_lifecycle_service.register_session(
+            session_id=session_id,
+            user_id=user_id,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+
+    def require_active_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None:
+        self.session_lifecycle_service.require_active_session(
+            session_id=session_id,
+            user_id=user_id,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+
+    def revoke_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        actor_id: str,
+        reason: str,
+    ) -> None:
+        self.session_lifecycle_service.revoke_session(
+            session_id=session_id,
+            user_id=user_id,
+            actor_id=actor_id,
+            reason=reason,
+        )
 
     def create_user(
         self, *, actor_id: str, username: str, password: str, role: str

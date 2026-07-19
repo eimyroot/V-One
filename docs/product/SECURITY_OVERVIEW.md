@@ -6,6 +6,8 @@
 - generated local secrets stored outside Git,
 - `scrypt` password hashing with per-user salt,
 - context-bound v2 sessions signed with a purpose-derived HMAC key,
+- database-backed active-session allowlisting with server-side current-session logout,
+- HMAC-referenced session storage that excludes bearer tokens and raw nonces,
 - explicit identity-provider boundary for password, session and bearer authentication,
 - fail-closed startup for configured but unreleased OIDC identity,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
@@ -51,11 +53,13 @@ Bearer tokens use version `v2`, fixed issuer and audience claims, bounded claim 
 and a signing key derived from the runtime root secret under a session-token-specific context. The
 raw root secret is not used directly as the token signing key. Legacy `v1` tokens fail closed after
 upgrade, so operators must expect all existing console and API sessions to authenticate again. The
-runtime still revalidates active account state and the current database role on every request.
+runtime also requires an exact active-session allowlist match, then revalidates active account state
+and the current database role on every request. Migration `0007` intentionally invalidates previously
+issued stateless sessions.
 
 FastAPI authentication routes now depend on an explicit identity-provider contract. The released
 `local` provider owns session issuance and bearer verification while depending on separate canonical
-credential-authentication and active-user lookup ports. Production composition does not inject the
+credential-authentication, active-user lookup and session-lifecycle ports. Production composition does not inject the
 broad product compatibility facade. OIDC configuration requires exact HTTPS issuer and JWKS
 endpoints, audience and distinct identity claim names, but OIDC execution remains unavailable.
 Selecting it aborts startup before persistence initialization and never falls back to local

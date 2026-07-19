@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `5`, verify evidence integrity again, and only then
+one new instance, require health schema version `7`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -62,6 +62,14 @@ Database triggers reject new or retargeted change requests whose environment dif
 workspace, prevent environment reclassification after governance begins, and reject execution rows
 for any historical mismatch. Existing historical rows are preserved rather than silently rewritten;
 the service blocks their submit, review and execution paths.
+
+Migration `0006_external_identity_bindings.sql` adds immutable, non-reactivatable external identity
+bindings without enabling the unreleased OIDC runtime.
+
+Migration `0007_active_sessions.sql` adds the persistent local-session allowlist. It stores only a
+purpose-derived HMAC reference, user ID and bounded timestamps. Existing v2 tokens have no matching
+row and therefore fail closed until the operator signs in again. Session rows are immutable and
+explicit revocation deletes only the selected active row while the audit chain preserves evidence.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.

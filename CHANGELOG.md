@@ -11,6 +11,8 @@
 - Reduced the default session lifetime from eight hours to one hour.
 - Replaced legacy v1 bearer tokens with context-bound v2 tokens signed by a purpose-derived key.
 - Routed local password and bearer authentication through an explicit provider boundary while keeping OIDC fail-closed.
+- Added a database-backed active-session allowlist and audited server-side current-session logout.
+- Kept bearer tokens and raw session nonces out of persistence by storing purpose-derived references.
 - Separated constant-time liveness from explicit evidence-chain verification.
 - Expanded system/security coverage from 10 to 14 tests.
 - Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.
