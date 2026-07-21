@@ -72,6 +72,11 @@ jobs:
           tests/system/test_execution_recovery.py
           tests/system/test_persistence_boundary.py
           tests/system/test_statement_catalog.py
+      - name: Sandbox filesystem security gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_adapter_sandbox_security.py
+          tests/system/test_product_platform_rc1.py::test_symlinked_sandbox_directory_fails_closed
       - name: Product and release gate
         run: >-
           python -m pytest -q

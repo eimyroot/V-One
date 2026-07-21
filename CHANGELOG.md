@@ -6,7 +6,7 @@
 - Pinned runtime and development dependency graphs with hashes.
 - Added least-privilege CI and a manually gated release-candidate build.
 - Revalidated active account and current role on every authenticated request.
-- Hardened sandbox writes against symlink traversal and partial writes.
+- Hardened sandbox writes with no-follow metadata checks and opened-directory identity verification, preventing platform-specific `O_NOFOLLOW` behavior from following symlinked directory components.
 - Added change-payload, artifact, token-header and idempotency-key bounds.
 - Reduced the default session lifetime from eight hours to one hour.
 - Replaced legacy v1 bearer tokens with context-bound v2 tokens signed by a purpose-derived key.

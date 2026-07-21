@@ -28,7 +28,7 @@
 - two distinct approvers for production requests,
 - production effects disabled by default,
 - allowlisted adapters only,
-- descriptor-relative, no-symlink sandbox writes with bounded artifact size,
+- descriptor-relative sandbox writes with no-follow metadata checks, opened-directory identity verification and bounded artifact size,
 - subprocess execution without a shell,
 - bounded subprocess output and timeout,
 - execution idempotency,
@@ -44,6 +44,8 @@ startup before the service accepts traffic. This prevents a SQLite-specific serv
 misrepresented as production-ready PostgreSQL support. The statement catalog has no cross-dialect
 fallback, and a future adapter must preserve global write serialization until narrower locking has
 independent concurrency proofs.
+
+Sandbox directory traversal does not rely on `O_NOFOLLOW` alone. Every attacker-controlled directory component is inspected without following symlinks, opened descriptor-relatively, inspected again, and then matched by device and inode across all three views. Existing destination symlinks and non-regular files fail closed. The configured sandbox-root path and mutation by other local processes remain operator-owned boundaries; workspace and artifact path components beneath the root are treated as untrusted.
 
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the
