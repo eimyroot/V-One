@@ -45,6 +45,13 @@ def test_release_candidate_cli_does_not_echo_rejected_input(capsys: pytest.Captu
     assert "release candidate rejected" in captured.err
 
 
+def test_product_image_smoke_uses_running_container_python_for_health_payload() -> None:
+    script = (ROOT / "scripts/smoke_product_image.sh").read_text(encoding="utf-8")
+
+    assert 'docker exec --interactive "$container" python -c' in script
+    assert "\n  python -c " not in script
+
+
 def test_product_image_smoke_script_has_valid_bash_syntax() -> None:
     result = subprocess.run(
         ["bash", "-n", "scripts/smoke_product_image.sh"],
