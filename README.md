@@ -24,6 +24,28 @@ python -m pytest -q
 python scripts/product_readiness_gate.py
 ```
 
+## Local checkpoint evidence verification
+
+The first ProofGraph slice verifies an existing checkpoint without changing product or runtime
+state:
+
+```bash
+export PATH="$PWD/scripts:$PATH"
+voodoo evidence verify /absolute/path/to/checkpoint
+```
+
+The equivalent module command is:
+
+```bash
+python -m voodoo_product evidence verify /absolute/path/to/checkpoint
+```
+
+The command emits JSON and exits non-zero when the outer manifest, provenance, Git bundle, source
+tree, source archive or runtime identity is inconsistent. It does not verify a remote Drive copy,
+contact Docker, publish an artifact or authorize a release.
+
+See `docs/adr/ADR-0002-local-checkpoint-proofgraph-verification.md`.
+
 ## Local start
 
 Create `.env.product.local` from `.env.product.example`, replace both secret placeholders with

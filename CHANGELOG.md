@@ -5,6 +5,7 @@
 - Established a clean, review-gated repository baseline from the verified RC1 artifact.
 - Pinned runtime and development dependency graphs with hashes.
 - Made the product-image smoke gate parse health JSON with the built image Python runtime instead of an unqualified host `python` command.
+- Added a fail-closed local checkpoint verifier and deterministic ProofGraph v1 JSON projection.
 - Added least-privilege CI and a manually gated release-candidate build.
 - Revalidated active account and current role on every authenticated request.
 - Hardened sandbox writes with no-follow metadata checks and opened-directory identity verification, preventing platform-specific `O_NOFOLLOW` behavior from following symlinked directory components.
