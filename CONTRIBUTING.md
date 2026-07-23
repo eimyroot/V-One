@@ -20,3 +20,14 @@
 
 Automation may classify and verify a patch. It must not approve its own R2–R4 change or bypass
 branch protection.
+
+## Documentation changes
+
+- Use only the capability states `VERIFIED`, `IMPLEMENTED`, `PROPOSED`, `INFERRED`, `UNKNOWN`, and
+  `BLOCKED`.
+- Update `docs/product/CURRENT_CAPABILITIES.md` when current behavior or evidence changes.
+- Update `ROADMAP.md` and `docs/product/TARGET_CAPABILITIES.md` when accepted future scope changes.
+- Record material architecture or trust-boundary changes in an ADR.
+- Keep runtime logs, databases, secrets, and generated evidence outside the Git worktree.
+- Follow `docs/governance/DOCUMENTATION_POLICY.md`; roadmap and vision text are not implementation
+  evidence.

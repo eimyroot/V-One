@@ -46,6 +46,8 @@ jobs:
           tests/system/test_product_composition.py
       - name: Checkpoint ProofGraph verification gate
         run: python -m pytest -q tests/system/test_checkpoint_evidence_verifier.py
+      - name: Project documentation truth gate
+        run: python -m pytest -q tests/system/test_project_documentation.py
       - name: Authentication and HTTP gate
         run: >-
           python -m pytest -q
