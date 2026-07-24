@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
 from voodoo_product.approval_policy import (
     CURRENT_APPROVAL_POLICY_VERSION,
+    ApprovalPolicyCompatibilityError,
     ApprovalPolicyInput,
     evaluate_current_approval_policy,
+    resolve_current_approval_policy,
 )
 from voodoo_product.evidence_primitives import canonical_json
 
@@ -121,3 +123,33 @@ def test_policy_input_and_decision_are_immutable() -> None:
         policy_input.risk = "R2"  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         decision.required_approvals = 2  # type: ignore[misc]
+
+
+def test_runtime_compatibility_resolver_accepts_exact_current_decision() -> None:
+    policy_input = ApprovalPolicyInput(environment="staging", risk="R2")
+
+    decision = resolve_current_approval_policy(policy_input)
+
+    assert decision == evaluate_current_approval_policy(policy_input)
+
+
+def test_runtime_compatibility_resolver_fails_closed_on_policy_drift() -> None:
+    policy_input = ApprovalPolicyInput(environment="production", risk="R4")
+
+    def incompatible_evaluator(value: ApprovalPolicyInput):
+        current = evaluate_current_approval_policy(value)
+        return replace(current, required_approvals=1, distinct_approver_identities=1)
+
+    with pytest.raises(ApprovalPolicyCompatibilityError, match="diverged"):
+        resolve_current_approval_policy(
+            policy_input,
+            evaluator=incompatible_evaluator,
+        )
+
+
+def test_runtime_compatibility_resolver_rejects_invalid_evaluator_result() -> None:
+    with pytest.raises(ApprovalPolicyCompatibilityError, match="diverged"):
+        resolve_current_approval_policy(
+            ApprovalPolicyInput(environment="local", risk="R0"),
+            evaluator=lambda _: None,  # type: ignore[arg-type,return-value]
+        )

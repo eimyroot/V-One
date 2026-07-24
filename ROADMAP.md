@@ -108,7 +108,7 @@ Exit criteria:
 
 Design reference: [`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md).
 
-Implemented foundation: a pure compatibility evaluator reproduces current environment-based approval requirements and emits deterministic explanations. It is not connected to runtime enforcement.
+Implemented foundation: a pure compatibility evaluator reproduces current environment-based approval requirements and emits deterministic explanations. A default-off runtime compatibility path now consumes that policy owner, preserves current outcomes, and fails closed on evaluator drift; Solo, Team, and Regulated enforcement remain unimplemented.
 
 Goal:
 

@@ -195,6 +195,9 @@ class ProductService:
                 audit_ledger=self.audit_ledger,
                 id_factory=lambda prefix: new_id(prefix),
                 clock=lambda: utc_now(),
+                approval_policy_compatibility_enabled=(
+                    self.config.approval_policy_compatibility_enabled
+                ),
             )
         )
         if resolved_change_request_service.db is not self.db:
@@ -204,6 +207,13 @@ class ProductService:
         if resolved_change_request_service.audit_ledger is not self.audit_ledger:
             raise ValueError(
                 "change request service must use the product service audit ledger"
+            )
+        if (
+            resolved_change_request_service.approval_policy_compatibility_enabled
+            is not self.config.approval_policy_compatibility_enabled
+        ):
+            raise ValueError(
+                "change request service must use the product approval-policy configuration"
             )
         self.change_request_service = resolved_change_request_service
         resolved_operational_safety_service = (

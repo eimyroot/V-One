@@ -5,6 +5,15 @@ from collections.abc import Callable
 from typing import Any
 
 from . import statements as sql
+from .approval_policy import (
+    VALID_ENVIRONMENTS,
+    VALID_RISKS,
+    ApprovalPolicyEvaluator,
+    ApprovalPolicyInput,
+    current_required_approvals,
+    evaluate_current_approval_policy,
+    resolve_current_approval_policy,
+)
 from .audit import AuditLedger
 from .evidence_primitives import canonical_json, new_id, utc_now
 from .persistence import DatabaseIntegrityError, DatabaseRow, ProductDatabaseAdapter
@@ -12,8 +21,6 @@ from .persistence import DatabaseIntegrityError, DatabaseRow, ProductDatabaseAda
 IdFactory = Callable[[str], str]
 Clock = Callable[[], str]
 
-VALID_RISKS = {"R0", "R1", "R2", "R3", "R4"}
-VALID_ENVIRONMENTS = {"local", "development", "staging", "production"}
 VALID_ADAPTERS = {"echo", "write_artifact", "run_validation"}
 MAX_CHANGE_PAYLOAD_BYTES = 65_536
 
@@ -28,6 +35,8 @@ class ChangeRequestService:
         audit_ledger: AuditLedger,
         id_factory: IdFactory = new_id,
         clock: Clock = utc_now,
+        approval_policy_compatibility_enabled: bool = False,
+        approval_policy_evaluator: ApprovalPolicyEvaluator = evaluate_current_approval_policy,
     ) -> None:
         if audit_ledger.db is not database:
             raise ValueError("change request audit ledger must use its database")
@@ -35,6 +44,8 @@ class ChangeRequestService:
         self.audit_ledger = audit_ledger
         self._id_factory = id_factory
         self._clock = clock
+        self.approval_policy_compatibility_enabled = approval_policy_compatibility_enabled
+        self._approval_policy_evaluator = approval_policy_evaluator
 
     def create_change_request(
         self,
@@ -158,6 +169,9 @@ class ChangeRequestService:
                 raise RuntimeError("request is not awaiting review")
             if request_row["requested_by"] == actor_id:
                 raise PermissionError("requester cannot approve their own change")
+            required_approvals = (
+                self._required_approvals(request_row) if decision == "APPROVED" else None
+            )
             approval_id = self._id_factory("appr")
             now = self._clock()
             try:
@@ -175,8 +189,11 @@ class ChangeRequestService:
                     sql.COUNT_APPROVED,
                     (request_id,),
                 ).fetchone()["count"]
-                required = 2 if request_row["environment"] == "production" else 1
-                next_status = "APPROVED" if int(approved_count) >= required else "REVIEW_REQUIRED"
+                next_status = (
+                    "APPROVED"
+                    if required_approvals is not None and int(approved_count) >= required_approvals
+                    else "REVIEW_REQUIRED"
+                )
             connection.execute(
                 sql.UPDATE_CHANGE_REQUEST_STATUS,
                 (next_status, now, request_id),
@@ -196,7 +213,22 @@ class ChangeRequestService:
             rows = connection.execute(
                 sql.LIST_PENDING_APPROVALS if pending_only else sql.LIST_APPROVALS
             ).fetchall()
-        return [dict(row) for row in rows]
+        approvals = [dict(row) for row in rows]
+        for approval in approvals:
+            approval["required_count"] = self._required_approvals(approval)
+        return approvals
+
+    def _required_approvals(self, value: DatabaseRow | dict[str, Any]) -> int:
+        environment = str(value["environment"])
+        if not self.approval_policy_compatibility_enabled:
+            return current_required_approvals(environment)
+        return resolve_current_approval_policy(
+            ApprovalPolicyInput(
+                environment=environment,
+                risk=str(value["risk"]),
+            ),
+            evaluator=self._approval_policy_evaluator,
+        ).required_approvals
 
     @staticmethod
     def _require_workspace_environment(value: DatabaseRow) -> None:

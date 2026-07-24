@@ -101,13 +101,13 @@ def test_approval_catalog_variants_preserve_pending_filter(tmp_path: Path) -> No
         payload={},
     )
 
-    assert {row["request_id"] for row in service.list_approvals()} == {
-        pending["id"],
-        draft["id"],
-    }
-    assert [row["request_id"] for row in service.list_approvals(pending_only=True)] == [
-        pending["id"]
-    ]
+    approvals = service.list_approvals()
+    pending_approvals = service.list_approvals(pending_only=True)
+
+    assert {row["request_id"] for row in approvals} == {pending["id"], draft["id"]}
+    assert {row["required_count"] for row in approvals} == {1}
+    assert [row["request_id"] for row in pending_approvals] == [pending["id"]]
+    assert pending_approvals[0]["required_count"] == 1
 
 
 def test_service_database_calls_use_only_catalog_statements() -> None:

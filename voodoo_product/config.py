@@ -64,6 +64,7 @@ class ProductConfig:
     oidc_subject_claim: str = _DEFAULT_OIDC_SUBJECT_CLAIM
     oidc_username_claim: str = _DEFAULT_OIDC_USERNAME_CLAIM
     oidc_groups_claim: str = _DEFAULT_OIDC_GROUPS_CLAIM
+    approval_policy_compatibility_enabled: bool = False
 
     def __post_init__(self) -> None:
         if self.environment not in {"local", "development", "staging", "test", "production"}:
@@ -184,6 +185,10 @@ class ProductConfig:
             execution_lease_seconds=int(os.getenv("VOODOO_EXECUTION_LEASE_SECONDS", "180")),
             log_level=os.getenv("VOODOO_LOG_LEVEL", "INFO").strip().upper(),
             production_effects_enabled=_bool_env("VOODOO_ALLOW_PRODUCTION_EFFECTS", False),
+            approval_policy_compatibility_enabled=_bool_env(
+                "VOODOO_ENABLE_APPROVAL_POLICY_COMPATIBILITY",
+                False,
+            ),
             cors_origins=origins,
             trusted_hosts=trusted_hosts,
             identity_provider=os.getenv("VOODOO_IDENTITY_PROVIDER", "local").strip().lower(),

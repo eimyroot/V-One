@@ -155,7 +155,7 @@ MARK_CHANGE_REQUEST_SUBMITTED = _write(
 SELECT_CHANGE_REQUEST_APPROVAL_CONTEXT = _read(
     "change_requests.select_approval_context",
     """
-    SELECT cr.status, cr.environment, cr.requested_by,
+    SELECT cr.status, cr.environment, cr.risk, cr.requested_by,
            w.environment AS workspace_environment
     FROM change_requests cr
     JOIN workspaces w ON w.id = cr.workspace_id
@@ -209,8 +209,7 @@ LIST_APPROVALS = _read(
     SELECT cr.id AS request_id, cr.title, cr.risk, cr.environment, cr.status,
            cr.updated_at, u.username AS requested_by,
            (SELECT COUNT(*) FROM approvals a
-            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count,
-           CASE WHEN cr.environment = 'production' THEN 2 ELSE 1 END AS required_count
+            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count
     FROM change_requests cr JOIN users u ON u.id = cr.requested_by
     ORDER BY cr.updated_at DESC
     """,
@@ -221,8 +220,7 @@ LIST_PENDING_APPROVALS = _read(
     SELECT cr.id AS request_id, cr.title, cr.risk, cr.environment, cr.status,
            cr.updated_at, u.username AS requested_by,
            (SELECT COUNT(*) FROM approvals a
-            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count,
-           CASE WHEN cr.environment = 'production' THEN 2 ELSE 1 END AS required_count
+            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count
     FROM change_requests cr JOIN users u ON u.id = cr.requested_by
     WHERE cr.status = 'REVIEW_REQUIRED'
     ORDER BY cr.updated_at DESC

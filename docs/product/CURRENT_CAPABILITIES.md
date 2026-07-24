@@ -46,7 +46,7 @@ limitations are therefore part of every claim.
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
 | Signed execution grants | PROPOSED | target contract only | no grant issuer or verifier exists |
-| Approval policy decision model | VERIFIED | 33 focused tests; full 264-test suite and readiness | pure compatibility evaluator only; not integrated into approval enforcement |
+| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; current outcomes remain authoritative and Solo, Team, Regulated enforcement is not implemented |
 | Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and runtime enforcement are not implemented |
 | CyberCore read-only intake | PROPOSED | architectural boundary only | no integration endpoint or persistence |
 | AI Change Copilot | PROPOSED | vision only | AI has no authorization authority |

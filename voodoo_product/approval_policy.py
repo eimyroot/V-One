@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .change_request import VALID_ENVIRONMENTS, VALID_RISKS
+VALID_ENVIRONMENTS = {"local", "development", "staging", "production"}
+VALID_RISKS = {"R0", "R1", "R2", "R3", "R4"}
 
 CURRENT_APPROVAL_POLICY_VERSION = "approval-policy/current-v1"
 CURRENT_APPROVAL_PROFILE = "CURRENT_COMPATIBILITY"
 CURRENT_AUTHORIZATION_MODE = "INDEPENDENT_APPROVAL"
 CURRENT_REQUIRED_PERMISSION = "approval.review"
 CURRENT_DECISION = "ALLOW_AFTER_AUTHORIZATION"
+
+
+class ApprovalPolicyCompatibilityError(RuntimeError):
+    """Raised when an injected evaluator diverges from current runtime behavior."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,13 +64,24 @@ class ApprovalPolicyDecision:
         }
 
 
+ApprovalPolicyEvaluator = Callable[[ApprovalPolicyInput], ApprovalPolicyDecision]
+
+
+def current_required_approvals(environment: str) -> int:
+    """Return the authoritative current approval count for one environment."""
+
+    if not isinstance(environment, str) or environment not in VALID_ENVIRONMENTS:
+        raise ValueError("unknown environment")
+    return 2 if environment == "production" else 1
+
+
 def evaluate_current_approval_policy(
     policy_input: ApprovalPolicyInput,
 ) -> ApprovalPolicyDecision:
     """Reproduce the existing environment-based approval requirements deterministically."""
 
     production = policy_input.environment == "production"
-    required_approvals = 2 if production else 1
+    required_approvals = current_required_approvals(policy_input.environment)
     environment_reason = f"ENVIRONMENT_{policy_input.environment.upper()}"
     risk_reason = f"{policy_input.risk}_CURRENTLY_NON_ENFORCING"
     approval_reason = (
@@ -95,3 +112,19 @@ def evaluate_current_approval_policy(
         step_up_required=False,
         reason_codes=reason_codes,
     )
+
+
+def resolve_current_approval_policy(
+    policy_input: ApprovalPolicyInput,
+    *,
+    evaluator: ApprovalPolicyEvaluator = evaluate_current_approval_policy,
+) -> ApprovalPolicyDecision:
+    """Resolve a current-policy decision and fail closed on compatibility drift."""
+
+    decision = evaluator(policy_input)
+    expected = evaluate_current_approval_policy(policy_input)
+    if not isinstance(decision, ApprovalPolicyDecision) or decision != expected:
+        raise ApprovalPolicyCompatibilityError(
+            "approval policy evaluator diverged from current runtime behavior"
+        )
+    return decision
