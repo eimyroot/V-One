@@ -113,3 +113,23 @@ def test_current_capabilities_preserve_release_and_production_boundaries() -> No
     assert "VOODOO_ALLOW_PRODUCTION_EFFECTS=false" in document
     assert "| Unrestricted production release | BLOCKED |" in document
     assert "| Public commercial distribution | BLOCKED |" in document
+
+
+def test_proposed_organization_approval_adr_preserves_current_safety_boundary() -> None:
+    relative = "docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md"
+    adr = _read(relative)
+    index = _read("docs/README.md")
+    roadmap = _read("ROADMAP.md")
+    capabilities = _read("docs/product/CURRENT_CAPABILITIES.md")
+    normalized_adr = " ".join(adr.split())
+
+    assert f"({relative.removeprefix('docs/')})" in index
+    assert f"({relative})" in roadmap
+    assert "| Status | PROPOSED |" in adr
+    assert "Runtime effect | None" in adr
+    assert "current approval behavior remains authoritative" in normalized_adr
+    assert "AI, service, and runner principals cannot authorize their own proposals" in adr
+    assert "Mutating production operations cannot run with zero human authorization" in adr
+    assert "Production effects remain fail-closed" in adr
+    assert "claiming organization tenancy is implemented." in adr
+    assert "| Policy Decision Graph | PROPOSED | ADR-0003" in capabilities

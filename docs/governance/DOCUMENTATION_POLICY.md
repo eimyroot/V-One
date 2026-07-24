@@ -83,7 +83,7 @@ compatibility. Unimplemented specifications must be labeled PROPOSED.
 
 ### ADRs
 
-Accepted material decisions with context, consequences, verification, and rollback.
+Material architecture decisions and proposals with context, consequences, verification, and rollback. A proposed ADR must state `PROPOSED`, must not claim implementation, and becomes accepted only through explicit owner and required architecture or security review.
 
 ### Runbooks
 

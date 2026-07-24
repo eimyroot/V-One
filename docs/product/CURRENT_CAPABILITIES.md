@@ -46,7 +46,7 @@ limitations are therefore part of every claim.
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
 | Signed execution grants | PROPOSED | target contract only | no grant issuer or verifier exists |
-| Policy Decision Graph | PROPOSED | roadmap and architecture only | current approval rules remain authoritative |
+| Policy Decision Graph | PROPOSED | ADR-0003, roadmap, and architecture only | current approval rules remain authoritative |
 | CyberCore read-only intake | PROPOSED | architectural boundary only | no integration endpoint or persistence |
 | AI Change Copilot | PROPOSED | vision only | AI has no authorization authority |
 | Multi-arch signed supply chain | PROPOSED | current Docker build is narrower | signing, provenance, and `linux/arm64` verification absent |

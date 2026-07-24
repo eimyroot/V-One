@@ -106,6 +106,8 @@ Exit criteria:
 
 **Status:** PROPOSED.
 
+Design reference: [`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md).
+
 Goal:
 
 Produce deterministic and explainable authorization decisions from:

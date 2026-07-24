@@ -15,13 +15,14 @@ and release documentation.
 | Which terms are authoritative? | [`../foundation/TERMINOLOGY.md`](../foundation/TERMINOLOGY.md) |
 | What are the main trust boundaries? | [`architecture/TRUST_BOUNDARIES.md`](architecture/TRUST_BOUNDARIES.md) |
 | How must documentation stay truthful? | [`governance/DOCUMENTATION_POLICY.md`](governance/DOCUMENTATION_POLICY.md) |
+| How will organization roles and approval profiles work? | [`adr/ADR-0003-organization-roles-and-configurable-approval-policy.md`](adr/ADR-0003-organization-roles-and-configurable-approval-policy.md) |
 
 ## Structure
 
 ```text
 docs/
 ├── README.md
-├── adr/            Accepted architecture decisions
+├── adr/            Architecture decision records and proposals
 ├── architecture/   Current and target component and trust-boundary models
 ├── governance/     Documentation and engineering governance
 └── product/        Current product contracts, readiness, runbooks, and capability maps

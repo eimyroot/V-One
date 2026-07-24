@@ -7,6 +7,7 @@
 - Made the product-image smoke gate parse health JSON with the built image Python runtime instead of an unqualified host `python` command.
 - Added a truth-scoped project vision, architecture, roadmap, capability inventory, terminology, trust-boundary map, and automated documentation consistency gate.
 - Added a fail-closed local checkpoint verifier and deterministic ProofGraph v1 JSON projection.
+- Proposed organization-scoped roles and configurable Solo, Team, and Regulated approval profiles with a non-bypassable platform safety floor; no runtime behavior changed.
 - Added least-privilege CI and a manually gated release-candidate build.
 - Revalidated active account and current role on every authenticated request.
 - Hardened sandbox writes with no-follow metadata checks and opened-directory identity verification, preventing platform-specific `O_NOFOLLOW` behavior from following symlinked directory components.
