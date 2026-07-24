@@ -108,6 +108,8 @@ Exit criteria:
 
 Design reference: [`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md).
 
+Implemented foundation: a pure compatibility evaluator reproduces current environment-based approval requirements and emits deterministic explanations. It is not connected to runtime enforcement.
+
 Goal:
 
 Produce deterministic and explainable authorization decisions from:

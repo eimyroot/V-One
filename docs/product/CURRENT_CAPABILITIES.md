@@ -6,7 +6,7 @@
 | Runtime capability evidence baseline | `f76ba752b12f4f8210dc1db0a03c684f2b24f9ad` |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
-| Evidence note | 223 tests and readiness passed before this documentation-only change |
+| Evidence note | 264 tests and readiness passed for the approval-policy decision model change |
 
 ## Reading this document
 
@@ -46,7 +46,8 @@ limitations are therefore part of every claim.
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
 | Signed execution grants | PROPOSED | target contract only | no grant issuer or verifier exists |
-| Policy Decision Graph | PROPOSED | ADR-0003, roadmap, and architecture only | current approval rules remain authoritative |
+| Approval policy decision model | VERIFIED | 33 focused tests; full 264-test suite and readiness | pure compatibility evaluator only; not integrated into approval enforcement |
+| Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and runtime enforcement are not implemented |
 | CyberCore read-only intake | PROPOSED | architectural boundary only | no integration endpoint or persistence |
 | AI Change Copilot | PROPOSED | vision only | AI has no authorization authority |
 | Multi-arch signed supply chain | PROPOSED | current Docker build is narrower | signing, provenance, and `linux/arm64` verification absent |

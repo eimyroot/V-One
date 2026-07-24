@@ -132,4 +132,6 @@ def test_proposed_organization_approval_adr_preserves_current_safety_boundary() 
     assert "Mutating production operations cannot run with zero human authorization" in adr
     assert "Production effects remain fail-closed" in adr
     assert "claiming organization tenancy is implemented." in adr
+    assert "| Approval policy decision model | VERIFIED |" in capabilities
+    assert "pure compatibility evaluator only; not integrated" in capabilities
     assert "| Policy Decision Graph | PROPOSED | ADR-0003" in capabilities
