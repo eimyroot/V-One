@@ -8,9 +8,9 @@ from . import statements as sql
 from .approval_policy import (
     VALID_ENVIRONMENTS,
     VALID_RISKS,
+    ApprovalPolicyDecision,
     ApprovalPolicyEvaluator,
     ApprovalPolicyInput,
-    current_required_approvals,
     evaluate_current_approval_policy,
     resolve_current_approval_policy,
 )
@@ -169,8 +169,15 @@ class ChangeRequestService:
                 raise RuntimeError("request is not awaiting review")
             if request_row["requested_by"] == actor_id:
                 raise PermissionError("requester cannot approve their own change")
+            policy_decision = (
+                self._approval_policy_decision(request_row)
+                if decision == "APPROVED"
+                else None
+            )
             required_approvals = (
-                self._required_approvals(request_row) if decision == "APPROVED" else None
+                policy_decision.required_approvals
+                if policy_decision is not None
+                else None
             )
             approval_id = self._id_factory("appr")
             now = self._clock()
@@ -204,7 +211,15 @@ class ChangeRequestService:
                 action=f"change_request.{decision.lower()}",
                 target_type="change_request",
                 target_id=request_id,
-                payload={"reason": reason, "resulting_status": next_status},
+                payload={
+                    "reason": reason,
+                    "resulting_status": next_status,
+                    **(
+                        {"approval_policy": policy_decision.to_dict()}
+                        if policy_decision is not None
+                        else {}
+                    ),
+                },
             )
         return self.get_change_request(request_id)
 
@@ -219,16 +234,22 @@ class ChangeRequestService:
         return approvals
 
     def _required_approvals(self, value: DatabaseRow | dict[str, Any]) -> int:
-        environment = str(value["environment"])
+        return self._approval_policy_decision(value).required_approvals
+
+    def _approval_policy_decision(
+        self,
+        value: DatabaseRow | dict[str, Any],
+    ) -> ApprovalPolicyDecision:
+        policy_input = ApprovalPolicyInput(
+            environment=str(value["environment"]),
+            risk=str(value["risk"]),
+        )
         if not self.approval_policy_compatibility_enabled:
-            return current_required_approvals(environment)
+            return evaluate_current_approval_policy(policy_input)
         return resolve_current_approval_policy(
-            ApprovalPolicyInput(
-                environment=environment,
-                risk=str(value["risk"]),
-            ),
+            policy_input,
             evaluator=self._approval_policy_evaluator,
-        ).required_approvals
+        )
 
     @staticmethod
     def _require_workspace_environment(value: DatabaseRow) -> None:

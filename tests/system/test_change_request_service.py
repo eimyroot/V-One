@@ -367,3 +367,70 @@ def test_policy_compatibility_mismatch_fails_closed_before_approval_write(
     )
     assert persisted["status"] == "REVIEW_REQUIRED"
     assert approval_row["approved_count"] == 0
+
+
+def test_approved_audit_event_records_resolved_policy_metadata(tmp_path: Path) -> None:
+    service = ProductService(
+        product_config(
+            tmp_path,
+            approval_policy_compatibility_enabled=True,
+        )
+    )
+    bootstrap = service.bootstrap_admin(
+        username="admin",
+        password="VeryStrongAdminPassword1!",
+        token="b" * 48,
+    )
+    operator = service.create_user(
+        actor_id=bootstrap["user_id"],
+        username="operator",
+        password="VeryStrongOperatorPassword1!",
+        role="operator",
+    )
+    request = service.create_change_request(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        title="Auditable approval policy",
+        description="record the resolved decision",
+        risk="R2",
+        environment="local",
+        adapter="echo",
+        payload={},
+    )
+    service.submit_change_request(
+        actor_id=bootstrap["user_id"],
+        request_id=request["id"],
+    )
+
+    service.approve_change_request(
+        actor_id=operator["id"],
+        request_id=request["id"],
+        decision="APPROVED",
+        reason="independent review complete",
+    )
+
+    event = next(
+        item
+        for item in service.list_audit_events(limit=100)
+        if item["action"] == "change_request.approved"
+        and item["target_id"] == request["id"]
+    )
+    assert event["payload"]["approval_policy"] == {
+        "policy_version": "approval-policy/current-v1",
+        "profile": "CURRENT_COMPATIBILITY",
+        "decision": "ALLOW_AFTER_AUTHORIZATION",
+        "authorization_mode": "INDEPENDENT_APPROVAL",
+        "required_approvals": 1,
+        "required_permissions": ["approval.review"],
+        "distinct_approver_identities": 1,
+        "requester_may_approve": False,
+        "step_up_required": False,
+        "reason_codes": [
+            "CURRENT_BEHAVIOR_COMPATIBILITY",
+            "ENVIRONMENT_LOCAL",
+            "R2_CURRENTLY_NON_ENFORCING",
+            "REQUESTER_SELF_APPROVAL_DENIED",
+            "NON_PRODUCTION_ONE_APPROVAL_REQUIRED",
+        ],
+    }
+    assert service.verify_audit_chain()["valid"] is True
