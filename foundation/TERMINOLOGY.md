@@ -1,0 +1,159 @@
+# VOODOO One Terminology
+
+| Field | Value |
+|---|---|
+| Document status | Accepted terminology |
+| Scope | Product, architecture, evidence, and roadmap language |
+| Rule | New public terms require documentation and compatibility review |
+
+## Product terms
+
+### Change request
+
+A structured proposal describing intended change, target workspace, environment, risk, adapter
+capability, and bounded payload.
+
+### Workspace
+
+The authoritative scope for a target environment and governed activity. A request cannot relabel the
+workspace environment to bypass policy.
+
+### Approval
+
+An independent authorization decision by an eligible principal. Approval is not publisher identity,
+artifact integrity, or execution success.
+
+### Policy decision
+
+A deterministic result explaining whether a request is allowed, denied, or awaiting conditions under
+a specific policy version.
+
+### Execution
+
+One governed attempt to apply an approved capability. It has an identity, idempotency binding, lease,
+fence, state, result, receipt, and audit trail.
+
+### Production effects
+
+External or materially consequential mutations classified as production-changing. They are disabled
+until an explicit release authorizes specific capabilities.
+
+### Emergency stop
+
+A governed runtime state that blocks new execution and is required for explicit recovery of expired
+running executions.
+
+## Evidence terms
+
+### Audit event
+
+An append-only record of a material decision or action in the control plane.
+
+### Receipt
+
+A structured record of an execution result, chained for integrity.
+
+### Evidence verification
+
+A deliberate operation that checks evidence integrity. It is separate from liveness and readiness.
+
+### Checkpoint
+
+A preserved development-state package containing source, Git history, provenance, evidence, and
+cryptographic manifests. A checkpoint is not automatically a release.
+
+### ProofGraph
+
+A deterministic graph of demonstrated evidence relationships. ProofGraph v1 currently represents:
+
+- checkpoint;
+- Git commit;
+- source tree;
+- container image identity.
+
+### Claim
+
+A normalized statement derived from verified evidence, with explicit scope and source.
+
+### Warning
+
+A visible non-fatal limitation that does not invalidate required outer evidence. A warning must never
+mask missing or mismatched authoritative evidence.
+
+### Attestation
+
+A signed statement binding an identity to a claim. Signature support is a target capability and is not
+part of ProofGraph v1.
+
+## Execution-plane terms
+
+### Capability
+
+A typed, allowlisted operation with known inputs, effects, limits, verification, and rollback or
+compensation properties.
+
+### Execution grant
+
+A short-lived authorization binding one execution to an exact artifact, target, policy, capability,
+expiry, nonce, and fence. This is PROPOSED.
+
+### Runner
+
+An isolated process or service that validates a grant, executes only allowed capabilities, verifies
+postconditions, and emits a structured receipt. The isolated runner is PROPOSED.
+
+### Fence
+
+A monotonic token preventing an obsolete or late worker from committing a result after recovery or
+replacement.
+
+### Indeterminate
+
+An outcome where execution may have produced effects but a trustworthy final result was not recorded.
+It must not be silently retried.
+
+## Integration terms
+
+### CyberCore
+
+A separate infrastructure context and intelligence platform. In the target model it may provide
+observations, knowledge, provenance, and proposals. It does not replace VOODOO One authorization.
+
+### Read-only intake
+
+A versioned integration that imports metadata and evidence references without allowing mutation,
+package code execution, or shared persistence.
+
+### Provider
+
+An adapter translating an external system into normalized observations or capabilities. Provider
+behavior must not leak into the governance core without an approved contract.
+
+## State taxonomy
+
+### VERIFIED
+
+Actually demonstrated within a stated scope by current evidence.
+
+### IMPLEMENTED
+
+Present in current source or documentation but not fully verified for every stated scope.
+
+### PROPOSED
+
+Approved direction or design without current implementation.
+
+### INFERRED
+
+Derived from available evidence but not directly demonstrated.
+
+### UNKNOWN
+
+Insufficient evidence is available.
+
+### BLOCKED
+
+Intentionally unavailable because requirements, safety controls, evidence, or authorization are
+missing.
+
+`COMPLETE` is not a VOODOO capability status.

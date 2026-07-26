@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_statement_catalog_is_complete_unique_and_classified() -> None:
-    assert len(ALL_STATEMENTS) == 46
+    assert len(ALL_STATEMENTS) == 52
     assert tuple(STATEMENTS_BY_NAME) == tuple(statement.name for statement in ALL_STATEMENTS)
     assert tuple(STATEMENTS_BY_NAME.values()) == ALL_STATEMENTS
 
@@ -101,29 +101,13 @@ def test_approval_catalog_variants_preserve_pending_filter(tmp_path: Path) -> No
         payload={},
     )
 
-    assert {row["request_id"] for row in service.list_approvals()} == {
-        pending["id"],
-        draft["id"],
-    }
-    assert [row["request_id"] for row in service.list_approvals(pending_only=True)] == [
-        pending["id"]
-    ]
+    approvals = service.list_approvals()
+    pending_approvals = service.list_approvals(pending_only=True)
 
-
-def _is_catalog_reference(node: ast.expr) -> bool:
-    return (
-        isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "sql"
-    )
-
-
-def _is_catalog_expression(node: ast.expr) -> bool:
-    return _is_catalog_reference(node) or (
-        isinstance(node, ast.IfExp)
-        and _is_catalog_reference(node.body)
-        and _is_catalog_reference(node.orelse)
-    )
+    assert {row["request_id"] for row in approvals} == {pending["id"], draft["id"]}
+    assert {row["required_count"] for row in approvals} == {1}
+    assert [row["request_id"] for row in pending_approvals] == [pending["id"]]
+    assert pending_approvals[0]["required_count"] == 1
 
 
 def test_service_database_calls_use_only_catalog_statements() -> None:
@@ -137,5 +121,4 @@ def test_service_database_calls_use_only_catalog_statements() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 5
-    assert all(call.args and _is_catalog_expression(call.args[0]) for call in execute_calls)
+    assert execute_calls == []

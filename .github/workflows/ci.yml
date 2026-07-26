@@ -44,6 +44,10 @@ jobs:
           tests/system/test_evidence_primitives.py
           tests/system/test_receipt_ledger.py
           tests/system/test_product_composition.py
+      - name: Checkpoint ProofGraph verification gate
+        run: python -m pytest -q tests/system/test_checkpoint_evidence_verifier.py
+      - name: Project documentation truth gate
+        run: python -m pytest -q tests/system/test_project_documentation.py
       - name: Authentication and HTTP gate
         run: >-
           python -m pytest -q
@@ -53,6 +57,8 @@ jobs:
           tests/system/test_token_security.py
       - name: Authentication rate-limit governance gate
         run: python -m pytest -q tests/system/test_authentication_rate_limit_service.py
+      - name: Bootstrap governance gate
+        run: python -m pytest -q tests/system/test_bootstrap_service.py
       - name: User account governance gate
         run: python -m pytest -q tests/system/test_user_account_service.py
       - name: Platform status governance gate
@@ -70,6 +76,11 @@ jobs:
           tests/system/test_execution_recovery.py
           tests/system/test_persistence_boundary.py
           tests/system/test_statement_catalog.py
+      - name: Sandbox filesystem security gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_adapter_sandbox_security.py
+          tests/system/test_product_platform_rc1.py::test_symlinked_sandbox_directory_fails_closed
       - name: Product and release gate
         run: >-
           python -m pytest -q

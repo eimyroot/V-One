@@ -31,6 +31,7 @@ _SESSION_FORMAT_VERSION = "v2"
 _SESSION_ISSUER = "voodoo-one"
 _SESSION_AUDIENCE = "voodoo-one-control-plane"
 _SESSION_SIGNING_PURPOSE = b"session-token/v2"
+_SESSION_REFERENCE_PURPOSE = b"session-reference/v1"
 _KEY_DERIVATION_DOMAIN = b"voodoo-one\x00key-derivation\x00"
 _MIN_TOKEN_TTL_SECONDS = 300
 _MAX_TOKEN_TTL_SECONDS = 86_400
@@ -95,6 +96,14 @@ class Principal:
         return "*" in permissions or permission in permissions
 
 
+@dataclass(frozen=True, slots=True)
+class VerifiedSessionToken:
+    principal: Principal
+    session_id: str
+    issued_at: int
+    expires_at: int
+
+
 def issue_token(
     *,
     secret: str,
@@ -134,7 +143,7 @@ def issue_token(
     return f"{_SESSION_FORMAT_VERSION}.{encoded_payload}.{_b64url_encode(signature)}"
 
 
-def verify_token(*, secret: str, token: str) -> Principal:
+def verify_session_token(*, secret: str, token: str) -> VerifiedSessionToken:
     try:
         if not token or len(token) > _MAX_TOKEN_LENGTH:
             raise ValueError("invalid token length")
@@ -184,7 +193,12 @@ def verify_token(*, secret: str, token: str) -> Principal:
         if not isinstance(role, str) or role not in ROLE_PERMISSIONS:
             raise ValueError("unknown role")
 
-        return Principal(user_id=user_id, username=username, role=role)
+        return VerifiedSessionToken(
+            principal=Principal(user_id=user_id, username=username, role=role),
+            session_id=nonce,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
     except (
         binascii.Error,
         KeyError,
@@ -194,3 +208,17 @@ def verify_token(*, secret: str, token: str) -> Principal:
         json.JSONDecodeError,
     ) as exc:
         raise ValueError("invalid authentication token") from exc
+
+
+def verify_token(*, secret: str, token: str) -> Principal:
+    return verify_session_token(secret=secret, token=token).principal
+
+
+def session_reference(*, secret: str, session_id: str) -> str:
+    if not isinstance(session_id, str) or not 16 <= len(session_id) <= 128:
+        raise ValueError("session ID is invalid")
+    return hmac.new(
+        _derive_key(secret, purpose=_SESSION_REFERENCE_PURPOSE),
+        session_id.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()

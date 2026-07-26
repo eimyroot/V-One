@@ -12,8 +12,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api import create_product_router
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService
+from .bootstrap import BootstrapService
 from .change_request import ChangeRequestService
 from .config import ProductConfig
+from .credential_authentication import CredentialAuthenticationService
 from .execution import ExecutionService
 from .external_identity_service import GovernedExternalIdentityService
 from .http_security import SecurityHeadersMiddleware
@@ -30,6 +32,7 @@ from .operational_safety import OperationalSafetyService
 from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
 from .service import ProductService
+from .session_lifecycle import SessionLifecycleService
 from .user_account import UserAccountService
 from .workspace import WorkspaceService
 
@@ -38,8 +41,11 @@ from .workspace import WorkspaceService
 class ProductComposition:
     service: ProductService
     authentication_rate_limit_service: AuthenticationRateLimitService
+    credential_authentication_service: CredentialAuthenticationService
+    bootstrap_service: BootstrapService
     audit_ledger: AuditLedger
     user_account_service: UserAccountService
+    session_lifecycle_service: SessionLifecycleService
     workspace_service: WorkspaceService
     change_request_service: ChangeRequestService
     receipt_ledger: ReceiptLedger
@@ -67,8 +73,11 @@ def install_composed_product_platform(
     product_logger = configure_product_logging(level=resolved_config.log_level)
     service = ProductService(resolved_config)
     authentication_rate_limit_service = service.authentication_rate_limit_service
+    credential_authentication_service = service.credential_authentication_service
+    bootstrap_service = service.bootstrap_service
     audit_ledger = service.audit_ledger
     user_account_service = service.user_account_service
+    session_lifecycle_service = service.session_lifecycle_service
     workspace_service = service.workspace_service
     change_request_service = service.change_request_service
     receipt_ledger = service.receipt_ledger
@@ -77,7 +86,9 @@ def install_composed_product_platform(
     platform_status_service = service.platform_status_service
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
-        service=service,
+        credential_authenticator=credential_authentication_service,
+        active_user_lookup=user_account_service,
+        session_lifecycle=session_lifecycle_service,
     )
     external_identity_service = GovernedExternalIdentityService(
         database=service.db,
@@ -86,8 +97,11 @@ def install_composed_product_platform(
     composition = ProductComposition(
         service=service,
         authentication_rate_limit_service=authentication_rate_limit_service,
+        credential_authentication_service=credential_authentication_service,
+        bootstrap_service=bootstrap_service,
         audit_ledger=audit_ledger,
         user_account_service=user_account_service,
+        session_lifecycle_service=session_lifecycle_service,
         workspace_service=workspace_service,
         change_request_service=change_request_service,
         receipt_ledger=receipt_ledger,
@@ -99,9 +113,12 @@ def install_composed_product_platform(
 
     app.state.voodoo_product_service = service
     app.state.voodoo_authentication_rate_limit_service = authentication_rate_limit_service
+    app.state.voodoo_credential_authentication_service = credential_authentication_service
+    app.state.voodoo_bootstrap_service = bootstrap_service
     app.state.voodoo_identity_provider = resolved_identity_provider
     app.state.voodoo_audit_ledger = audit_ledger
     app.state.voodoo_user_account_service = user_account_service
+    app.state.voodoo_session_lifecycle_service = session_lifecycle_service
     app.state.voodoo_workspace_service = workspace_service
     app.state.voodoo_change_request_service = change_request_service
     app.state.voodoo_receipt_ledger = receipt_ledger

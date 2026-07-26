@@ -6,17 +6,52 @@ from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from .config import ProductConfig
-from .security import Principal, issue_token, verify_token
+from .security import Principal, issue_token, verify_session_token
 
 _CLAIM_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
 
 
-class IdentityService(Protocol):
+class CredentialAuthenticator(Protocol):
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
         ...
 
+
+class ActiveUserLookup(Protocol):
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         ...
+
+
+class SessionLifecycle(Protocol):
+    def register_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None: ...
+
+    def require_active_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None: ...
+
+    def revoke_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        actor_id: str,
+        reason: str,
+    ) -> None: ...
+
+
+class IdentityService(CredentialAuthenticator, ActiveUserLookup, SessionLifecycle, Protocol):
+    """Compatibility protocol for callers that still expose both identity ports."""
 
 
 class IdentityProvider(Protocol):
@@ -29,6 +64,9 @@ class IdentityProvider(Protocol):
         ...
 
     def issue_session(self, *, user_id: str, username: str, role: str) -> str:
+        ...
+
+    def revoke_session(self, token: str, *, actor_id: str) -> None:
         ...
 
 
@@ -94,16 +132,47 @@ def validate_identity_provider_startup(config: ProductConfig) -> None:
 class LocalIdentityProvider:
     name = "local"
 
-    def __init__(self, *, config: ProductConfig, service: IdentityService):
+    def __init__(
+        self,
+        *,
+        config: ProductConfig,
+        service: IdentityService | None = None,
+        credential_authenticator: CredentialAuthenticator | None = None,
+        active_user_lookup: ActiveUserLookup | None = None,
+        session_lifecycle: SessionLifecycle | None = None,
+    ) -> None:
         self._config = config
-        self._service = service
+        (
+            self._credential_authenticator,
+            self._active_user_lookup,
+            self._session_lifecycle,
+        ) = (
+            _resolve_identity_dependencies(
+                service=service,
+                credential_authenticator=credential_authenticator,
+                active_user_lookup=active_user_lookup,
+                session_lifecycle=session_lifecycle,
+            )
+        )
 
     def authenticate_password(self, *, username: str, password: str) -> dict[str, Any]:
-        return self._service.authenticate(username=username, password=password)
+        return self._credential_authenticator.authenticate(
+            username=username,
+            password=password,
+        )
 
     def authenticate_bearer(self, token: str) -> Principal:
-        token_principal = verify_token(secret=self._config.session_signing_secret, token=token)
-        active_user = self._service.get_active_user(token_principal.user_id)
+        verified = verify_session_token(
+            secret=self._config.session_signing_secret,
+            token=token,
+        )
+        self._session_lifecycle.require_active_session(
+            session_id=verified.session_id,
+            user_id=verified.principal.user_id,
+            issued_at=verified.issued_at,
+            expires_at=verified.expires_at,
+        )
+        active_user = self._active_user_lookup.get_active_user(verified.principal.user_id)
         return Principal(
             user_id=str(active_user["id"]),
             username=str(active_user["username"]),
@@ -111,17 +180,80 @@ class LocalIdentityProvider:
         )
 
     def issue_session(self, *, user_id: str, username: str, role: str) -> str:
-        return issue_token(
+        token = issue_token(
             secret=self._config.session_signing_secret,
             user_id=user_id,
             username=username,
             role=role,
             ttl_seconds=self._config.token_ttl_seconds,
         )
+        verified = verify_session_token(
+            secret=self._config.session_signing_secret,
+            token=token,
+        )
+        self._session_lifecycle.register_session(
+            session_id=verified.session_id,
+            user_id=verified.principal.user_id,
+            issued_at=verified.issued_at,
+            expires_at=verified.expires_at,
+        )
+        return token
+
+    def revoke_session(self, token: str, *, actor_id: str) -> None:
+        verified = verify_session_token(
+            secret=self._config.session_signing_secret,
+            token=token,
+        )
+        self._session_lifecycle.revoke_session(
+            session_id=verified.session_id,
+            user_id=verified.principal.user_id,
+            actor_id=actor_id,
+            reason="user logout",
+        )
+
+
+def _resolve_identity_dependencies(
+    *,
+    service: IdentityService | None,
+    credential_authenticator: CredentialAuthenticator | None,
+    active_user_lookup: ActiveUserLookup | None,
+    session_lifecycle: SessionLifecycle | None,
+) -> tuple[CredentialAuthenticator, ActiveUserLookup, SessionLifecycle]:
+    if service is not None:
+        if (
+            credential_authenticator is not None
+            or active_user_lookup is not None
+            or session_lifecycle is not None
+        ):
+            raise ValueError(
+                "identity service compatibility input cannot be mixed with explicit ports"
+            )
+        return service, service, service
+    if (
+        credential_authenticator is None
+        or active_user_lookup is None
+        or session_lifecycle is None
+    ):
+        raise ValueError(
+            "credential authenticator, active-user lookup and session lifecycle "
+            "must all be configured"
+        )
+    return credential_authenticator, active_user_lookup, session_lifecycle
 
 
 def create_identity_provider(
-    *, config: ProductConfig, service: IdentityService
+    *,
+    config: ProductConfig,
+    service: IdentityService | None = None,
+    credential_authenticator: CredentialAuthenticator | None = None,
+    active_user_lookup: ActiveUserLookup | None = None,
+    session_lifecycle: SessionLifecycle | None = None,
 ) -> IdentityProvider:
     validate_identity_provider_startup(config)
-    return LocalIdentityProvider(config=config, service=service)
+    return LocalIdentityProvider(
+        config=config,
+        service=service,
+        credential_authenticator=credential_authenticator,
+        active_user_lookup=active_user_lookup,
+        session_lifecycle=session_lifecycle,
+    )

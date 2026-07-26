@@ -49,6 +49,7 @@
         <div class="page-head"><div><h1>Command Center</h1><p>Aktuální stav řízených operací.</p></div><button data-refresh="command">Obnovit</button></div>
         <div id="command-kpis" class="kpi-grid"></div>
         <div class="grid-two"><article class="panel"><h2>Riziko</h2><div id="risk-overview"></div></article><article class="panel"><h2>Integrita</h2><div id="integrity-overview"></div></article></div>
+        <article class="panel policy-panel"><div class="panel-heading"><div><h2>Policy transparency</h2><p>Runtime facts exposed by the current API. Missing policy metadata is shown explicitly.</p></div><span id="policy-summary-status" class="status UNKNOWN">UNKNOWN</span></div><div id="policy-overview" class="fact-grid"></div></article>
       </section>
 
       <section id="view-changes" class="view">
@@ -85,7 +86,8 @@
 
       <section id="view-health" class="view">
         <div class="page-head"><div><h1>System Health</h1><p>Runtime, databáze, evidence a bezpečnostní stav.</p></div><button data-refresh="health">Obnovit</button></div>
-        <article class="panel"><pre id="health-json"></pre></article>
+        <div id="health-summary" class="fact-grid health-summary"></div>
+        <details class="panel raw-health"><summary>Raw health payload</summary><pre id="health-json"></pre></details>
         <article class="panel danger-zone"><h2>Emergency control</h2><p>Zastaví nové execution operace a vytvoří auditní událost.</p><input id="stop-reason" placeholder="Povinný důvod" /><button id="activate-stop" class="danger">Aktivovat emergency stop</button><button id="clear-stop" class="secondary">Zrušit emergency stop</button></article>
       </section>
     </main>

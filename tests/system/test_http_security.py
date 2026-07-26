@@ -134,6 +134,19 @@ def test_trusted_hosts_are_loaded_from_environment(
     assert config.trusted_hosts == ("control.example.com", "api.example.com")
 
 
+def test_approval_policy_compatibility_flag_is_default_off_and_env_controlled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VOODOO_ROOT", str(tmp_path))
+    monkeypatch.setenv("VOODOO_SESSION_SIGNING_SECRET", "s" * 64)
+    monkeypatch.setenv("VOODOO_BOOTSTRAP_TOKEN", "b" * 48)
+
+    assert ProductConfig.from_env().approval_policy_compatibility_enabled is False
+
+    monkeypatch.setenv("VOODOO_ENABLE_APPROVAL_POLICY_COMPATIBILITY", "true")
+    assert ProductConfig.from_env().approval_policy_compatibility_enabled is True
+
+
 def test_console_source_is_compatible_with_strict_csp() -> None:
     javascript = (ROOT / "voodoo_product" / "static" / "app.js").read_text(encoding="utf-8")
     html = (ROOT / "voodoo_product" / "static" / "index.html").read_text(encoding="utf-8")

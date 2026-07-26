@@ -5,12 +5,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import statements as sql
 from .adapters import execute_adapter
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService, AuthRateLimitExceeded
+from .bootstrap import BootstrapService
 from .change_request import ChangeRequestService
 from .config import ProductConfig
+from .credential_authentication import CredentialAuthenticationService
 from .db import create_product_database
 from .evidence_primitives import canonical_json, chained_hash, new_id, utc_now
 from .execution import ExecutionService, timestamp_after, timestamp_expired
@@ -18,7 +19,8 @@ from .operational_safety import OperationalSafetyService
 from .persistence import DatabaseConnection, DatabaseRow, ProductDatabaseAdapter
 from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
-from .security import hash_password, verify_password
+from .security import hash_password, session_reference, verify_password
+from .session_lifecycle import SessionLifecycleService
 from .user_account import UserAccountService
 from .workspace import WorkspaceService
 
@@ -56,8 +58,11 @@ class ProductService:
         *,
         database: ProductDatabaseAdapter | None = None,
         authentication_rate_limit_service: AuthenticationRateLimitService | None = None,
+        credential_authentication_service: CredentialAuthenticationService | None = None,
+        bootstrap_service: BootstrapService | None = None,
         audit_ledger: AuditLedger | None = None,
         user_account_service: UserAccountService | None = None,
+        session_lifecycle_service: SessionLifecycleService | None = None,
         workspace_service: WorkspaceService | None = None,
         change_request_service: ChangeRequestService | None = None,
         receipt_ledger: ReceiptLedger | None = None,
@@ -92,10 +97,45 @@ class ProductService:
                 "authentication rate-limit service must use the product service configuration"
             )
         self.authentication_rate_limit_service = resolved_authentication_rate_limit_service
+        resolved_credential_authentication_service = (
+            credential_authentication_service
+            or CredentialAuthenticationService(
+                database=self.db,
+                password_hasher=lambda password: hash_password(password),
+                password_verifier=lambda password, encoded: verify_password(
+                    password,
+                    encoded,
+                ),
+            )
+        )
+        if resolved_credential_authentication_service.db is not self.db:
+            raise ValueError(
+                "credential authentication service must use the product service database"
+            )
+        self.credential_authentication_service = resolved_credential_authentication_service
         resolved_audit_ledger = audit_ledger or AuditLedger(self.db)
         if resolved_audit_ledger.db is not self.db:
             raise ValueError("audit ledger must use the product service database")
         self.audit_ledger = resolved_audit_ledger
+        resolved_bootstrap_service = bootstrap_service or BootstrapService(
+            database=self.db,
+            config=self.config,
+            audit_ledger=self.audit_ledger,
+            id_factory=lambda prefix: new_id(prefix),
+            clock=lambda: utc_now(),
+            password_hasher=lambda password: hash_password(password),
+            token_comparator=lambda supplied, expected: secrets.compare_digest(
+                supplied,
+                expected,
+            ),
+        )
+        if resolved_bootstrap_service.db is not self.db:
+            raise ValueError("bootstrap service must use the product service database")
+        if resolved_bootstrap_service.config is not self.config:
+            raise ValueError("bootstrap service must use the product service configuration")
+        if resolved_bootstrap_service.audit_ledger is not self.audit_ledger:
+            raise ValueError("bootstrap service must use the product service audit ledger")
+        self.bootstrap_service = resolved_bootstrap_service
         resolved_user_account_service = user_account_service or UserAccountService(
             database=self.db,
             audit_ledger=self.audit_ledger,
@@ -112,6 +152,27 @@ class ProductService:
                 "user account service must use the product service audit ledger"
             )
         self.user_account_service = resolved_user_account_service
+        resolved_session_lifecycle_service = (
+            session_lifecycle_service
+            or SessionLifecycleService(
+                database=self.db,
+                audit_ledger=self.audit_ledger,
+                session_reference_factory=lambda session_id: session_reference(
+                    secret=self.config.session_signing_secret,
+                    session_id=session_id,
+                ),
+                clock=lambda: time.time(),
+            )
+        )
+        if resolved_session_lifecycle_service.db is not self.db:
+            raise ValueError(
+                "session lifecycle service must use the product service database"
+            )
+        if resolved_session_lifecycle_service.audit_ledger is not self.audit_ledger:
+            raise ValueError(
+                "session lifecycle service must use the product service audit ledger"
+            )
+        self.session_lifecycle_service = resolved_session_lifecycle_service
         resolved_workspace_service = workspace_service or WorkspaceService(
             database=self.db,
             audit_ledger=self.audit_ledger,
@@ -134,6 +195,9 @@ class ProductService:
                 audit_ledger=self.audit_ledger,
                 id_factory=lambda prefix: new_id(prefix),
                 clock=lambda: utc_now(),
+                approval_policy_compatibility_enabled=(
+                    self.config.approval_policy_compatibility_enabled
+                ),
             )
         )
         if resolved_change_request_service.db is not self.db:
@@ -143,6 +207,13 @@ class ProductService:
         if resolved_change_request_service.audit_ledger is not self.audit_ledger:
             raise ValueError(
                 "change request service must use the product service audit ledger"
+            )
+        if (
+            resolved_change_request_service.approval_policy_compatibility_enabled
+            is not self.config.approval_policy_compatibility_enabled
+        ):
+            raise ValueError(
+                "change request service must use the product approval-policy configuration"
             )
         self.change_request_service = resolved_change_request_service
         resolved_operational_safety_service = (
@@ -222,61 +293,16 @@ class ProductService:
             )
         self.platform_status_service = resolved_platform_status_service
         self.config.sandbox_root.mkdir(parents=True, exist_ok=True)
-        self._dummy_password_hash = hash_password(
-            f"VOODOO-invalid-account-{secrets.token_urlsafe(32)}"
-        )
 
     def has_users(self) -> bool:
-        with self.db.connect() as connection:
-            row = connection.execute(sql.COUNT_USERS).fetchone()
-            return bool(row and int(row["count"]) > 0)
+        return self.bootstrap_service.has_users()
 
     def bootstrap_admin(self, *, username: str, password: str, token: str) -> dict[str, Any]:
-        if not secrets.compare_digest(token, self.config.bootstrap_token):
-            raise PermissionError("invalid bootstrap token")
-        with self.db.transaction() as connection:
-            count = connection.execute(sql.COUNT_USERS).fetchone()
-            if count and int(count["count"]) > 0:
-                raise RuntimeError("bootstrap is already closed")
-            user_id = new_id("usr")
-            workspace_id = new_id("wrk")
-            workspace_environment = (
-                self.config.environment
-                if self.config.environment in VALID_ENVIRONMENTS
-                else "local"
-            )
-            now = utc_now()
-            connection.execute(
-                sql.INSERT_USER,
-                (user_id, username.strip(), hash_password(password), "administrator", now),
-            )
-            connection.execute(
-                sql.INSERT_WORKSPACE,
-                (
-                    workspace_id,
-                    f"VOODOO {workspace_environment.title()}",
-                    workspace_environment,
-                    now,
-                ),
-            )
-            self._append_audit(
-                connection,
-                actor_id=user_id,
-                action="system.bootstrap",
-                target_type="workspace",
-                target_id=workspace_id,
-                payload={
-                    "username": username,
-                    "role": "administrator",
-                    "workspace_environment": workspace_environment,
-                },
-            )
-            return {
-                "user_id": user_id,
-                "workspace_id": workspace_id,
-                "workspace_environment": workspace_environment,
-                "role": "administrator",
-            }
+        return self.bootstrap_service.bootstrap_admin(
+            username=username,
+            password=password,
+            token=token,
+        )
 
     def enforce_login_rate_limit(self, *, username: str, source: str) -> None:
         self.authentication_rate_limit_service.enforce_login_rate_limit(
@@ -306,21 +332,68 @@ class ProductService:
         self.authentication_rate_limit_service.clear_bootstrap_rate_limit(source=source)
 
     def authenticate(self, *, username: str, password: str) -> dict[str, Any]:
-        with self.db.connect() as connection:
-            row = connection.execute(
-                sql.SELECT_USER_FOR_AUTH,
-                (username.strip(),),
-            ).fetchone()
-        encoded_password = (
-            str(row["password_hash"]) if row is not None else self._dummy_password_hash
+        return self.credential_authentication_service.authenticate(
+            username=username,
+            password=password,
         )
-        password_valid = verify_password(password, encoded_password)
-        if row is None or not int(row["active"]) or not password_valid:
-            raise PermissionError("invalid credentials")
-        return {"id": row["id"], "username": row["username"], "role": row["role"]}
 
     def get_active_user(self, user_id: str) -> dict[str, Any]:
         return self.user_account_service.get_active_user(user_id)
+
+    def register_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None:
+        self.session_lifecycle_service.register_session(
+            session_id=session_id,
+            user_id=user_id,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+
+    def require_active_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        issued_at: int,
+        expires_at: int,
+    ) -> None:
+        self.session_lifecycle_service.require_active_session(
+            session_id=session_id,
+            user_id=user_id,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+
+    def revoke_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        actor_id: str,
+        reason: str,
+    ) -> None:
+        self.session_lifecycle_service.revoke_session(
+            session_id=session_id,
+            user_id=user_id,
+            actor_id=actor_id,
+            reason=reason,
+        )
+
+    def revoke_all_sessions(
+        self, *, user_id: str, actor_id: str, reason: str
+    ) -> dict[str, object]:
+        revoked_count = self.session_lifecycle_service.revoke_all_sessions(
+            user_id=user_id,
+            actor_id=actor_id,
+            reason=reason,
+        )
+        return {"user_id": user_id, "revoked_count": revoked_count}
 
     def create_user(
         self, *, actor_id: str, username: str, password: str, role: str

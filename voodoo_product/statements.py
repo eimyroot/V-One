@@ -26,6 +26,46 @@ SELECT_ACTIVE_USER = _read(
     "users.select_active",
     "SELECT id, username, role, active FROM users WHERE id = ?",
 )
+SELECT_USER_BY_ID = _read(
+    "users.select_by_id",
+    "SELECT id FROM users WHERE id = ?",
+)
+
+INSERT_ACTIVE_SESSION = _write(
+    "active_sessions.insert",
+    """
+    INSERT INTO active_sessions(session_reference, user_id, issued_at, expires_at)
+    VALUES (?, ?, ?, ?)
+    """,
+)
+SELECT_ACTIVE_SESSION = _read(
+    "active_sessions.select_active",
+    """
+    SELECT user_id, issued_at, expires_at
+    FROM active_sessions
+    WHERE session_reference = ? AND expires_at > ?
+    """,
+)
+DELETE_ACTIVE_SESSION = _write(
+    "active_sessions.delete",
+    """
+    DELETE FROM active_sessions
+    WHERE session_reference = ? AND user_id = ?
+    RETURNING session_reference
+    """,
+)
+DELETE_ACTIVE_SESSIONS_FOR_USER = _write(
+    "active_sessions.delete_for_user",
+    """
+    DELETE FROM active_sessions
+    WHERE user_id = ?
+    RETURNING session_reference
+    """,
+)
+DELETE_EXPIRED_ACTIVE_SESSIONS = _write(
+    "active_sessions.delete_expired",
+    "DELETE FROM active_sessions WHERE expires_at <= ?",
+)
 
 INSERT_WORKSPACE = _write(
     "workspaces.insert",
@@ -115,7 +155,7 @@ MARK_CHANGE_REQUEST_SUBMITTED = _write(
 SELECT_CHANGE_REQUEST_APPROVAL_CONTEXT = _read(
     "change_requests.select_approval_context",
     """
-    SELECT cr.status, cr.environment, cr.requested_by,
+    SELECT cr.status, cr.environment, cr.risk, cr.requested_by,
            w.environment AS workspace_environment
     FROM change_requests cr
     JOIN workspaces w ON w.id = cr.workspace_id
@@ -169,8 +209,7 @@ LIST_APPROVALS = _read(
     SELECT cr.id AS request_id, cr.title, cr.risk, cr.environment, cr.status,
            cr.updated_at, u.username AS requested_by,
            (SELECT COUNT(*) FROM approvals a
-            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count,
-           CASE WHEN cr.environment = 'production' THEN 2 ELSE 1 END AS required_count
+            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count
     FROM change_requests cr JOIN users u ON u.id = cr.requested_by
     ORDER BY cr.updated_at DESC
     """,
@@ -181,8 +220,7 @@ LIST_PENDING_APPROVALS = _read(
     SELECT cr.id AS request_id, cr.title, cr.risk, cr.environment, cr.status,
            cr.updated_at, u.username AS requested_by,
            (SELECT COUNT(*) FROM approvals a
-            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count,
-           CASE WHEN cr.environment = 'production' THEN 2 ELSE 1 END AS required_count
+            WHERE a.request_id = cr.id AND a.decision = 'APPROVED') AS approved_count
     FROM change_requests cr JOIN users u ON u.id = cr.requested_by
     WHERE cr.status = 'REVIEW_REQUIRED'
     ORDER BY cr.updated_at DESC
@@ -325,6 +363,12 @@ ALL_STATEMENTS = (
     INSERT_USER,
     SELECT_USER_FOR_AUTH,
     SELECT_ACTIVE_USER,
+    SELECT_USER_BY_ID,
+    INSERT_ACTIVE_SESSION,
+    SELECT_ACTIVE_SESSION,
+    DELETE_ACTIVE_SESSION,
+    DELETE_ACTIVE_SESSIONS_FOR_USER,
+    DELETE_EXPIRED_ACTIVE_SESSIONS,
     INSERT_WORKSPACE,
     LIST_WORKSPACES,
     SELECT_WORKSPACE_CONTEXT,

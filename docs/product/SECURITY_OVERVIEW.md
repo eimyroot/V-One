@@ -6,6 +6,8 @@
 - generated local secrets stored outside Git,
 - `scrypt` password hashing with per-user salt,
 - context-bound v2 sessions signed with a purpose-derived HMAC key,
+- database-backed active-session allowlisting with server-side current-session logout,
+- HMAC-referenced session storage that excludes bearer tokens and raw nonces,
 - explicit identity-provider boundary for password, session and bearer authentication,
 - fail-closed startup for configured but unreleased OIDC identity,
 - HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
@@ -26,7 +28,7 @@
 - two distinct approvers for production requests,
 - production effects disabled by default,
 - allowlisted adapters only,
-- descriptor-relative, no-symlink sandbox writes with bounded artifact size,
+- descriptor-relative sandbox writes with no-follow metadata checks, opened-directory identity verification and bounded artifact size,
 - subprocess execution without a shell,
 - bounded subprocess output and timeout,
 - execution idempotency,
@@ -43,6 +45,8 @@ misrepresented as production-ready PostgreSQL support. The statement catalog has
 fallback, and a future adapter must preserve global write serialization until narrower locking has
 independent concurrency proofs.
 
+Sandbox directory traversal does not rely on `O_NOFOLLOW` alone. Every attacker-controlled directory component is inspected without following symlinks, opened descriptor-relatively, inspected again, and then matched by device and inode across all three views. Existing destination symlinks and non-regular files fail closed. The configured sandbox-root path and mutation by other local processes remain operator-owned boundaries; workspace and artifact path components beneath the root are treated as untrusted.
+
 The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
 verification is an authenticated evidence operation, preventing chain growth from degrading the
 container health probe.
@@ -51,14 +55,18 @@ Bearer tokens use version `v2`, fixed issuer and audience claims, bounded claim 
 and a signing key derived from the runtime root secret under a session-token-specific context. The
 raw root secret is not used directly as the token signing key. Legacy `v1` tokens fail closed after
 upgrade, so operators must expect all existing console and API sessions to authenticate again. The
-runtime still revalidates active account state and the current database role on every request.
+runtime also requires an exact active-session allowlist match, then revalidates active account state
+and the current database role on every request. Migration `0007` intentionally invalidates previously
+issued stateless sessions.
 
 FastAPI authentication routes now depend on an explicit identity-provider contract. The released
-`local` provider owns password verification, session issuance, bearer verification and live account
-revalidation. OIDC configuration requires exact HTTPS issuer and JWKS endpoints, audience and
-distinct identity claim names, but OIDC execution remains unavailable. Selecting it aborts startup
-before persistence initialization and never falls back to local passwords. External groups must not
-become internal roles until a separate allowlisted mapping and integration gate are released.
+`local` provider owns session issuance and bearer verification while depending on separate canonical
+credential-authentication, active-user lookup and session-lifecycle ports. Production composition does not inject the
+broad product compatibility facade. OIDC configuration requires exact HTTPS issuer and JWKS
+endpoints, audience and distinct identity claim names, but OIDC execution remains unavailable.
+Selecting it aborts startup before persistence initialization and never falls back to local
+passwords. External groups must not become internal roles until a separate allowlisted mapping and
+integration gate are released.
 
 The application derives the authentication source from the ASGI server's client address and does
 not parse forwarding headers itself. A production reverse proxy must therefore be configured as a

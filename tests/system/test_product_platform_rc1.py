@@ -295,9 +295,12 @@ def test_console_and_openapi_are_available(tmp_path: Path) -> None:
     javascript = client.get("/console/assets/app.js")
     assert javascript.status_code == 200
     assert "syncChangeEnvironment" in javascript.text
+    assert "api('/auth/logout',{method:'POST'})" in javascript.text
+    assert "Serverové odvolání relace se nepodařilo potvrdit" in javascript.text
     schema = client.get("/openapi.json")
     assert schema.status_code == 200
     assert "/api/v1/change-requests" in schema.json()["paths"]
+    assert "/api/v1/auth/logout" in schema.json()["paths"]
 
 
 def test_roles_are_permission_based_not_linear(tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import secrets
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -39,31 +40,109 @@ def _safe_relative_path(value: str) -> Path:
     return candidate
 
 
+def _require_sandbox_path_primitives() -> None:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise AdapterError("sandbox writes require O_NOFOLLOW support")
+    if os.open not in os.supports_dir_fd or os.mkdir not in os.supports_dir_fd:
+        raise AdapterError("sandbox writes require descriptor-relative path support")
+    if os.stat not in os.supports_dir_fd or os.stat not in os.supports_follow_symlinks:
+        raise AdapterError("sandbox writes require no-follow metadata support")
+
+
+def _open_verified_directory(
+    name: str | Path, *, directory_flags: int, parent_fd: int | None = None
+) -> int:
+    if parent_fd is None:
+        metadata = os.stat(name, follow_symlinks=False)
+    else:
+        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise AdapterError("sandbox write failed closed")
+
+    if parent_fd is None:
+        descriptor = os.open(name, directory_flags)
+    else:
+        descriptor = os.open(name, directory_flags, dir_fd=parent_fd)
+
+    verified = False
+    try:
+        opened_metadata = os.fstat(descriptor)
+        if parent_fd is None:
+            current_metadata = os.stat(name, follow_symlinks=False)
+        else:
+            current_metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        expected_identity = (metadata.st_dev, metadata.st_ino)
+        opened_identity = (opened_metadata.st_dev, opened_metadata.st_ino)
+        current_identity = (current_metadata.st_dev, current_metadata.st_ino)
+        if (
+            not stat.S_ISDIR(opened_metadata.st_mode)
+            or not stat.S_ISDIR(current_metadata.st_mode)
+            or opened_identity != expected_identity
+            or current_identity != expected_identity
+        ):
+            raise AdapterError("sandbox write failed closed")
+        verified = True
+        return descriptor
+    finally:
+        if not verified:
+            os.close(descriptor)
+
+
+def _ensure_and_open_directory(name: str, *, parent_fd: int, directory_flags: int) -> int:
+    with contextlib.suppress(FileExistsError):
+        os.mkdir(name, mode=0o750, dir_fd=parent_fd)
+    return _open_verified_directory(
+        name,
+        directory_flags=directory_flags,
+        parent_fd=parent_fd,
+    )
+
+
+def _reject_unsafe_destination(name: str, *, parent_fd: int) -> None:
+    try:
+        metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise AdapterError("sandbox write failed closed")
+
+
 def _write_sandbox_file(
     *, sandbox_root: Path, workspace_id: str, relative_path: Path, content: bytes
 ) -> str:
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise AdapterError("sandbox writes require O_NOFOLLOW support")
+    _require_sandbox_path_primitives()
+    workspace_path = Path(workspace_id)
+    if (
+        workspace_path.is_absolute()
+        or len(workspace_path.parts) != 1
+        or workspace_path.parts[0] in {"", ".", ".."}
+    ):
+        raise AdapterError("workspace path escapes the governed sandbox")
 
-    root = sandbox_root.resolve()
+    root = sandbox_root.absolute()
     root.mkdir(parents=True, exist_ok=True, mode=0o750)
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
-    root_fd = os.open(root, directory_flags)
+    root_fd = _open_verified_directory(root, directory_flags=directory_flags)
     open_fds = [root_fd]
     temporary_name: str | None = None
     try:
-        with contextlib.suppress(FileExistsError):
-            os.mkdir(workspace_id, mode=0o750, dir_fd=root_fd)
-        current_fd = os.open(workspace_id, directory_flags, dir_fd=root_fd)
+        current_fd = _ensure_and_open_directory(
+            workspace_id,
+            parent_fd=root_fd,
+            directory_flags=directory_flags,
+        )
         open_fds.append(current_fd)
 
         for part in relative_path.parts[:-1]:
-            with contextlib.suppress(FileExistsError):
-                os.mkdir(part, mode=0o750, dir_fd=current_fd)
-            next_fd = os.open(part, directory_flags, dir_fd=current_fd)
+            next_fd = _ensure_and_open_directory(
+                part,
+                parent_fd=current_fd,
+                directory_flags=directory_flags,
+            )
             open_fds.append(next_fd)
             current_fd = next_fd
 
+        _reject_unsafe_destination(relative_path.name, parent_fd=current_fd)
         temporary_name = f".{relative_path.name}.{secrets.token_hex(8)}.tmp"
         file_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
         file_fd = os.open(temporary_name, file_flags, 0o640, dir_fd=current_fd)

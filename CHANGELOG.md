@@ -4,13 +4,22 @@
 
 - Established a clean, review-gated repository baseline from the verified RC1 artifact.
 - Pinned runtime and development dependency graphs with hashes.
+- Made the product-image smoke gate parse health JSON with the built image Python runtime instead of an unqualified host `python` command.
+- Added a truth-scoped project vision, architecture, roadmap, capability inventory, terminology, trust-boundary map, and automated documentation consistency gate.
+- Added a fail-closed local checkpoint verifier and deterministic ProofGraph v1 JSON projection.
+- Proposed organization-scoped roles and configurable Solo, Team, and Regulated approval profiles with a non-bypassable platform safety floor; no runtime behavior changed.
+- Added a pure deterministic approval-policy decision model that reproduces current environment-based requirements and emits stable explanations without changing runtime enforcement.
+- Added a default-off runtime compatibility path that centralizes approval counts in the policy owner and fails closed if an injected evaluator diverges from current behavior; Solo, Team, and Regulated enforcement remain disabled.
 - Added least-privilege CI and a manually gated release-candidate build.
 - Revalidated active account and current role on every authenticated request.
-- Hardened sandbox writes against symlink traversal and partial writes.
+- Hardened sandbox writes with no-follow metadata checks and opened-directory identity verification, preventing platform-specific `O_NOFOLLOW` behavior from following symlinked directory components.
 - Added change-payload, artifact, token-header and idempotency-key bounds.
 - Reduced the default session lifetime from eight hours to one hour.
 - Replaced legacy v1 bearer tokens with context-bound v2 tokens signed by a purpose-derived key.
 - Routed local password and bearer authentication through an explicit provider boundary while keeping OIDC fail-closed.
+- Added a database-backed active-session allowlist and audited server-side current-session logout.
+- Added administrator-only, transactionally audited revocation of all local sessions for a user.
+- Kept bearer tokens and raw session nonces out of persistence by storing purpose-derived references.
 - Separated constant-time liveness from explicit evidence-chain verification.
 - Expanded system/security coverage from 10 to 14 tests.
 - Added persistent account/source login throttling and bootstrap-token throttling with bounded lockout recovery.

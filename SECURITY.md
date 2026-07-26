@@ -29,3 +29,11 @@ details in logs. Repository security advisories must be used once enabled by the
 - receipt-chain order derived only from a monotonic database sequence,
 - expired executions recover only under emergency stop and fence every late completion,
 - audit and receipt integrity verified independently of liveness probes.
+
+## Local checkpoint verification boundary
+
+`voodoo evidence verify` treats checkpoint paths as untrusted local input. It rejects traversal,
+symlinks, special files, incomplete manifest coverage and inconsistent Git/source/runtime claims.
+It never executes checkpoint code, contacts Docker or a registry, changes a database, or enables
+production effects. Remote byte verification and signed attestations remain outside the current
+boundary.

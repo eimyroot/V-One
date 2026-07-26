@@ -96,6 +96,12 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "blocked_until",
         "updated_at",
     },
+    "active_sessions": {
+        "session_reference",
+        "user_id",
+        "issued_at",
+        "expires_at",
+    },
     "schema_migrations": {"version", "name", "checksum", "applied_at"},
 }
 REQUIRED_INDEXES = {
@@ -104,6 +110,7 @@ REQUIRED_INDEXES = {
     "idx_executions_recovery",
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
+    "idx_active_sessions_user_expiry",
 }
 REQUIRED_TRIGGERS = {
     "trg_change_requests_environment_insert",
@@ -113,6 +120,7 @@ REQUIRED_TRIGGERS = {
     "trg_workspaces_environment_update_valid",
     "trg_workspaces_environment_immutable",
     "trg_executions_environment_insert",
+    "trg_active_sessions_immutable",
 }
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000

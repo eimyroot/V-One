@@ -45,6 +45,10 @@ class UserCreateRequest(BaseModel):
     role: str = Field(min_length=3, max_length=40)
 
 
+class SessionRevocationRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=200)
+
+
 class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     environment: str = Field(min_length=4, max_length=20)
@@ -108,17 +112,23 @@ def create_product_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["VOODOO One Product"])
 
-    def current_principal(
+    def bearer_token(
         authorization: str | None = Header(default=None),
-    ) -> Principal:
+    ) -> str:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="authentication required")
         if len(authorization) > 4096:
             raise HTTPException(status_code=401, detail="invalid authentication token")
+        token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="invalid authentication token")
+        return token
+
+    def current_principal(
+        token: str = Depends(bearer_token),
+    ) -> Principal:
         try:
-            return identity_provider.authenticate_bearer(
-                authorization.removeprefix("Bearer ").strip()
-            )
+            return identity_provider.authenticate_bearer(token)
         except (PermissionError, ValueError) as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
 
@@ -225,6 +235,17 @@ def create_product_router(
     def me(principal: Principal = Depends(current_principal)) -> dict[str, Any]:
         return {"id": principal.user_id, "username": principal.username, "role": principal.role}
 
+    @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+    def logout(
+        token: str = Depends(bearer_token),
+        principal: Principal = Depends(current_principal),
+    ) -> None:
+        try:
+            identity_provider.revoke_session(token, actor_id=principal.user_id)
+            log_event("auth.logout.succeeded", auth_scope="logout")
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+
     @router.post("/users", status_code=status.HTTP_201_CREATED)
     def create_user(
         body: UserCreateRequest,
@@ -237,6 +258,27 @@ def create_product_router(
                 password=body.password,
                 role=body.role,
             )
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+
+    @router.post("/users/{user_id}/sessions/revoke")
+    def revoke_user_sessions(
+        user_id: str,
+        body: SessionRevocationRequest,
+        principal: Principal = Depends(require_permission("*")),
+    ) -> dict[str, object]:
+        try:
+            result = service.revoke_all_sessions(
+                user_id=user_id,
+                actor_id=principal.user_id,
+                reason=body.reason,
+            )
+            log_event(
+                "auth.sessions.revoked",
+                auth_scope="administrative_revocation",
+                revoked_count=result["revoked_count"],
+            )
+            return result
         except Exception as exc:
             raise _translate_error(exc) from exc
 
@@ -442,7 +484,9 @@ def install_product_platform(
     service = ProductService(resolved_config)
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
-        service=service,
+        credential_authenticator=service.credential_authentication_service,
+        active_user_lookup=service.user_account_service,
+        session_lifecycle=service.session_lifecycle_service,
     )
     app.state.voodoo_product_service = service
     app.state.voodoo_identity_provider = resolved_identity_provider
