@@ -25,6 +25,13 @@ Tento soubor je orientační mapa. Normativní autorita zůstává v uvedených 
 - `docs/governance/MILESTONE_REVIEW_TEMPLATE.md`
 - `docs/governance/EXCEPTION_RECORD_TEMPLATE.md`
 
+## Řízené provozní postupy
+
+- `docs/governance/REVIEW_BRANCH_PUBLICATION.md`
+  - fail-closed publikace přesně ověřeného lokálního `HEAD` do nové GitHub review větve,
+  - jediný schválený mechanismus pro auditované obejití local-only `pre-push` hooku,
+  - nemění `main`, tagy, release, Git remotes ani samotný hook.
+
 ## Hlavní filtr změny
 
 Každá významná změna musí být jednoduchá, účelná, automatizovaná, bezpečná, měřitelná, vratná a důkazně ověřitelná.
