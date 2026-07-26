@@ -74,7 +74,8 @@ Delivered:
 
 Next:
 
-- fix evidence producers so logs are frozen before nested manifests;
+- bring the verified frozen-snapshot checkpoint pattern under repository ownership;
+- preserve a fresh runtime-verified checkpoint for the current committed HEAD;
 - add signed checkpoint attestations;
 - add remote byte verification and external anchoring;
 - add SBOM and vulnerability-policy nodes.
@@ -225,12 +226,11 @@ Prerequisites include:
 
 ## Immediate priority order
 
-1. preserve a fresh runtime-verified checkpoint for the current committed HEAD;
-2. complete the documentation foundation and keep it evidence-aligned;
-3. remove the evidence-producer post-manifest log mutation;
-4. specify Policy Decision Graph v1;
-5. specify isolated runner grant and receipt contracts;
-6. implement the read-only CyberCore boundary only after those contracts are reviewed.
+1. bring the verified frozen-snapshot checkpoint pattern under repository ownership;
+2. preserve a fresh runtime-verified checkpoint for the current committed HEAD;
+3. specify Policy Decision Graph v1;
+4. specify isolated runner grant and receipt contracts;
+5. implement the read-only CyberCore boundary only after those contracts are reviewed.
 
 ## Explicit no-go items
 
