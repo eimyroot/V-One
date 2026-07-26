@@ -155,7 +155,7 @@ Move execution behind a durable boundary with:
 
 Production-changing adapters remain BLOCKED until this epic and its security review are complete.
 
-### EPIC-006 — CyberCore read-only knowledge boundary
+### EPIC-006 — Core read-only knowledge boundary
 
 **Status:** PROPOSED.
 
