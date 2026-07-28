@@ -41,7 +41,8 @@ limitations are therefore part of every claim.
 | OIDC identity provider | BLOCKED | fail-closed identity-provider tests | no released OIDC login path |
 | Local checkpoint verifier | VERIFIED | 8 targeted tests; real checkpoint verification | local filesystem only |
 | ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | four node types; no persistent graph store |
-| Nested manifest mutation detection | VERIFIED | verifier regression tests plus two historical ProofGraph V6 checkpoints reverified with zero warnings and zero nested mismatches | the frozen-snapshot producer pattern remains external and is not yet repository-owned or reproduced for the current HEAD |
+| Nested manifest mutation detection | VERIFIED | verifier regression tests plus two historical ProofGraph V6 checkpoints reverified with zero warnings and zero nested mismatches | fresh runtime evidence for the current HEAD is still pending |
+| Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | local candidate finalization only; runtime capture, release, and remote publication remain separate |
 | Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
@@ -77,7 +78,9 @@ HTTP:
 
 Local CLI:
   voodoo evidence verify <checkpoint>
+  voodoo evidence finalize <candidate> <destination>
   python -m voodoo_product evidence verify <checkpoint>
+  python -m voodoo_product evidence finalize <candidate> <destination>
 ```
 
 ## Current release boundary

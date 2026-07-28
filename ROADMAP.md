@@ -70,11 +70,11 @@ Delivered:
 - runtime identity consistency checks;
 - nested post-manifest mutation warnings;
 - deterministic ProofGraph v1 JSON;
-- regression coverage and ADR-0002.
+- repository-owned frozen-snapshot finalization with fail-closed verification;
+- regression coverage, ADR-0002, and ADR-0004.
 
 Next:
 
-- bring the verified frozen-snapshot checkpoint pattern under repository ownership;
 - preserve a fresh runtime-verified checkpoint for the current committed HEAD;
 - add signed checkpoint attestations;
 - add remote byte verification and external anchoring;
@@ -226,11 +226,10 @@ Prerequisites include:
 
 ## Immediate priority order
 
-1. bring the verified frozen-snapshot checkpoint pattern under repository ownership;
-2. preserve a fresh runtime-verified checkpoint for the current committed HEAD;
-3. specify Policy Decision Graph v1;
-4. specify isolated runner grant and receipt contracts;
-5. implement the read-only CyberCore boundary only after those contracts are reviewed.
+1. preserve a fresh runtime-verified checkpoint for the current committed HEAD;
+2. specify Policy Decision Graph v1;
+3. specify isolated runner grant and receipt contracts;
+4. implement the read-only CyberCore boundary only after those contracts are reviewed.
 
 ## Explicit no-go items
 
