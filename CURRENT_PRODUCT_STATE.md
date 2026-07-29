@@ -5,125 +5,131 @@
 ## Identita snapshotu
 
 ```text
-AS_OF: 2026-07-26T06:36:20Z
-VERIFIED_BASELINE_COMMIT: 8da621632bb227170ec77271f3d88464fdcf0ebf
-VERIFIED_BASELINE_TREE: 2d29de5d6c2d071ab23bdb509f4dae1b2b2f1db5
-VERIFIED_BASELINE_BRANCH: local/post-merge-main-20260726
-STATE_UPDATE_BRANCH: local/post-merge-state-v1-20260726
-STATE_DOCUMENT_COMMIT: containing Git commit
-ORIGIN_MAIN_AT_BASELINE: 8da621632bb227170ec77271f3d88464fdcf0ebf
-WORKTREE_STATUS_AT_BASELINE: VERIFIED CLEAN
-SNAPSHOT_STATUS: VERIFIED
-COMMITS_AHEAD_OF_ORIGIN_MAIN_AT_BASELINE: 0
+AS_OF: 2026-07-30
+VERIFIED_REMOTE_BRANCH: main
+VERIFIED_REMOTE_COMMIT: 81522699a9cf7c413e0d9f7c7afcc867e0df8d02
+MERGED_PR: #42
+MERGED_FEATURE_COMMIT: 190758e27b38a1139ff51a4e00bb3767634b19ea
+LOCAL_WORKTREE_STATUS: UNKNOWN — čeká na post-merge local reality check
+CURRENT_PHASE: POST-MERGE STABILIZATION + CURRENT-HEAD RUNTIME RE-ATTESTATION
+RELEASE_STATE: BLOCKED — není release-verified
+PRODUCTION_EFFECTS: VERIFIED DISABLED / FAIL-CLOSED
 ```
 
-## Aktuální fáze
-
-```text
-CURRENT_PHASE: VERIFIED POST-MERGE DEVELOPMENT BASELINE
-CURRENT_VERTICAL_SLICE: PR #39 merge and post-merge local verification
-RELEASE_STATE: 0.9.0-rc2-dev — development baseline VERIFIED; unrestricted production release UNKNOWN
-PRODUCTION_EFFECTS: VERIFIED FAIL-CLOSED
-```
-
-## Ověřené schopnosti a stav
+## Co dnes skutečně funguje
 
 ### VERIFIED
 
-- Git repozitář `/Users/eimyna/V-ONE` byl ověřen na baseline commitu `8da621632bb227170ec77271f3d88464fdcf0ebf` a tree `2d29de5d6c2d071ab23bdb509f4dae1b2b2f1db5`.
-- Lokální baseline větev `local/post-merge-main-20260726` a `origin/main` ukazovaly na stejný commit.
-- Review head `75c1af2925c5d6e6e03a96190fb44c3d68981304` byl začleněn přes PR #39.
-- Merge commit PR #39 je `08ec45b44cb7099feed83925e4dcf9f614acace9`.
-- Následný commit `8da621632bb227170ec77271f3d88464fdcf0ebf` změnil pouze název EPIC-006 v `ROADMAP.md`.
-- GitHub PR workflow skončilo úspěšně.
-- PR workflow ověřilo lint, compile, testy, readiness, dependency audit, product image build a image smoke.
-- Lokální post-merge Ruff kontrola: `All checks passed`.
-- Lokální post-merge Python compile kontrola: prošla.
-- Lokální post-merge full regression suite: `276 passed`.
-- Product readiness gate: `passed: true`.
-- Readiness system tests: `276 passed`.
-- Readiness secret scan: bez nálezů.
-- Integrita technické ústavy byla ověřena pomocí očekávaného SHA-256.
-- Integrita produktové ústavy byla ověřena pomocí jejího SHA-256 manifestu.
-- Sandbox symlink fail-closed regresní kontrola je součástí zelených testovacích gates.
-- Databázové migrační kontroly jsou součástí zelených testovacích gates.
-- Produkční efekty zůstávají fail-closed.
+- FastAPI `/api/v1` control plane a statická command-center konzole.
+- Lokální bootstrap, login, context-bound sessions, logout a administrativní revokace sessions.
+- RBAC, workspaces, change requests, nezávislé approvals a execution lifecycle.
+- Emergency stop, execution idempotency, leases, fencing a explicitní indeterminate recovery.
+- Checksum-verified SQLite migrace a reviewovaný SQL statement catalog.
+- Audit a receipt ledgers s nezávislou kontrolou integrity.
+- Bounded local adapters a governed sandbox filesystem effects.
+- Lokální checkpoint verifier a deterministický ProofGraph v1 JSON.
+- Repository-owned checkpoint finalizer s fail-closed snapshot/copy/staging verification a atomickým publish krokem.
+- Hash-locked dependencies, lokální lint/compile/test/readiness gates a Docker build/smoke workflow.
+- Produkční efekty zůstávají vypnuté a fail-closed.
 
-### INFERRED
+## Čeho jsme právě dosáhli
 
-- Změna názvu EPIC-006 v `ROADMAP.md` nemění runtime chování.
-- PR image build a smoke evidence zůstávají relevantní pro review tree; přesný post-merge commit
-  `8da6216` nebyl samostatně sestaven jako nový image.
-- Pro aktuální baseline nebyl provedenými kontrolami potvrzen P0 problém. Jde o omezené tvrzení,
-  nikoli úplný bezpečnostní audit.
-
-### UNKNOWN
-
-- Živý aplikační runtime smoke mimo testovací proces.
-- Product image build a image smoke na přesném post-merge commitu `8da6216`.
-- Produkční deployment a jeho aktuální verze.
-- Produkční telemetry, SLI, SLO a alerting.
-- Disaster recovery a ověřený restore.
-- Penetrační test a úplný supply-chain audit.
-- Podepsaná provenance a externí evidence anchoring.
-- Finální licence, EULA a distribuční model.
-- Unrestricted production readiness.
-
-## Rizika a blokery
-
-### P0
+PR #42 byl mergnut do `main` jako merge commit:
 
 ```text
-NO CURRENT P0 CONFIRMED BY THE EXECUTED CHECKS.
-STATUS: INFERRED
-SCOPE: local tests, readiness checks and PR CI; not a complete security assessment
+81522699a9cf7c413e0d9f7c7afcc867e0df8d02
 ```
 
-### Historický symlink nález
+Milník přidal repository-owned checkpoint finalization. Finalizer nyní:
+
+- zachytí a porovná candidate snapshot před/po verification a po copy;
+- odmítne symlinky, special files, candidate races, neplatný manifest a unsafe destination;
+- vytvoří frozen staging kopii;
+- zapisuje nested/outer manifests až po zmrazení stagingu;
+- vyžaduje canonical verification s nulou errors a warnings;
+- publikuje checkpoint pouze same-filesystem atomickým rename;
+- zachovává strukturovanou failure evidence a nikdy tím neautorizuje release nebo production effect.
+
+Pro feature commit `190758e27b38a1139ff51a4e00bb3767634b19ea` existuje fresh native Docker runtime checkpoint s těmito ověřenými výsledky:
 
 ```text
-STATUS: VERIFIED
-EVIDENCE: test_symlinked_sandbox_directory_fails_closed — passed
+FULL_PYTEST: 298 passed
+READINESS_TESTS: 298 passed
+RUFF: passed
+COMPILEALL: passed
+PRODUCT_IMAGE_SMOKE: passed
+DOCKER_HEALTHCHECK: healthy
+PRODUCTION_EFFECTS: disabled
+INDEPENDENT_CANONICAL_VERIFY: valid=true, errors=[], warnings=[]
+EVIDENCE_ARCHIVE_SHA256: cfd89bfa59cef58508993a95753d06894147402447bb6eac7a2e7451dcb3ffab
+CHECKPOINT_OUTER_MANIFEST_SHA256: d00c8600737e3a0b92412fd02315d33d05c1c591ca9cc52f791735ec77986776
+RUNTIME_BUNDLE_SHA256: e7b5cc9096571d874882ed3529747f768a557d42bbddffa7b367157be871a968
 ```
 
-### Zbývající produkční témata
+GitHub comparison potvrdil, že merge commit `81522699...` nepřidal proti feature commitu `190758e...` žádnou další file-level změnu. Přesto je runtime provenance commit-bound, takže starý checkpoint nelze vydávat za fresh checkpoint pro nový `main` commit.
 
-1. oddělení execution plane od API/control-plane procesu,
-2. živý runtime, deployment a post-deployment health verification,
-3. image build a smoke evidence na přesném release kandidátu,
-4. workspace-scoped authorization pro budoucí multi-tenant provoz,
-5. externí evidence anchoring, podpisy a provenance,
-6. disaster recovery a restore evidence,
-7. penetrační test a úplný supply-chain audit,
-8. finální licence a distribuční model,
-9. bezpečný read-only kontrakt pro externí knowledge/package boundary, bude-li integrace pokračovat.
+## Co lze od platformy očekávat dnes
 
-## Evidence
+VOODOO One je nyní **development / controlled-pilot authorization and evidence control plane**.
+
+Lze od něj očekávat:
+
+- řízené change requests a approvals;
+- explicitní identity/policy/execution lifecycle;
+- auditovatelné evidence a receipts;
+- bounded lokální execution capabilities;
+- fail-closed recovery a production-effect controls;
+- lokální verification/finalization evidence checkpointů.
+
+Nelze od něj zatím očekávat unrestricted production automation, autonomní produkční execution nebo release-grade supply chain.
+
+## Co zbývá
+
+### Nejbližší práce
+
+1. **Post-merge local reality check** — ověřit čistý lokální repo stav a synchronizovat lokální `main` na `81522699...`.
+2. **Fresh runtime checkpoint pro current `main`** — vytvořit nový checkpoint přímo pro merge commit `81522699...`.
+3. **Policy Decision Graph v1** — pokračovat v deterministickém a vysvětlitelném authorization modelu.
+4. **Isolated Runner contracts** — signed short-lived grants, receipts, heartbeat/cancel/fencing a postcondition verification.
+5. **Read-only CyberCore boundary** — až po review výše uvedených kontraktů.
+
+### Stále BLOCKED / PROPOSED
+
+- unrestricted production release;
+- production effects;
+- isolated runner capsules a signed execution grants;
+- released OIDC a PostgreSQL backend;
+- signed checkpoints/receipts a external evidence anchoring;
+- remote byte attestation, širší SBOM/provenance a multi-arch release evidence;
+- mutační CyberCore integration;
+- public commercial distribution před vyřešením licence, EULA, privacy a support modelu.
+
+## Důkazní stav
 
 ```text
-GIT_EVIDENCE: VERIFIED
-PR_PUBLICATION_EVIDENCE: VERIFIED
-PR_MERGE_EVIDENCE: VERIFIED — PR #39
-PR_CI_EVIDENCE: VERIFIED — success at review head 75c1af2925c5d6e6e03a96190fb44c3d68981304
-POST_MERGE_BASELINE_EVIDENCE: VERIFIED — 8da621632bb227170ec77271f3d88464fdcf0ebf
-POST_MERGE_TEST_EVIDENCE: VERIFIED — 276 passed
-LINT_EVIDENCE: VERIFIED
-COMPILE_EVIDENCE: VERIFIED
-READINESS_EVIDENCE: VERIFIED
-SECRET_SCAN_EVIDENCE: VERIFIED — no findings
-PR_IMAGE_BUILD_EVIDENCE: VERIFIED
-PR_IMAGE_SMOKE_EVIDENCE: VERIFIED
-POST_MERGE_IMAGE_BUILD_EVIDENCE: UNKNOWN
-RUNTIME_EVIDENCE: UNKNOWN
-COMPLETE_SECURITY_ASSESSMENT: UNKNOWN
-RELEASE_EVIDENCE: UNKNOWN
-BASELINE_EVIDENCE_ID: VOODOO_POST_MERGE_LOCAL_BASELINE_20260726_8da6216
-BASELINE_EVIDENCE_LOCATION: operator terminal transcript
+VERIFIED:
+- remote main = 81522699a9cf7c413e0d9f7c7afcc867e0df8d02
+- PR #42 merged
+- checkpoint verifier + repository-owned finalizer jsou na main
+- feature commit 190758e... má nezávisle ověřený fresh runtime checkpoint
+- production effects jsou disabled / fail-closed
+
+PARTIALLY VERIFIED:
+- runtime stav current main: source tree odpovídá ověřenému feature tree,
+  ale runtime provenance zatím není znovu svázána s merge commitem 81522699...
+
+UNKNOWN:
+- aktuální lokální branch/HEAD/worktree/index do provedení post-merge reality checku
+- úplný aktuální P0/P1 finding set bez nového explicitního auditu
+
+BLOCKED:
+- unrestricted production release
+- public commercial distribution
 ```
 
-## Rozhodnutí
+## NEXT SAFE STEP
 
-```text
-OWNER_DECISION: PR #39 was merged and the post-merge development baseline was locally verified.
-NEXT_SAFE_STEP: Review this single-file state commit and decide separately whether to publish it through a governed review PR.
-```
+Provedení krátkého post-merge local reality checku a následně nový fresh runtime checkpoint přímo pro `81522699a9cf7c413e0d9f7c7afcc867e0df8d02`.
+
+Capability-level detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)  
+Delivery order: [`ROADMAP.md`](ROADMAP.md)
