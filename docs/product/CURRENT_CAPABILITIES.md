@@ -3,10 +3,10 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
-| Runtime capability evidence baseline | `f76ba752b12f4f8210dc1db0a03c684f2b24f9ad` |
+| Current remote baseline | `main@81522699a9cf7c413e0d9f7c7afcc867e0df8d02` |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
-| Evidence note | 264 tests and readiness passed for the approval-policy decision model change |
+| Latest milestone evidence | checkpoint finalizer merged; 298 tests/readiness passed and fresh runtime verified for feature commit `190758e...`; current-main runtime re-attestation pending |
 
 ## Reading this document
 
