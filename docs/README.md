@@ -7,6 +7,7 @@ and release documentation.
 
 | Question | Document |
 |---|---|
+| What is the exact current evidence snapshot? | [`../CURRENT_PRODUCT_STATE.md`](../CURRENT_PRODUCT_STATE.md) |
 | What is VOODOO One? | [`../VISION.md`](../VISION.md) |
 | How is it built today? | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
 | What works now? | [`product/CURRENT_CAPABILITIES.md`](product/CURRENT_CAPABILITIES.md) |
