@@ -21,13 +21,20 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 | Development control-plane baseline | VERIFIED |
 | Local identity, approvals, execution lifecycle, audit, and receipts | VERIFIED |
 | Local checkpoint ProofGraph verifier | VERIFIED |
+| Repository-owned checkpoint finalizer | VERIFIED |
+| Fresh runtime checkpoint for current `main` merge commit | PARTIALLY VERIFIED — re-attestation pending |
 | Production effects | BLOCKED and disabled by default |
 | Isolated execution runner | PROPOSED |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED pending licensing |
 
-The current product version is `0.9.0-rc2-dev`. The repository is suitable for local integration,
-verification, and controlled pilot hardening. It is not an unrestricted production release.
+The current product version is `0.9.0-rc2-dev`. PR #42 merged repository-owned checkpoint
+finalization into `main` at `81522699a9cf7c413e0d9f7c7afcc867e0df8d02`. The implementation is suitable
+for local integration, verification, and controlled pilot hardening. It is not an unrestricted
+production release.
+
+The latest exact evidence snapshot, including what works, current limitations, and the next safe step,
+is maintained in [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md).
 
 ## Product model
 
@@ -51,6 +58,7 @@ Execution is intended to move into an isolated runner. ProofGraph connects the r
 
 | Document | Purpose |
 |---|---|
+| [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) | Exact current evidence snapshot and next safe step |
 | [`VISION.md`](VISION.md) | Product purpose, long-term direction, and non-goals |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current architecture and target evolution |
 | [`ROADMAP.md`](ROADMAP.md) | Ordered delivery plan and milestone states |
@@ -77,7 +85,7 @@ The current implementation includes:
 - checksum-verified SQLite migrations and reviewed SQL statement catalog;
 - audit and receipt ledgers with independent integrity verification;
 - bounded local adapters with governed sandbox filesystem effects;
-- local checkpoint verification and deterministic ProofGraph v1 JSON;
+- local checkpoint verification, deterministic ProofGraph v1 JSON, and repository-owned checkpoint finalization;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
 See the scoped evidence and limitations in
