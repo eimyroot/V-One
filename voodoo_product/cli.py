@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Sequence
 
 from .checkpoint_evidence import render_report, verify_checkpoint
+from .checkpoint_producer import finalize_checkpoint, render_finalization_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,6 +21,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="emit canonical single-line JSON",
     )
+
+    finalize = evidence_commands.add_parser(
+        "finalize",
+        help="freeze and verify one local checkpoint candidate",
+    )
+    finalize.add_argument("candidate", help="path to a checkpoint candidate directory")
+    finalize.add_argument("destination", help="new final checkpoint directory")
+    finalize.add_argument(
+        "--canonical",
+        action="store_true",
+        help="emit canonical single-line JSON",
+    )
     return parser
 
 
@@ -29,4 +42,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = verify_checkpoint(arguments.checkpoint)
         print(render_report(report, canonical=arguments.canonical))
         return 0 if report["valid"] else 1
+    if arguments.command == "evidence" and arguments.evidence_command == "finalize":
+        report = finalize_checkpoint(arguments.candidate, arguments.destination)
+        print(render_finalization_report(report, canonical=arguments.canonical))
+        return 0 if report["finalized"] else 1
     raise RuntimeError("unreachable command dispatch")
