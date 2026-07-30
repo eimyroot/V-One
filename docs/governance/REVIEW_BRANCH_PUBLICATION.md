@@ -27,25 +27,64 @@ Skript odmítne pokračovat, pokud:
 
 Skript nepoužívá force push a nemění konfiguraci repozitáře.
 
+Publikace aktuálně podporuje přesně base ref `origin/main`. Jiná hodnota
+`--base-ref` je odmítnuta před freshness fetch.
+
+## Kanonický baseline
+
+Jediný kanonický VOODOO One checkout a source-of-truth baseline je:
+
+```text
+/Users/eimyna/00_DEV/V-ONE
+```
+
+Tento checkout je chráněný. Publikace kandidátní větve se z kanonického `main`
+nespouští.
+
+## Publication working directory
+
+Publikace se spouští z již ověřeného managed worktree, který obsahuje přesný
+kandidátní `HEAD`. Ověřený kořen repozitáře se při publikaci nesmí automaticky
+považovat za kanonický checkout `main`.
+
+Před každým spuštěním publisheru ověř:
+
+```bash
+pwd
+git rev-parse --show-toplevel
+git rev-parse HEAD
+git branch --show-current
+git status --porcelain=v1 --untracked-files=all
+```
+
 ## Fáze 1 — ověřený plán bez vzdálené změny
 
 ```bash
 set -euo pipefail
-cd /Users/eimyna/V-ONE
 
-git fetch --prune origin
+pwd
+git rev-parse --show-toplevel
+git rev-parse HEAD
+git branch --show-current
+git status --porcelain=v1 --untracked-files=all
+
+git fetch --no-tags origin \
+  +refs/heads/main:refs/remotes/origin/main
 
 EXPECTED_HEAD="$(git rev-parse HEAD)"
 EXPECTED_COMMIT_COUNT="$(git rev-list --count origin/main..HEAD)"
 TARGET_BRANCH="review/admin-session-revocation-v1-20260719-051330"
+EVIDENCE_DIR="/Users/eimyna/00_DEV/V-ONE-EVIDENCE/CODEX/REVIEW_PUBLICATION_$(date -u +%Y%m%dT%H%M%SZ)"
 
 printf 'EXPECTED_HEAD=%s\n' "$EXPECTED_HEAD"
 printf 'EXPECTED_COMMIT_COUNT=%s\n' "$EXPECTED_COMMIT_COUNT"
+printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR"
 
-.venv/bin/python scripts/publish_review_branch.py \
+/Users/eimyna/00_DEV/V-ONE/.venv/bin/python scripts/publish_review_branch.py \
   --expected-head "$EXPECTED_HEAD" \
   --expected-commit-count "$EXPECTED_COMMIT_COUNT" \
-  --target-branch "$TARGET_BRANCH"
+  --target-branch "$TARGET_BRANCH" \
+  --evidence-dir "$EVIDENCE_DIR"
 ```
 
 Očekávaný stav:
@@ -63,19 +102,26 @@ Použij přesnou hodnotu vypsanou jako `REQUIRED_APPROVAL`:
 
 ```bash
 set -euo pipefail
-cd /Users/eimyna/V-ONE
+
+pwd
+git rev-parse --show-toplevel
+git rev-parse HEAD
+git branch --show-current
+git status --porcelain=v1 --untracked-files=all
 
 EXPECTED_HEAD='<exact HEAD from the verified plan>'
 EXPECTED_COMMIT_COUNT='<exact commit count from the verified plan>'
 TARGET_BRANCH='review/admin-session-revocation-v1-20260719-051330'
 APPROVAL='<exact REQUIRED_APPROVAL value from the verified plan>'
+EVIDENCE_DIR='<exact EVIDENCE_DIR from the verified plan>'
 
-.venv/bin/python scripts/publish_review_branch.py \
+/Users/eimyna/00_DEV/V-ONE/.venv/bin/python scripts/publish_review_branch.py \
   --expected-head "$EXPECTED_HEAD" \
   --expected-commit-count "$EXPECTED_COMMIT_COUNT" \
   --target-branch "$TARGET_BRANCH" \
   --execute \
-  --approval "$APPROVAL"
+  --approval "$APPROVAL" \
+  --evidence-dir "$EVIDENCE_DIR"
 ```
 
 Úspěch musí skončit:
@@ -87,11 +133,17 @@ REMOTE_SHA=<stejné SHA jako expected-head>
 
 ## Evidence
 
-Každý plán i pokus o publikaci vytvoří lokální JSON evidence soubor a SHA-256 sidecar v:
+Každý plán i pokus o publikaci musí pomocí explicitního
+`--evidence-dir "$EVIDENCE_DIR"` vytvořit lokální JSON evidence soubor a SHA-256
+sidecar uvnitř jediného durable evidence root:
 
 ```text
-~/Downloads/voodoo-review-publication-evidence
+/Users/eimyna/00_DEV/V-ONE-EVIDENCE
 ```
+
+Použij task-specific podadresář ve tvaru
+`/Users/eimyna/00_DEV/V-ONE-EVIDENCE/CODEX/REVIEW_PUBLICATION_<UTC_TIMESTAMP>`
+a pro autorizovanou fázi znovu použij přesný `EVIDENCE_DIR` z ověřeného plánu.
 
 Evidence nesmí obsahovat přístupové tokeny ani jiné secrets.
 

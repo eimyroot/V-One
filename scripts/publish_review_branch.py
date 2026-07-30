@@ -337,7 +337,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--target-branch", required=True)
     parser.add_argument("--expected-commit-count", required=True, type=int)
-    parser.add_argument("--base-ref", default=DEFAULT_BASE_REF)
+    parser.add_argument(
+        "--base-ref",
+        default=DEFAULT_BASE_REF,
+        help=f"publication base ref; currently only {DEFAULT_BASE_REF!r} is supported",
+    )
     parser.add_argument("--repository-url", default=ALLOWED_GITHUB_REPOSITORY)
     parser.add_argument(
         "--evidence-dir",
