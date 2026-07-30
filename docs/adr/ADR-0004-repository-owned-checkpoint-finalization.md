@@ -65,9 +65,16 @@ The finalizer:
 16. writes the outer `ops/SHA256SUMS` as the last payload mutation;
 17. calls the existing `verify_checkpoint()` owner against staging;
 18. requires staged verification with zero errors and zero warnings;
-19. promotes staging to the destination with a same-filesystem rename only after verification;
-20. reports staging or lock cleanup failures with stable structured error codes instead of suppressing
-    them.
+19. temporarily opens only the verified finalizer-owned staging root to mode `0700` immediately
+    before promotion, without changing the sealed source candidate;
+20. promotes staging to the destination with a same-filesystem rename only after verification;
+21. immediately reseals the promoted destination to mode `0500`, independently verifies that
+    destination and reports `finalized: true` only for `valid: true`, zero errors and zero warnings;
+22. preserves a destination when resealing or promoted verification fails, reports
+    `destination_published: true` and never silently repairs or removes the published evidence;
+23. may restore owner write permission only on its own temporary staging root when cleanup requires
+    it, and reports staging or lock cleanup failures with stable structured error codes instead of
+    suppressing them.
 
 ## Authoritative ownership and reuse
 
@@ -124,6 +131,14 @@ A lock cleanup failure discovered after atomic promotion returns `finalized: fal
 `destination_published: true`, and causes a non-zero CLI exit code. This prevents a partially completed
 operation from being reported as fully successful while preserving the already verified destination.
 
+The candidate source remains sealed and unchanged throughout finalization. A verified staging root
+may be opened to `0700` only for the bounded atomic-promotion step. The promoted destination is
+immediately resealed to `0500` before authoritative destination verification. Resealing failures use
+`promoted_destination_resealing_failed`; promoted verification failures use
+`promoted_destination_verification_failed`. Both preserve the destination for forensics and report
+`destination_published: true`. Cleanup may reopen only the finalizer-created temporary staging root,
+never the caller-controlled candidate or another caller path.
+
 ## Deferred work
 
 This decision does not implement:
@@ -151,6 +166,11 @@ The change requires:
 - detection of empty-directory and permission-mode changes;
 - rejection when a candidate entry becomes a symlink or special file;
 - source-candidate byte preservation;
+- successful finalization of a sealed `0500` candidate while preserving its source mode;
+- staged verification before the bounded `0700` promotion transition;
+- destination resealing to `0500` before independent promoted verification;
+- preservation and explicit publication state for post-promotion reseal or verification failures;
+- successful cleanup of finalizer-owned sealed staging after a pre-promotion failure;
 - visible staging-cleanup and lock-cleanup failures;
 - existing-destination rejection;
 - legacy exception rejection;

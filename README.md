@@ -18,20 +18,23 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 
 | Area | Status |
 |---|---|
+| Root agent governance | IMPLEMENTED in repository source |
+| Current source/runtime identity | See `CURRENT_PRODUCT_STATE.md` and live Git state |
 | Development control-plane baseline | VERIFIED |
 | Local identity, approvals, execution lifecycle, audit, and receipts | VERIFIED |
 | Local checkpoint ProofGraph verifier | VERIFIED |
 | Repository-owned checkpoint finalizer | VERIFIED |
-| Fresh runtime checkpoint for current `main` merge commit | PARTIALLY VERIFIED — re-attestation pending |
+| Current-HEAD runtime attestation | UNKNOWN — NOT VERIFIED after latest source/governance changes |
 | Production effects | BLOCKED and disabled by default |
 | Isolated execution runner | PROPOSED |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED pending licensing |
 
-The current product version is `0.9.0-rc2-dev`. PR #42 merged repository-owned checkpoint
-finalization into `main` at `81522699a9cf7c413e0d9f7c7afcc867e0df8d02`. The implementation is suitable
-for local integration, verification, and controlled pilot hardening. It is not an unrestricted
-production release.
+The current product version is `0.9.0-rc2-dev`. Exact repository identity is obtained from live Git,
+not from this README. Historical runtime evidence remains bound to its recorded historical commit;
+source changes after that checkpoint require fresh runtime re-attestation. The implementation is
+suitable for local integration, verification, and controlled pilot hardening. It is not an
+unrestricted production release.
 
 The latest exact evidence snapshot, including what works, current limitations, and the next safe step,
 is maintained in [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md).
