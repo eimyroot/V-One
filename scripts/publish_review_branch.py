@@ -18,6 +18,7 @@ from pathlib import Path
 
 ALLOWED_GITHUB_REPOSITORY = "https://github.com/nulleimy/V-One.git"
 DEFAULT_BASE_REF = "origin/main"
+DEFAULT_BASE_FETCH_REFSPEC = "+refs/heads/main:refs/remotes/origin/main"
 TARGET_PREFIX = "review/"
 PROTECTED_BRANCHES = frozenset({"main", "master", "trunk", "develop", "production"})
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -143,6 +144,14 @@ def _validate_expected_head(expected_head: str) -> None:
         raise PublicationError("--expected-head must be a full lowercase 40-character Git SHA")
 
 
+def fetch_origin_base(repo_root: Path, base_ref: str) -> None:
+    if base_ref != DEFAULT_BASE_REF:
+        raise PublicationError(
+            f"unsupported --base-ref: expected={DEFAULT_BASE_REF!r} actual={base_ref!r}"
+        )
+    git(repo_root, "fetch", "--no-tags", "origin", DEFAULT_BASE_FETCH_REFSPEC)
+
+
 def build_plan(
     *,
     repo_root: Path,
@@ -186,7 +195,7 @@ def build_plan(
         )
 
     if fetch_origin:
-        git(repo_root, "fetch", "--prune", "origin")
+        fetch_origin_base(repo_root, base_ref)
 
     git(repo_root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
     ancestor = git(repo_root, "merge-base", "--is-ancestor", base_ref, "HEAD", check=False)
