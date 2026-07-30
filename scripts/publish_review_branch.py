@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ALLOWED_GITHUB_REPOSITORY = "https://github.com/nulleimy/V-One.git"
+CANONICAL_EVIDENCE_ROOT = Path("/Users/eimyna/00_DEV/V-ONE-EVIDENCE")
 DEFAULT_BASE_REF = "origin/main"
 DEFAULT_BASE_FETCH_REFSPEC = "+refs/heads/main:refs/remotes/origin/main"
 TARGET_PREFIX = "review/"
@@ -104,6 +105,23 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_evidence_dir(
+    evidence_dir: Path,
+    *,
+    evidence_root: Path | None = None,
+) -> Path:
+    root = (evidence_root or CANONICAL_EVIDENCE_ROOT).expanduser().resolve()
+    resolved = evidence_dir.expanduser().resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise PublicationError(
+            "evidence directory must resolve beneath the canonical durable evidence root: "
+            f"root={root} actual={resolved}"
+        ) from exc
+    return resolved
 
 
 def verify_sha256_manifest(repo_root: Path, manifest_name: str) -> str:
@@ -295,8 +313,13 @@ def execute_publication(
     return push, remote_sha
 
 
-def write_evidence(evidence_dir: Path, payload: dict[str, object]) -> tuple[Path, Path]:
-    evidence_dir = evidence_dir.expanduser().resolve()
+def write_evidence(
+    evidence_dir: Path,
+    payload: dict[str, object],
+    *,
+    evidence_root: Path | None = None,
+) -> tuple[Path, Path]:
+    evidence_dir = validate_evidence_dir(evidence_dir, evidence_root=evidence_root)
     evidence_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(evidence_dir, 0o700)
 
@@ -345,7 +368,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--repository-url", default=ALLOWED_GITHUB_REPOSITORY)
     parser.add_argument(
         "--evidence-dir",
-        default="~/Downloads/voodoo-review-publication-evidence",
+        required=True,
+        help=(
+            "durable evidence directory; its resolved path must be the canonical evidence root "
+            f"{CANONICAL_EVIDENCE_ROOT} or a descendant"
+        ),
     )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--approval")
@@ -361,8 +388,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "mode": "execute" if args.execute else "plan",
         "status": "BLOCKED",
     }
+    evidence_dir: Path | None = None
 
     try:
+        evidence_dir = validate_evidence_dir(Path(args.evidence_dir))
         plan = build_plan(
             repo_root=Path.cwd(),
             expected_head=args.expected_head,
@@ -380,7 +409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if not args.execute:
             evidence["status"] = "VERIFIED_PLAN"
-            evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
+            evidence_path, sha_path = write_evidence(evidence_dir, evidence)
             print("PUBLICATION_STATUS=VERIFIED_PLAN")
             print(f"HEAD={plan.head}")
             print(f"COMMITS={plan.commit_count}")
@@ -401,7 +430,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence["push_stderr"] = push.stderr.strip()
         evidence["remote_sha"] = remote_sha
         evidence["status"] = "IMPLEMENTED_VERIFIED_REMOTE_BRANCH"
-        evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
+        evidence_path, sha_path = write_evidence(evidence_dir, evidence)
 
         print("PUBLICATION_STATUS=IMPLEMENTED_VERIFIED_REMOTE_BRANCH")
         print(f"REMOTE_SHA={remote_sha}")
@@ -411,12 +440,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except PublicationError as exc:
         evidence["error"] = str(exc)
-        try:
-            evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
-            print(f"EVIDENCE_FILE={evidence_path}", file=sys.stderr)
-            print(f"EVIDENCE_SHA256_FILE={sha_path}", file=sys.stderr)
-        except OSError as evidence_error:
-            print(f"EVIDENCE_WRITE_ERROR={evidence_error}", file=sys.stderr)
+        if evidence_dir is not None:
+            try:
+                evidence_path, sha_path = write_evidence(evidence_dir, evidence)
+                print(f"EVIDENCE_FILE={evidence_path}", file=sys.stderr)
+                print(f"EVIDENCE_SHA256_FILE={sha_path}", file=sys.stderr)
+            except (OSError, PublicationError) as evidence_error:
+                print(f"EVIDENCE_WRITE_ERROR={evidence_error}", file=sys.stderr)
         print("PUBLICATION_STATUS=BLOCKED", file=sys.stderr)
         print(f"BLOCK_REASON={exc}", file=sys.stderr)
         return 2

@@ -5,6 +5,7 @@ import importlib.util
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -392,10 +393,211 @@ def test_evidence_is_atomic_and_hash_verifiable(tmp_path: Path) -> None:
         "head": "a" * 40,
         "status": "VERIFIED_PLAN",
     }
-    evidence, sidecar = MODULE.write_evidence(tmp_path / "evidence", payload)
+    evidence_root = tmp_path / "evidence-root"
+    evidence, sidecar = MODULE.write_evidence(
+        evidence_root / "task",
+        payload,
+        evidence_root=evidence_root,
+    )
 
     expected = sidecar.read_text(encoding="utf-8").split()[0]
     actual = hashlib.sha256(evidence.read_bytes()).hexdigest()
     assert expected == actual
     assert evidence.stat().st_mode & 0o777 == 0o600
     assert sidecar.stat().st_mode & 0o777 == 0o600
+
+
+def test_evidence_dir_is_required() -> None:
+    with pytest.raises(SystemExit) as exc:
+        MODULE.parse_args(
+            [
+                "--expected-head",
+                "a" * 40,
+                "--expected-commit-count",
+                "2",
+                "--target-branch",
+                "review/test",
+            ]
+        )
+
+    assert exc.value.code == 2
+
+
+def test_evidence_path_contract_accepts_canonical_descendants(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+
+    assert MODULE.validate_evidence_dir(
+        evidence_root,
+        evidence_root=evidence_root,
+    ) == evidence_root.resolve()
+    assert MODULE.validate_evidence_dir(
+        evidence_root / "ordinary",
+        evidence_root=evidence_root,
+    ) == (evidence_root / "ordinary").resolve()
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_20260730T120000Z"
+    assert MODULE.validate_evidence_dir(
+        task_dir,
+        evidence_root=evidence_root,
+    ) == task_dir.resolve()
+
+
+def test_evidence_path_contract_rejects_escapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    invalid_paths = (
+        Path("/tmp/publication-evidence"),  # noqa: S108 - intentional rejection case
+        Path("~/Downloads/voodoo-review-publication-evidence"),
+        tmp_path / "V-ONE",
+        tmp_path / "V-ONE-EVIDENCE-EVIL",
+        evidence_root / ".." / "outside",
+    )
+
+    for invalid in invalid_paths:
+        with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+            MODULE.validate_evidence_dir(invalid, evidence_root=evidence_root)
+
+
+def test_evidence_path_contract_rejects_symlink_escape(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    evidence_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = evidence_root / "escaped-link"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks are unavailable: {exc}")
+
+    with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+        MODULE.validate_evidence_dir(link / "task", evidence_root=evidence_root)
+
+
+def test_write_evidence_rejects_legacy_default_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    home = tmp_path / "home"
+    legacy = home / "Downloads" / "voodoo-review-publication-evidence"
+    monkeypatch.setenv("HOME", str(home))
+    payload = {
+        "timestamp_utc": "2026-07-30T12:00:00+00:00",
+        "status": "BLOCKED",
+    }
+
+    with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+        MODULE.write_evidence(
+            Path("~/Downloads/voodoo-review-publication-evidence"),
+            payload,
+            evidence_root=evidence_root,
+        )
+
+    assert not legacy.exists()
+
+
+def _main_args(evidence_dir: Path) -> list[str]:
+    return [
+        "--expected-head",
+        "a" * 40,
+        "--expected-commit-count",
+        "2",
+        "--target-branch",
+        "review/test",
+        "--evidence-dir",
+        str(evidence_dir),
+    ]
+
+
+def _stub_plan(evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> object:
+    plan = MODULE.PublicationPlan(
+        repo_root=str(evidence_root),
+        head="a" * 40,
+        base_ref="origin/main",
+        origin_fetch_url=MODULE.ALLOWED_GITHUB_REPOSITORY,
+        repository_url=MODULE.ALLOWED_GITHUB_REPOSITORY,
+        target_branch="review/test",
+        target_ref="refs/heads/review/test",
+        commit_count=2,
+        merge_commit_count=0,
+        diff_shortstat="2 files changed",
+        changed_file_count=2,
+        approval="PUBLISH_REVIEW exact",
+    )
+    monkeypatch.setattr(MODULE, "build_plan", lambda **_: plan)
+    monkeypatch.setattr(
+        MODULE,
+        "dry_run_publication",
+        lambda _: SimpleNamespace(stdout="dry run", stderr=""),
+    )
+    return plan
+
+
+def test_outside_root_is_blocked_before_plan_or_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    outside = tmp_path / "outside"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+
+    def unexpected_plan(**_: object) -> None:
+        pytest.fail("build_plan reached before evidence path validation")
+
+    monkeypatch.setattr(MODULE, "build_plan", unexpected_plan)
+
+    assert MODULE.main(_main_args(outside)) == 2
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=BLOCKED" in captured.err
+    assert not outside.exists()
+
+
+def test_valid_plan_writes_evidence_inside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_20260730T120000Z"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+    _stub_plan(evidence_root, monkeypatch)
+
+    assert MODULE.main(_main_args(task_dir)) == 0
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=VERIFIED_PLAN" in captured.out
+    evidence_files = list(task_dir.glob("*.json"))
+    sidecars = list(task_dir.glob("*.json.sha256"))
+    assert len(evidence_files) == 1
+    assert len(sidecars) == 1
+    assert evidence_files[0].is_relative_to(evidence_root)
+    assert sidecars[0].is_relative_to(evidence_root)
+
+
+def test_publication_error_writes_blocked_evidence_inside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_FAILURE"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+
+    def fail_after_validation(**_: object) -> None:
+        raise MODULE.PublicationError("deliberate failure")
+
+    monkeypatch.setattr(MODULE, "build_plan", fail_after_validation)
+
+    assert MODULE.main(_main_args(task_dir)) == 2
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=BLOCKED" in captured.err
+    evidence_files = list(task_dir.glob("*.json"))
+    sidecars = list(task_dir.glob("*.json.sha256"))
+    assert len(evidence_files) == 1
+    assert len(sidecars) == 1
+    assert '"status": "BLOCKED"' in evidence_files[0].read_text(encoding="utf-8")
+    assert evidence_files[0].is_relative_to(evidence_root)
+    assert sidecars[0].is_relative_to(evidence_root)
