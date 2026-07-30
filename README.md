@@ -24,17 +24,20 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 | Local identity, approvals, execution lifecycle, audit, and receipts | VERIFIED |
 | Local checkpoint ProofGraph verifier | VERIFIED |
 | Repository-owned checkpoint finalizer | VERIFIED |
-| Current-HEAD runtime attestation | UNKNOWN — NOT VERIFIED after latest source/governance changes |
+| Latest runtime-attested committed baseline | VERIFIED for `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` |
+| Read-only Policy Decision Graph v1 | VERIFIED deterministic projection/test scope; no runtime authority or integration |
 | Production effects | BLOCKED and disabled by default |
 | Isolated execution runner | PROPOSED |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED pending licensing |
 
 The current product version is `0.9.0-rc2-dev`. Exact repository identity is obtained from live Git,
-not from this README. Historical runtime evidence remains bound to its recorded historical commit;
-source changes after that checkpoint require fresh runtime re-attestation. The implementation is
-suitable for local integration, verification, and controlled pilot hardening. It is not an
-unrestricted production release.
+not from this README. The latest canonical runtime checkpoint attests the committed baseline
+`main@8a5f36b218c3aa6dce2e4cf771512875f136d839` as
+`DEVELOPMENT_RUNTIME_VERIFIED_NOT_RELEASE`: native Docker runtime verified, product-image smoke
+passed, healthcheck healthy, and production effects disabled. That checkpoint does not attest PDG
+v1 or any subsequent source changes. The implementation is suitable for local integration,
+verification, and controlled pilot hardening. It is not an unrestricted production release.
 
 The latest exact evidence snapshot, including what works, current limitations, and the next safe step,
 is maintained in [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md).
@@ -89,6 +92,7 @@ The current implementation includes:
 - audit and receipt ledgers with independent integrity verification;
 - bounded local adapters with governed sandbox filesystem effects;
 - local checkpoint verification, deterministic ProofGraph v1 JSON, and repository-owned checkpoint finalization;
+- read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
 See the scoped evidence and limitations in

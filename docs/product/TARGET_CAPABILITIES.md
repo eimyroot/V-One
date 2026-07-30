@@ -25,12 +25,22 @@ Every target capability must define:
 
 ## T1 — Policy Decision Graph
 
-**Status:** PROPOSED
+**Status:** VERIFIED read-only projection foundation; authoritative policy, approval binding,
+persistence, and runtime enforcement remain PROPOSED.
 
 ### Problem
 
 Current approval rules are secure for the present scope but do not yet express a complete,
 explainable matrix over risk, capability, blast radius, reversibility, target, and policy version.
+
+### Verified foundation
+
+Accepted ADR-0006 provides `policy-decision-graph/v1` as a pure deterministic projection over
+caller-supplied current facts. It emits sorted nodes, edges, reason codes, limitations, and a
+canonical digest; it denies informational eligibility when represented current gates fail.
+
+This foundation is not wired into runtime authorization or execution, performs no permission
+lookup, persists nothing, and issues no grant. Its snapshots are caller-supplied and unsigned.
 
 ### Target behavior
 
@@ -51,6 +61,10 @@ normalized request context
 - relevant drift invalidates approval;
 - decision explanation is stored without sensitive payloads;
 - negative and replay tests pass.
+
+The first criterion is VERIFIED for the read-only v1 projection. Approval payload/policy-version/
+expiry binding, stored authoritative decisions, drift invalidation, replay enforcement, and runtime
+policy enforcement remain PROPOSED.
 
 ## T2 — Signed execution grants
 

@@ -43,6 +43,13 @@ voodoo evidence verify
      |
      v
 read-only checkpoint verifier -> deterministic ProofGraph JSON
+
+Caller-supplied immutable snapshot
+     |
+     v
+read-only PDG v1 library -> deterministic policy-decision graph + digest
+     X
+     +-- not wired into runtime authorization or execution
 ```
 
 ## Current components
@@ -70,6 +77,21 @@ read-only checkpoint verifier -> deterministic ProofGraph JSON
 - independent approval rules;
 - execution eligibility checks;
 - emergency stop and recovery controls.
+
+### Read-only policy decision projection
+
+- accepted `policy-decision-graph/v1` pure library;
+- immutable caller-supplied current-fact and `execution.run` permission observations;
+- deterministic canonical nodes, edges, reason codes, limitations, and graph digest;
+- deny-by-default informational projection for missing or failed current gates;
+- no database, persistence, API, CLI, service composition, authorization lookup, execution gate, or
+  adapter invocation;
+- an `ALLOW` projection is not an execution grant and has no runtime authorization authority.
+
+PDG v1 is owner-accepted and locally source/test VERIFIED for this read-only projection scope. The
+latest runtime checkpoint attests exactly
+`main@8a5f36b218c3aa6dce2e4cf771512875f136d839`; it does not attest PDG v1 or
+subsequent source changes.
 
 ### Persistence
 
@@ -214,4 +236,5 @@ Initial integration must be:
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 - [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
+- [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
 - [`docs/adr/`](docs/adr/)
