@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -405,6 +406,225 @@ def test_evidence_is_atomic_and_hash_verifiable(tmp_path: Path) -> None:
     assert expected == actual
     assert evidence.stat().st_mode & 0o777 == 0o600
     assert sidecar.stat().st_mode & 0o777 == 0o600
+    assert sorted(path.name for path in evidence.parent.iterdir()) == [
+        evidence.name,
+        sidecar.name,
+    ]
+
+
+def _evidence_payload(status: str = "VERIFIED_PLAN") -> dict[str, object]:
+    return {
+        "timestamp_utc": "2026-07-30T05:00:00+00:00",
+        "head": "a" * 40,
+        "status": status,
+    }
+
+
+def _paths_for_publication_id(
+    evidence_dir: Path,
+    publication_id: str,
+) -> tuple[Path, Path]:
+    basename = (
+        "review-publication-20260730T050000+0000-"
+        f"{'a' * 12}-{publication_id}.json"
+    )
+    evidence = evidence_dir / basename
+    return evidence, evidence.with_suffix(".json.sha256")
+
+
+def _assert_checksum_pair(evidence: Path, sidecar: Path) -> None:
+    expected, filename = sidecar.read_text(encoding="utf-8").split()
+    assert filename == evidence.name
+    assert expected == hashlib.sha256(evidence.read_bytes()).hexdigest()
+
+
+def test_evidence_same_second_and_head_are_append_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_ids = iter(("01" * 16, "02" * 16))
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: next(publication_ids))
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+
+    first, first_sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("FIRST"),
+        evidence_root=evidence_root,
+    )
+    first_bytes = first.read_bytes()
+    first_sidecar_bytes = first_sidecar.read_bytes()
+    second, second_sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("SECOND"),
+        evidence_root=evidence_root,
+    )
+
+    assert first.name != second.name
+    assert first.read_bytes() == first_bytes
+    assert first_sidecar.read_bytes() == first_sidecar_bytes
+    _assert_checksum_pair(first, first_sidecar)
+    _assert_checksum_pair(second, second_sidecar)
+    assert len(list(evidence_dir.glob("*.json"))) == 2
+    assert len(list(evidence_dir.glob("*.json.sha256"))) == 2
+
+
+def test_forced_publication_id_collision_fails_without_overwrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_id = "03" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    evidence, sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("FIRST"),
+        evidence_root=evidence_root,
+    )
+    before = {evidence: evidence.read_bytes(), sidecar: sidecar.read_bytes()}
+
+    with pytest.raises(MODULE.PublicationError, match="already has a final path"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload("SECOND"),
+            evidence_root=evidence_root,
+        )
+
+    assert {path: path.read_bytes() for path in before} == before
+
+
+@pytest.mark.parametrize("existing", ("json", "sidecar", "pair"))
+def test_preexisting_final_paths_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing: str,
+) -> None:
+    publication_id = "04" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    evidence_dir.mkdir(parents=True)
+    evidence, sidecar = _paths_for_publication_id(evidence_dir, publication_id)
+    if existing in {"json", "pair"}:
+        evidence.write_bytes(b"existing-json")
+    if existing in {"sidecar", "pair"}:
+        sidecar.write_bytes(b"existing-sidecar")
+    before = {path: path.read_bytes() for path in evidence_dir.iterdir()}
+
+    with pytest.raises(MODULE.PublicationError, match="already has a final path"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    assert {path: path.read_bytes() for path in evidence_dir.iterdir()} == before
+
+
+def test_failure_before_sidecar_publication_leaves_no_final_or_temporary_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: "05" * 16)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    original_publish = MODULE._publish_no_clobber
+
+    def fail_before_sidecar(temporary: Path, target: Path) -> None:
+        if target.name.endswith(".json.sha256"):
+            raise OSError("failure before sidecar publication")
+        original_publish(temporary, target)
+
+    monkeypatch.setattr(MODULE, "_publish_no_clobber", fail_before_sidecar)
+    with pytest.raises(OSError, match="before sidecar"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    assert list(evidence_dir.iterdir()) == []
+
+
+def test_failure_after_sidecar_before_json_leaves_complete_orphan_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_id = "06" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    original_publish = MODULE._publish_no_clobber
+    prepared_json: bytes | None = None
+
+    def fail_before_json(temporary: Path, target: Path) -> None:
+        nonlocal prepared_json
+        if target.suffix == ".json":
+            prepared_json = temporary.read_bytes()
+            raise OSError("failure before JSON publication")
+        original_publish(temporary, target)
+
+    monkeypatch.setattr(MODULE, "_publish_no_clobber", fail_before_json)
+    with pytest.raises(OSError, match="before JSON"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    evidence, sidecar = _paths_for_publication_id(evidence_dir, publication_id)
+    assert prepared_json is not None
+    assert not evidence.exists()
+    expected, filename = sidecar.read_text(encoding="utf-8").split()
+    assert filename == evidence.name
+    assert expected == hashlib.sha256(prepared_json).hexdigest()
+    assert sorted(path.name for path in evidence_dir.iterdir()) == [sidecar.name]
+
+
+def test_no_clobber_primitive_refuses_existing_destination(tmp_path: Path) -> None:
+    temporary = tmp_path / "temporary"
+    target = tmp_path / "target"
+    temporary.write_bytes(b"new")
+    target.write_bytes(b"existing")
+
+    with pytest.raises(MODULE.PublicationError, match="already exists"):
+        MODULE._publish_no_clobber(temporary, target)
+
+    assert temporary.read_bytes() == b"new"
+    assert target.read_bytes() == b"existing"
+
+
+def test_concurrent_same_identity_cannot_damage_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: "07" * 16)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+
+    def publish(status: str) -> tuple[Path, Path] | MODULE.PublicationError:
+        try:
+            return MODULE.write_evidence(
+                evidence_dir,
+                _evidence_payload(status),
+                evidence_root=evidence_root,
+            )
+        except MODULE.PublicationError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(publish, ("FIRST", "SECOND")))
+
+    successes = [result for result in results if isinstance(result, tuple)]
+    failures = [result for result in results if isinstance(result, MODULE.PublicationError)]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    _assert_checksum_pair(*successes[0])
+    assert len(list(evidence_dir.glob("*.json"))) == 1
+    assert len(list(evidence_dir.glob("*.json.sha256"))) == 1
+    assert not list(evidence_dir.glob(".*.reserve"))
+    assert not list(evidence_dir.glob(".review-publication-*"))
 
 
 def test_evidence_dir_is_required() -> None:

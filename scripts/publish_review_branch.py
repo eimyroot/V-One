@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -313,6 +314,49 @@ def execute_publication(
     return push, remote_sha
 
 
+def _write_fsynced_temporary(evidence_dir: Path, contents: bytes) -> Path:
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=evidence_dir,
+            prefix=".review-publication-",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        return temporary
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def _publish_no_clobber(temporary: Path, target: Path) -> None:
+    try:
+        os.link(temporary, target)
+    except FileExistsError as exc:
+        raise PublicationError(f"evidence destination already exists: {target}") from exc
+    temporary.unlink()
+
+
+def _reserve_publication_identity(reservation: Path) -> None:
+    try:
+        descriptor = os.open(
+            reservation,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+    except FileExistsError as exc:
+        raise PublicationError(
+            f"evidence publication identity is already reserved: {reservation.name}"
+        ) from exc
+    os.close(descriptor)
+
+
 def write_evidence(
     evidence_dir: Path,
     payload: dict[str, object],
@@ -325,29 +369,42 @@ def write_evidence(
 
     timestamp = str(payload["timestamp_utc"]).replace(":", "").replace("-", "")
     head = str(payload.get("head", "unknown"))[:12]
-    target = evidence_dir / f"review-publication-{timestamp}-{head}.json"
-    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=evidence_dir,
-        prefix=".review-publication-",
-        delete=False,
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(serialized)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.chmod(temporary, 0o600)
-    os.replace(temporary, target)
-    os.chmod(target, 0o600)
-
-    digest = sha256_file(target)
+    publication_id = secrets.token_hex(16)
+    basename = f"review-publication-{timestamp}-{head}-{publication_id}"
+    target = evidence_dir / f"{basename}.json"
     sidecar = target.with_suffix(target.suffix + ".sha256")
-    sidecar.write_text(f"{digest}  {target.name}\n", encoding="utf-8")
-    os.chmod(sidecar, 0o600)
-    return target, sidecar
+    reservation = evidence_dir / f".{basename}.reserve"
+    json_temporary: Path | None = None
+    sidecar_temporary: Path | None = None
+    reservation_owned = False
+
+    try:
+        _reserve_publication_identity(reservation)
+        reservation_owned = True
+        if os.path.lexists(target) or os.path.lexists(sidecar):
+            raise PublicationError(
+                f"evidence publication identity already has a final path: {basename}"
+            )
+
+        serialized = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        digest = hashlib.sha256(serialized).hexdigest()
+        sidecar_contents = f"{digest}  {target.name}\n".encode()
+
+        json_temporary = _write_fsynced_temporary(evidence_dir, serialized)
+        sidecar_temporary = _write_fsynced_temporary(evidence_dir, sidecar_contents)
+
+        _publish_no_clobber(sidecar_temporary, sidecar)
+        sidecar_temporary = None
+        _publish_no_clobber(json_temporary, target)
+        json_temporary = None
+        return target, sidecar
+    finally:
+        if json_temporary is not None:
+            json_temporary.unlink(missing_ok=True)
+        if sidecar_temporary is not None:
+            sidecar_temporary.unlink(missing_ok=True)
+        if reservation_owned:
+            reservation.unlink(missing_ok=True)
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
