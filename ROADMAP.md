@@ -71,11 +71,14 @@ Delivered:
 - nested post-manifest mutation warnings;
 - deterministic ProofGraph v1 JSON;
 - repository-owned frozen-snapshot finalization with fail-closed verification;
+- repository-owned runtime candidate capture;
+- canonical capture→finalize→independent verify closure for
+  `main@8a5f36b218c3aa6dce2e4cf771512875f136d839`, with native Docker runtime
+  verified, smoke passed, healthcheck healthy, and production effects disabled;
 - regression coverage, ADR-0002, and ADR-0004.
 
 Next:
 
-- preserve a fresh runtime-verified checkpoint for the current committed HEAD;
 - add signed checkpoint attestations;
 - add remote byte verification and external anchoring;
 - add SBOM and vulnerability-policy nodes.
@@ -105,11 +108,20 @@ Exit criteria:
 
 ### EPIC-004 — Policy Decision Graph
 
-**Status:** PROPOSED.
+**Status:** VERIFIED for the read-only PDG v1 projection foundation; broader authoritative policy
+and runtime enforcement remain PROPOSED.
 
-Design reference: [`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md).
+Accepted foundation: [`ADR-0006`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md).
+Broader target: [`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md).
 
 Implemented foundation: a pure compatibility evaluator reproduces current environment-based approval requirements and emits deterministic explanations. A default-off runtime compatibility path now consumes that policy owner, preserves current outcomes, and fails closed on evaluator drift; Solo, Team, and Regulated enforcement remain unimplemented.
+
+The accepted read-only PDG v1 slice deterministically projects caller-supplied current facts,
+permission observations, approval-policy decisions, approvals, lifecycle/safety state, and optional
+evidence references into a canonical graph and digest. It has no persistence, API, execution gate,
+runtime authorization authority, or runtime integration. The canonical runtime checkpoint attests
+exactly `main@8a5f36b218c3aa6dce2e4cf771512875f136d839`; it does not attest PDG v1 or
+subsequent source changes.
 
 Goal:
 
@@ -226,10 +238,11 @@ Prerequisites include:
 
 ## Immediate priority order
 
-1. preserve a fresh runtime-verified checkpoint for the current committed HEAD;
-2. specify Policy Decision Graph v1;
-3. specify isolated runner grant and receipt contracts;
-4. implement the read-only CyberCore boundary only after those contracts are reviewed.
+1. specify the execution grant and structured receipt contract;
+2. design and implement the isolated runner boundary against the reviewed contracts;
+3. implement the read-only CyberCore boundary only after execution contracts are reviewed;
+4. keep CyberCore mutation out of scope until artifact binding, isolated execution, and
+   postcondition evidence are separately authorized.
 
 ## Explicit no-go items
 
