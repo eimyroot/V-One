@@ -22,6 +22,12 @@ _GIT_OBJECT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _IMAGE_ID_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SAFE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 _MAX_CAPTURED_OUTPUT = 1024 * 1024
+_CAPTURE_ROOT_MODE = 0o500
+_CAPTURE_ROOT_ENTRIES = {
+    "README.txt": "file",
+    "ops": "directory",
+    "source": "directory",
+}
 
 
 class CheckpointCaptureError(ValueError):
@@ -82,6 +88,7 @@ def capture_runtime_candidate(
     verification: dict[str, Any] | None = None
     state: RepositoryState | None = None
     report: dict[str, Any] | None = None
+    destination_published = False
 
     try:
         git = shutil.which("git")
@@ -139,6 +146,10 @@ def capture_runtime_candidate(
         generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         _write_provenance(staging, state, runtime, generated_at=generated_at)
         _write_checkpoint_readme(staging, state, generated_at=generated_at)
+        _sanitize_capture_root(staging)
+        _validate_capture_root_inventory(staging)
+        _seal_capture_root(staging)
+        _validate_capture_root_inventory(staging)
         _write_outer_manifest(staging)
 
         verification = verify_checkpoint(staging)
@@ -162,18 +173,37 @@ def capture_runtime_candidate(
                 "destination appeared during capture",
                 path=str(target.destination),
             )
-        os.rename(staging, target.destination)
+        staging.chmod(0o700)
+        try:
+            os.rename(staging, target.destination)
+        except OSError:
+            _seal_capture_root(staging)
+            raise
         staging = None
+        destination_published = True
+        _seal_capture_root(target.destination)
+        _validate_capture_root_inventory(target.destination)
 
-        normalized_verification = dict(verification)
-        normalized_verification["checkpoint"] = str(target.destination)
+        verification = verify_checkpoint(target.destination)
+        if (
+            verification.get("valid") is not True
+            or verification.get("errors")
+            or verification.get("warnings") != []
+        ):
+            raise CheckpointCaptureError(
+                "promoted_candidate_verification_failed",
+                "promoted candidate did not pass fail-closed verification without warnings",
+                path=str(target.destination),
+            )
+        _require_repository_unchanged(state, _reobserve_repository(git, root))
+
         report = {
             "schema_version": 1,
             "captured": True,
             "candidate": str(target.destination),
             "head": state.head,
             "image_id": runtime.image_id,
-            "verification": normalized_verification,
+            "verification": verification,
             "errors": [],
         }
     except CheckpointCaptureError as exc:
@@ -182,6 +212,7 @@ def capture_runtime_candidate(
             exc,
             state=state,
             verification=verification,
+            destination_published=destination_published,
         )
     except (OSError, json.JSONDecodeError, subprocess.SubprocessError, tarfile.TarError) as exc:
         error = CheckpointCaptureError(
@@ -194,6 +225,7 @@ def capture_runtime_candidate(
             error,
             state=state,
             verification=verification,
+            destination_published=destination_published,
         )
     finally:
         cleanup_issues: list[dict[str, str]] = []
@@ -818,9 +850,57 @@ def _write_checkpoint_readme(
     )
 
 
+def _sanitize_capture_root(checkpoint: Path) -> None:
+    metadata = checkpoint / ".DS_Store"
+    if not os.path.lexists(metadata):
+        return
+    metadata_stat = os.lstat(metadata)
+    if stat.S_ISLNK(metadata_stat.st_mode) or not stat.S_ISREG(metadata_stat.st_mode):
+        raise CheckpointCaptureError(
+            "capture_root_metadata_invalid",
+            "capture root metadata must be a regular file before removal",
+            path=str(metadata),
+        )
+    metadata.unlink()
+
+
+def _validate_capture_root_inventory(checkpoint: Path) -> None:
+    with os.scandir(checkpoint) as directory_entries:
+        entries = {entry.name: entry for entry in directory_entries}
+    if set(entries) != set(_CAPTURE_ROOT_ENTRIES):
+        raise CheckpointCaptureError(
+            "capture_root_inventory_invalid",
+            "capture root must contain only README.txt, ops, and source",
+            path=str(checkpoint),
+        )
+    for name, expected_type in _CAPTURE_ROOT_ENTRIES.items():
+        entry_stat = entries[name].stat(follow_symlinks=False)
+        valid = (
+            stat.S_ISREG(entry_stat.st_mode)
+            if expected_type == "file"
+            else stat.S_ISDIR(entry_stat.st_mode)
+        )
+        if entries[name].is_symlink() or not valid:
+            raise CheckpointCaptureError(
+                "capture_root_inventory_invalid",
+                f"capture root entry must be a real {expected_type}",
+                path=str(checkpoint / name),
+            )
+
+
+def _seal_capture_root(checkpoint: Path) -> None:
+    checkpoint.chmod(_CAPTURE_ROOT_MODE)
+    root_mode = stat.S_IMODE(os.lstat(checkpoint).st_mode)
+    if root_mode != _CAPTURE_ROOT_MODE:
+        raise CheckpointCaptureError(
+            "capture_root_sealing_failed",
+            "capture root did not retain required read/traverse-only permissions",
+            path=str(checkpoint),
+        )
+
+
 def _write_outer_manifest(checkpoint: Path) -> None:
     manifest = checkpoint / "ops" / "SHA256SUMS"
-    manifest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     files: list[Path] = []
     for directory, directory_names, file_names in os.walk(checkpoint, followlinks=False):
         directory_names.sort()
@@ -1011,6 +1091,9 @@ def _require_task_image_absent(docker: str, image: str, *, cwd: Path) -> None:
 
 
 def _remove_capture_staging(path: Path) -> None:
+    path_stat = os.lstat(path)
+    if stat.S_ISDIR(path_stat.st_mode) and not stat.S_ISLNK(path_stat.st_mode):
+        path.chmod(0o700)
     shutil.rmtree(path)
 
 
@@ -1102,8 +1185,9 @@ def _failure_report(
     *,
     state: RepositoryState | None,
     verification: dict[str, Any] | None,
+    destination_published: bool = False,
 ) -> dict[str, Any]:
-    return {
+    report = {
         "schema_version": 1,
         "captured": False,
         "candidate": str(destination),
@@ -1112,6 +1196,9 @@ def _failure_report(
         "verification": verification,
         "errors": [_issue(error.code, error.message, path=error.path)],
     }
+    if destination_published:
+        report["destination_published"] = True
+    return report
 
 
 def _issue(code: str, message: str, *, path: str | None = None) -> dict[str, str]:

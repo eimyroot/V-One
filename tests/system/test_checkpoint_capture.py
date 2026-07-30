@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -206,6 +209,19 @@ def _error_code(report: dict[str, Any]) -> str:
     return report["errors"][0]["code"]
 
 
+def _inject_after_checkpoint_readme(
+    monkeypatch: pytest.MonkeyPatch,
+    action: Callable[[Path], None],
+) -> None:
+    original = checkpoint_capture._write_checkpoint_readme
+
+    def wrapped(checkpoint: Path, *args: Any, **kwargs: Any) -> None:
+        original(checkpoint, *args, **kwargs)
+        action(checkpoint)
+
+    monkeypatch.setattr(checkpoint_capture, "_write_checkpoint_readme", wrapped)
+
+
 def test_valid_capture_finalizes_and_verifies_without_warnings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -222,9 +238,11 @@ def test_valid_capture_finalizes_and_verifies_without_warnings(
     branch = _run_git(repository, "branch", "--show-current")
     report = capture_runtime_candidate(candidate, repository=repository)
 
-    assert report["captured"] is True
+    assert report["captured"] is True, report["errors"]
     assert report["errors"] == []
     assert report["head"] == head
+    assert report["verification"]["checkpoint"] == str(candidate)
+    assert report["verification"]["warnings"] == []
     candidate_verification = verify_checkpoint(candidate)
     assert candidate_verification["valid"] is True
     assert candidate_verification["errors"] == []
@@ -238,13 +256,235 @@ def test_valid_capture_finalizes_and_verifies_without_warnings(
     assert build_command[-1].endswith("/source")
     assert build_command[-2].endswith("/source/Dockerfile.product")
 
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
     finalization = finalize_checkpoint(candidate, final)
     assert finalization["finalized"] is True
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
     final_verification = verify_checkpoint(final)
     assert final_verification["valid"] is True
     assert final_verification["errors"] == []
     assert final_verification["warnings"] == []
     assert _run_git(repository, "status", "--porcelain=v1", "--untracked-files=all") == ""
+
+
+def test_capture_removes_regular_root_ds_store_before_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    _inject_after_checkpoint_readme(
+        monkeypatch,
+        lambda checkpoint: (checkpoint / ".DS_Store").write_bytes(b"host metadata"),
+    )
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is True, report["errors"]
+    assert not (candidate / ".DS_Store").exists()
+    assert "  .DS_Store\n" not in (candidate / "ops" / "SHA256SUMS").read_text(
+        encoding="utf-8"
+    )
+    assert {entry.name for entry in candidate.iterdir()} == {
+        "README.txt",
+        "ops",
+        "source",
+    }
+
+
+@pytest.mark.parametrize("metadata_type", ["symlink", "directory"])
+def test_capture_rejects_non_regular_root_ds_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    metadata_type: str,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+
+    def add_invalid_metadata(checkpoint: Path) -> None:
+        metadata = checkpoint / ".DS_Store"
+        if metadata_type == "symlink":
+            metadata.symlink_to("README.txt")
+        else:
+            metadata.mkdir()
+
+    _inject_after_checkpoint_readme(monkeypatch, add_invalid_metadata)
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is False
+    assert _error_code(report) == "capture_root_metadata_invalid"
+    assert not candidate.exists()
+    assert list(tmp_path.glob(".candidate.capture-*")) == []
+
+
+def test_capture_rejects_unexpected_root_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    _inject_after_checkpoint_readme(
+        monkeypatch,
+        lambda checkpoint: (checkpoint / "unexpected.txt").write_text(
+            "unexpected\n",
+            encoding="utf-8",
+        ),
+    )
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is False
+    assert _error_code(report) == "capture_root_inventory_invalid"
+    assert not candidate.exists()
+    assert list(tmp_path.glob(".candidate.capture-*")) == []
+
+
+def test_capture_seals_staging_root_before_manifest_and_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    observed_modes: list[int] = []
+    original_manifest = checkpoint_capture._write_outer_manifest
+    original_verify = checkpoint_capture.verify_checkpoint
+
+    def inspect_manifest_root(checkpoint: Path) -> None:
+        observed_modes.append(stat.S_IMODE(checkpoint.stat().st_mode))
+        original_manifest(checkpoint)
+
+    def inspect_verified_root(checkpoint: str | Path) -> dict[str, Any]:
+        path = Path(checkpoint)
+        observed_modes.append(stat.S_IMODE(path.stat().st_mode))
+        return original_verify(path)
+
+    monkeypatch.setattr(
+        checkpoint_capture,
+        "_write_outer_manifest",
+        inspect_manifest_root,
+    )
+    monkeypatch.setattr(checkpoint_capture, "verify_checkpoint", inspect_verified_root)
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is True, (report["errors"], observed_modes)
+    assert observed_modes == [0o500, 0o500, 0o500]
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+    assert stat.S_IMODE((candidate / "ops").stat().st_mode) & stat.S_IWUSR
+
+
+def test_successful_capture_sealed_root_prevents_new_root_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if os.name != "posix" or os.geteuid() == 0:
+        pytest.skip("requires non-root POSIX directory permission enforcement")
+
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is True, report["errors"]
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+    unexpected = candidate / "unexpected.txt"
+    with pytest.raises(PermissionError):
+        unexpected.write_text("unexpected\n", encoding="utf-8")
+    assert not unexpected.exists()
+
+
+def test_capture_cleans_sealed_task_staging_after_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+
+    def fail_after_sealing(checkpoint: Path) -> None:
+        assert stat.S_IMODE(checkpoint.stat().st_mode) == 0o500
+        raise OSError("simulated failure after root sealing")
+
+    monkeypatch.setattr(
+        checkpoint_capture,
+        "_write_outer_manifest",
+        fail_after_sealing,
+    )
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is False
+    assert _error_code(report) == "capture_io_error"
+    assert not candidate.exists()
+    assert list(tmp_path.glob(".candidate.capture-*")) == []
+
+
+def test_capture_independently_verifies_promoted_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    verified_paths: list[Path] = []
+    original_verify = checkpoint_capture.verify_checkpoint
+
+    def record_verification(checkpoint: str | Path) -> dict[str, Any]:
+        path = Path(checkpoint)
+        verified_paths.append(path)
+        return original_verify(path)
+
+    monkeypatch.setattr(checkpoint_capture, "verify_checkpoint", record_verification)
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is True
+    assert len(verified_paths) == 2
+    assert verified_paths[0] != candidate
+    assert verified_paths[1] == candidate
+    assert report["verification"]["checkpoint"] == str(candidate)
+
+
+def test_capture_preserves_invalid_destination_after_post_promotion_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    original_verify = checkpoint_capture.verify_checkpoint
+
+    def mutate_promoted_candidate(checkpoint: str | Path) -> dict[str, Any]:
+        path = Path(checkpoint)
+        if path == candidate:
+            (path / "README.txt").write_text(
+                "post-promotion mutation\n",
+                encoding="utf-8",
+            )
+        return original_verify(path)
+
+    monkeypatch.setattr(
+        checkpoint_capture,
+        "verify_checkpoint",
+        mutate_promoted_candidate,
+    )
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is False
+    assert report["destination_published"] is True
+    assert _error_code(report) == "promoted_candidate_verification_failed"
+    assert report["verification"]["valid"] is False
+    assert candidate.is_dir()
+    assert (candidate / "README.txt").read_text(encoding="utf-8") == (
+        "post-promotion mutation\n"
+    )
 
 
 def test_capture_rejects_dirty_tracked_worktree(

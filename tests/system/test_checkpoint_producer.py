@@ -44,6 +44,193 @@ def test_finalizer_publishes_verified_checkpoint_without_warnings(tmp_path: Path
     assert verification["warnings"] == []
 
 
+def test_finalizer_accepts_sealed_candidate_and_preserves_source(
+    tmp_path: Path,
+) -> None:
+    candidate = _build_checkpoint(tmp_path)
+    candidate.chmod(0o500)
+    destination = tmp_path / "final-checkpoint"
+    candidate_digest = _tree_digest(candidate)
+
+    report = finalize_checkpoint(candidate, destination)
+
+    assert report["finalized"] is True, report["errors"]
+    assert report["errors"] == []
+    assert report["verification"]["checkpoint"] == str(destination)
+    assert report["verification"]["valid"] is True
+    assert report["verification"]["errors"] == []
+    assert report["verification"]["warnings"] == []
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+    assert _tree_digest(candidate) == candidate_digest
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o500
+
+
+def test_finalizer_opens_staging_only_after_verify_and_reseals_before_promoted_verify(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    candidate = _build_checkpoint(tmp_path)
+    candidate.chmod(0o500)
+    destination = tmp_path / "final-checkpoint"
+    events: list[tuple[str, str, int, int | None]] = []
+    original_verify = checkpoint_producer.verify_checkpoint
+    original_require_mode = checkpoint_producer._require_finalizer_owned_directory_mode
+
+    def observe_verify(path: str | Path) -> dict[str, object]:
+        checkpoint = Path(path)
+        events.append(
+            (
+                "verify",
+                checkpoint.name,
+                stat.S_IMODE(checkpoint.stat().st_mode),
+                None,
+            )
+        )
+        return original_verify(checkpoint)
+
+    def observe_required_mode(
+        path: Path,
+        mode: int,
+        *,
+        code: str,
+        message: str,
+    ) -> None:
+        events.append(
+            (
+                "chmod",
+                path.name,
+                stat.S_IMODE(path.stat().st_mode),
+                mode,
+            )
+        )
+        original_require_mode(path, mode, code=code, message=message)
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        checkpoint_producer,
+        "verify_checkpoint",
+        observe_verify,
+    )
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        checkpoint_producer,
+        "_require_finalizer_owned_directory_mode",
+        observe_required_mode,
+    )
+
+    report = checkpoint_producer.finalize_checkpoint(candidate, destination)
+
+    assert report["finalized"] is True, report["errors"]
+    assert events[0] == ("verify", candidate.name, 0o500, None)
+    assert events[1][0] == "verify"
+    assert events[1][1].startswith(".final-checkpoint.staging-")
+    assert events[1][2:] == (0o500, None)
+    assert events[2][0] == "chmod"
+    assert events[2][1].startswith(".final-checkpoint.staging-")
+    assert events[2][2:] == (0o500, 0o700)
+    assert events[3] == ("chmod", destination.name, 0o700, 0o500)
+    assert events[4] == ("verify", destination.name, 0o500, None)
+
+
+def test_finalizer_preserves_destination_when_resealing_fails(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    candidate = _build_checkpoint(tmp_path)
+    candidate.chmod(0o500)
+    destination = tmp_path / "final-checkpoint"
+    original_set_mode = checkpoint_producer._set_finalizer_owned_directory_mode
+
+    def fail_destination_reseal(path: Path, mode: int) -> None:
+        if path == destination and mode == 0o500:
+            raise PermissionError("simulated promoted destination reseal failure")
+        original_set_mode(path, mode)
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        checkpoint_producer,
+        "_set_finalizer_owned_directory_mode",
+        fail_destination_reseal,
+    )
+
+    report = checkpoint_producer.finalize_checkpoint(candidate, destination)
+
+    assert report["finalized"] is False
+    assert report["destination_published"] is True
+    assert report["errors"][0]["code"] == "promoted_destination_resealing_failed"
+    assert destination.is_dir()
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o700
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+
+
+def test_finalizer_preserves_destination_when_promoted_verification_fails(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    candidate = _build_checkpoint(tmp_path)
+    candidate.chmod(0o500)
+    destination = tmp_path / "final-checkpoint"
+    original_verify = checkpoint_producer.verify_checkpoint
+
+    def fail_promoted_verification(path: str | Path) -> dict[str, object]:
+        checkpoint = Path(path)
+        report = original_verify(checkpoint)
+        if checkpoint == destination:
+            assert stat.S_IMODE(checkpoint.stat().st_mode) == 0o500
+            report["valid"] = False
+            report["errors"] = [{"code": "simulated_promoted_verification_failure"}]
+        return report
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        checkpoint_producer,
+        "verify_checkpoint",
+        fail_promoted_verification,
+    )
+
+    report = checkpoint_producer.finalize_checkpoint(candidate, destination)
+
+    assert report["finalized"] is False
+    assert report["destination_published"] is True
+    assert report["errors"][0]["code"] == "promoted_destination_verification_failed"
+    assert report["verification"]["checkpoint"] == str(destination)
+    assert report["verification"]["valid"] is False
+    assert destination.is_dir()
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o500
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+
+
+def test_finalizer_cleans_sealed_staging_after_prepromotion_failure(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    candidate = _build_checkpoint(tmp_path)
+    candidate.chmod(0o500)
+    destination = tmp_path / "final-checkpoint"
+    original_verify = checkpoint_producer.verify_checkpoint
+    observed_staging_modes: list[int] = []
+
+    def fail_staged_verification(path: str | Path) -> dict[str, object]:
+        checkpoint = Path(path)
+        report = original_verify(checkpoint)
+        if checkpoint.name.startswith(".final-checkpoint.staging-"):
+            observed_staging_modes.append(stat.S_IMODE(checkpoint.stat().st_mode))
+            report["valid"] = False
+            report["errors"] = [{"code": "simulated_staged_verification_failure"}]
+        return report
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        checkpoint_producer,
+        "verify_checkpoint",
+        fail_staged_verification,
+    )
+
+    report = checkpoint_producer.finalize_checkpoint(candidate, destination)
+
+    assert report["finalized"] is False
+    assert report["errors"][0]["code"] == "verification_failed"
+    assert observed_staging_modes == [0o500]
+    assert list(tmp_path.glob(".final-checkpoint.staging-*")) == []
+    assert not destination.exists()
+    assert stat.S_IMODE(candidate.stat().st_mode) == 0o500
+
+
 def test_finalizer_freezes_snapshot_before_live_source_changes(tmp_path: Path) -> None:
     candidate = _build_checkpoint(tmp_path)
     destination = tmp_path / "final-checkpoint"

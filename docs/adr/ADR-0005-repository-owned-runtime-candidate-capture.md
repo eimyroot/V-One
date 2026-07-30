@@ -41,8 +41,8 @@ VRATNÁ: ANO
 DŮKAZNĚ OVĚŘITELNÁ: ANO
 
 TEST_PLAN: Deterministic Git fixtures and fake Docker subprocess boundary, then full repository gates.
-SUCCESS_EVIDENCE: Candidate passes the existing verifier and then finalizer with zero final warnings.
-FAILURE_SIGNAL: Stable captured=false JSON, non-zero CLI exit and no promoted partial candidate.
+SUCCESS_EVIDENCE: Promoted candidate passes an independent verifier run with zero errors or warnings.
+FAILURE_SIGNAL: Stable captured=false JSON, non-zero CLI exit and preserved invalid promoted evidence.
 ROLLBACK: Revert capture module, CLI route, smoke evidence mode, tests and this documentation.
 POST_STATE_VERIFICATION: Repository identity unchanged; task-owned Docker resources removed.
 
@@ -129,6 +129,21 @@ The command re-observes the complete repository identity and cleanliness after s
 after runtime capture and after candidate verification. Drift fails as
 `repository_changed_during_capture`.
 
+Before manifesting, capture removes a regular root `.DS_Store` only from its private task-owned
+staging directory. A symlink, directory or other special entry at that path fails closed. The
+capture root must then contain exactly `README.txt`, `ops/` and `source/`, with their expected
+regular-file or real-directory types. After validating that inventory, capture seals only the
+staging root to read/traverse-only mode `0500` and validates the inventory again. Nested `ops/`
+remains writable so the separate finalizer can create its owned nested manifests later.
+
+The current macOS filesystem rejects atomic rename of the `0500` directory. Capture therefore
+restores mode `0700` only on its task-owned staging root for that rename, immediately reseals the
+promoted root to `0500`, validates inventory and performs promoted verification. A successful
+candidate remains sealed at `0500`; capture does not restore owner write permission after promotion.
+Compatibility with the separate repository-owned finalizer must be demonstrated by an integration test
+that finalizes the sealed candidate and independently verifies the final checkpoint without
+warnings.
+
 ## Runtime evidence
 
 The capture owner reuses:
@@ -170,10 +185,10 @@ ops/provenance/
 ops/SHA256SUMS
 ```
 
-The capture owner writes the required candidate outer manifest because ADR-0004 requires the
-candidate to pass verification before freezing. It does not write pre-finalization nested runtime
-or commit manifests. The finalizer remains responsible for frozen nested manifests and the final
-outer manifest.
+The capture owner writes the required candidate outer manifest only after root inventory validation
+and root sealing because ADR-0004 requires the candidate to pass verification before freezing. It
+does not write pre-finalization nested runtime or commit manifests. The finalizer remains
+responsible for frozen nested manifests and the final outer manifest.
 
 Provenance is limited to directly observed local facts:
 
@@ -185,8 +200,11 @@ GITHUB_PUSH=NOT_PERFORMED
 PRODUCTION_EFFECT=NONE
 ```
 
-`captured=true` is returned only after the existing `verify_checkpoint()` reports `valid=true` with
-no errors and repository identity remains unchanged.
+Capture verifies the sealed private staging tree, atomically renames it to the caller-selected
+destination, and immediately verifies that promoted destination again. `captured=true` is returned
+only when the promoted verifier result reports `valid=true`, `errors=[]` and `warnings=[]`, and the
+repository identity remains unchanged. The successful destination root remains mode `0500`. The
+success report carries that promoted-path verification, not the earlier staging-path result.
 
 ## Failure and cleanup
 
@@ -196,8 +214,14 @@ production-effect, image-identity, verifier, repository-drift, I/O and cleanup f
 
 Candidate bytes are first written to a task-created sibling staging directory. A handled failure
 removes only that staging directory and task-owned Docker resources. The caller-selected destination
-is never recursively removed or overwritten. A cleanup failure is explicit and prevents a success
-claim.
+is never recursively removed or overwritten. Cleanup may restore owner write permission only on the
+task-owned temporary staging root before removing it. A cleanup failure is explicit and prevents a
+success claim.
+
+If verification fails after atomic promotion, capture returns the stable
+`promoted_candidate_verification_failed` code with `captured=false` and
+`destination_published=true`. The invalid destination is preserved unchanged for evidence and
+forensics; capture never silently repairs or removes it.
 
 ## Security properties and limitations
 
@@ -207,8 +231,10 @@ claim.
 - no dependency, database, persistence model or remote service is added;
 - production effects remain explicitly disabled;
 - no registry push, fetch, publication, signing, release or deployment occurs;
-- same-operating-system-identity races remain possible and are bounded by repeated repository
-  observations plus the finalizer snapshot protocol;
+- root sealing blocks ordinary same-user metadata creation but is not cryptographic immutability;
+  a hostile process with the same operating-system identity can restore permissions or mutate
+  writable nested payloads, so repeated repository observation and promoted-destination verification
+  remain required;
 - Docker daemon control remains a privileged local trust boundary;
 - this proposal is not independently approved and cannot authorize its own R3 acceptance.
 
@@ -222,6 +248,11 @@ Required evidence includes:
 - dirty, untracked, detached, destination, unsupported-entry and repository-drift rejection;
 - Docker unavailable/build/smoke/health/production-effect/image-identity rejection;
 - candidate-verifier and cleanup-failure rejection;
+- regular root `.DS_Store` sanitization, special metadata rejection, exact root inventory and root
+  sealing before manifesting;
+- independent promoted-destination verification and preservation of invalid promoted evidence;
+- successful finalization of the sealed `0500` candidate and independent zero-warning verification
+  of the final checkpoint;
 - CLI JSON and exit-code coverage;
 - existing two-argument smoke compatibility;
 - lint, compile, JavaScript syntax, full tests, readiness and locked dependency audit.

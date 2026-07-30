@@ -133,9 +133,9 @@ def finalize_checkpoint(candidate: str | Path, destination: str | Path) -> dict[
 
         verification = verify_checkpoint(staging)
         if (
-            not verification.get("valid")
-            or verification.get("errors")
-            or verification.get("warnings")
+            verification.get("valid") is not True
+            or verification.get("errors") != []
+            or verification.get("warnings") != []
         ):
             raise CheckpointFinalizationError(
                 "verification_failed",
@@ -149,18 +149,39 @@ def finalize_checkpoint(candidate: str | Path, destination: str | Path) -> dict[
                 "destination appeared during finalization",
                 path=str(target.destination),
             )
+        _require_finalizer_owned_directory_mode(
+            staging,
+            0o700,
+            code="staging_promotion_permission_failed",
+            message="verified finalizer staging could not be opened for atomic promotion",
+        )
         os.rename(staging, target.destination)
         staging = None
         destination_published = True
+        _require_finalizer_owned_directory_mode(
+            target.destination,
+            0o500,
+            code="promoted_destination_resealing_failed",
+            message="promoted destination could not be resealed read/traverse-only",
+        )
 
-        normalized_verification = dict(verification)
-        normalized_verification["checkpoint"] = str(target.destination)
+        verification = verify_checkpoint(target.destination)
+        if (
+            verification.get("valid") is not True
+            or verification.get("errors") != []
+            or verification.get("warnings") != []
+        ):
+            raise CheckpointFinalizationError(
+                "promoted_destination_verification_failed",
+                "promoted destination did not pass fail-closed verification without warnings",
+                path=str(target.destination),
+            )
         report = {
             "schema_version": 1,
             "finalized": True,
             "candidate": str(target.candidate),
             "destination": str(target.destination),
-            "verification": normalized_verification,
+            "verification": verification,
             "errors": [],
         }
     except CheckpointFinalizationError as exc:
@@ -191,8 +212,12 @@ def finalize_checkpoint(candidate: str | Path, destination: str | Path) -> dict[
         if report is not None and cleanup_issues:
             report["errors"] = [*report.get("errors", []), *cleanup_issues]
             report["finalized"] = False
-            if destination_published:
-                report["destination_published"] = True
+        if (
+            report is not None
+            and destination_published
+            and report.get("finalized") is not True
+        ):
+            report["destination_published"] = True
 
     if report is None:
         raise RuntimeError("finalization finished without a structured report")
@@ -262,11 +287,69 @@ def _cleanup_issue(
 
 
 def _remove_staging(path: Path) -> None:
+    path_stat = os.lstat(path)
+    if (
+        stat.S_ISDIR(path_stat.st_mode)
+        and not stat.S_ISLNK(path_stat.st_mode)
+        and not path_stat.st_mode & stat.S_IWUSR
+    ):
+        _set_finalizer_owned_directory_mode(
+            path,
+            stat.S_IMODE(path_stat.st_mode) | stat.S_IWUSR,
+        )
     shutil.rmtree(path)
 
 
 def _unlink_lock(path: Path) -> None:
     path.unlink()
+
+
+def _require_finalizer_owned_directory_mode(
+    path: Path,
+    mode: int,
+    *,
+    code: str,
+    message: str,
+) -> None:
+    try:
+        _set_finalizer_owned_directory_mode(path, mode)
+    except OSError as exc:
+        raise CheckpointFinalizationError(
+            code,
+            f"{message}: {type(exc).__name__}: {exc}",
+            path=str(path),
+        ) from exc
+
+
+def _set_finalizer_owned_directory_mode(path: Path, mode: int) -> None:
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_DIRECTORY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            not stat.S_ISDIR(opened.st_mode)
+            or stat.S_ISLNK(current.st_mode)
+            or not stat.S_ISDIR(current.st_mode)
+            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+        ):
+            raise OSError("finalizer-owned directory identity changed before chmod")
+
+        os.fchmod(descriptor, mode)
+
+        changed = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            (changed.st_dev, changed.st_ino) != (current.st_dev, current.st_ino)
+            or stat.S_IMODE(changed.st_mode) != mode
+            or stat.S_IMODE(current.st_mode) != mode
+        ):
+            raise OSError("finalizer-owned directory did not retain the required mode")
+    finally:
+        os.close(descriptor)
 
 
 def _reject_legacy_runtime_exception(root: Path) -> None:
