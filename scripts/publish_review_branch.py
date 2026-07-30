@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ALLOWED_GITHUB_REPOSITORY = "https://github.com/nulleimy/V-One.git"
+CANONICAL_EVIDENCE_ROOT = Path("/Users/eimyna/00_DEV/V-ONE-EVIDENCE")
 DEFAULT_BASE_REF = "origin/main"
+DEFAULT_BASE_FETCH_REFSPEC = "+refs/heads/main:refs/remotes/origin/main"
 TARGET_PREFIX = "review/"
 PROTECTED_BRANCHES = frozenset({"main", "master", "trunk", "develop", "production"})
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -105,6 +108,23 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_evidence_dir(
+    evidence_dir: Path,
+    *,
+    evidence_root: Path | None = None,
+) -> Path:
+    root = (evidence_root or CANONICAL_EVIDENCE_ROOT).expanduser().resolve()
+    resolved = evidence_dir.expanduser().resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise PublicationError(
+            "evidence directory must resolve beneath the canonical durable evidence root: "
+            f"root={root} actual={resolved}"
+        ) from exc
+    return resolved
+
+
 def verify_sha256_manifest(repo_root: Path, manifest_name: str) -> str:
     manifest_path = repo_root / manifest_name
     if not manifest_path.is_file():
@@ -141,6 +161,14 @@ def expected_approval(plan: PublicationPlan) -> str:
 def _validate_expected_head(expected_head: str) -> None:
     if not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise PublicationError("--expected-head must be a full lowercase 40-character Git SHA")
+
+
+def fetch_origin_base(repo_root: Path, base_ref: str) -> None:
+    if base_ref != DEFAULT_BASE_REF:
+        raise PublicationError(
+            f"unsupported --base-ref: expected={DEFAULT_BASE_REF!r} actual={base_ref!r}"
+        )
+    git(repo_root, "fetch", "--no-tags", "origin", DEFAULT_BASE_FETCH_REFSPEC)
 
 
 def build_plan(
@@ -186,7 +214,7 @@ def build_plan(
         )
 
     if fetch_origin:
-        git(repo_root, "fetch", "--prune", "origin")
+        fetch_origin_base(repo_root, base_ref)
 
     git(repo_root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
     ancestor = git(repo_root, "merge-base", "--is-ancestor", base_ref, "HEAD", check=False)
@@ -286,36 +314,97 @@ def execute_publication(
     return push, remote_sha
 
 
-def write_evidence(evidence_dir: Path, payload: dict[str, object]) -> tuple[Path, Path]:
-    evidence_dir = evidence_dir.expanduser().resolve()
+def _write_fsynced_temporary(evidence_dir: Path, contents: bytes) -> Path:
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=evidence_dir,
+            prefix=".review-publication-",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        return temporary
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def _publish_no_clobber(temporary: Path, target: Path) -> None:
+    try:
+        os.link(temporary, target)
+    except FileExistsError as exc:
+        raise PublicationError(f"evidence destination already exists: {target}") from exc
+    temporary.unlink()
+
+
+def _reserve_publication_identity(reservation: Path) -> None:
+    try:
+        descriptor = os.open(
+            reservation,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+    except FileExistsError as exc:
+        raise PublicationError(
+            f"evidence publication identity is already reserved: {reservation.name}"
+        ) from exc
+    os.close(descriptor)
+
+
+def write_evidence(
+    evidence_dir: Path,
+    payload: dict[str, object],
+    *,
+    evidence_root: Path | None = None,
+) -> tuple[Path, Path]:
+    evidence_dir = validate_evidence_dir(evidence_dir, evidence_root=evidence_root)
     evidence_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(evidence_dir, 0o700)
 
     timestamp = str(payload["timestamp_utc"]).replace(":", "").replace("-", "")
     head = str(payload.get("head", "unknown"))[:12]
-    target = evidence_dir / f"review-publication-{timestamp}-{head}.json"
-    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=evidence_dir,
-        prefix=".review-publication-",
-        delete=False,
-    ) as handle:
-        temporary = Path(handle.name)
-        handle.write(serialized)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.chmod(temporary, 0o600)
-    os.replace(temporary, target)
-    os.chmod(target, 0o600)
-
-    digest = sha256_file(target)
+    publication_id = secrets.token_hex(16)
+    basename = f"review-publication-{timestamp}-{head}-{publication_id}"
+    target = evidence_dir / f"{basename}.json"
     sidecar = target.with_suffix(target.suffix + ".sha256")
-    sidecar.write_text(f"{digest}  {target.name}\n", encoding="utf-8")
-    os.chmod(sidecar, 0o600)
-    return target, sidecar
+    reservation = evidence_dir / f".{basename}.reserve"
+    json_temporary: Path | None = None
+    sidecar_temporary: Path | None = None
+    reservation_owned = False
+
+    try:
+        _reserve_publication_identity(reservation)
+        reservation_owned = True
+        if os.path.lexists(target) or os.path.lexists(sidecar):
+            raise PublicationError(
+                f"evidence publication identity already has a final path: {basename}"
+            )
+
+        serialized = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        digest = hashlib.sha256(serialized).hexdigest()
+        sidecar_contents = f"{digest}  {target.name}\n".encode()
+
+        json_temporary = _write_fsynced_temporary(evidence_dir, serialized)
+        sidecar_temporary = _write_fsynced_temporary(evidence_dir, sidecar_contents)
+
+        _publish_no_clobber(sidecar_temporary, sidecar)
+        sidecar_temporary = None
+        _publish_no_clobber(json_temporary, target)
+        json_temporary = None
+        return target, sidecar
+    finally:
+        if json_temporary is not None:
+            json_temporary.unlink(missing_ok=True)
+        if sidecar_temporary is not None:
+            sidecar_temporary.unlink(missing_ok=True)
+        if reservation_owned:
+            reservation.unlink(missing_ok=True)
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -328,11 +417,19 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--target-branch", required=True)
     parser.add_argument("--expected-commit-count", required=True, type=int)
-    parser.add_argument("--base-ref", default=DEFAULT_BASE_REF)
+    parser.add_argument(
+        "--base-ref",
+        default=DEFAULT_BASE_REF,
+        help=f"publication base ref; currently only {DEFAULT_BASE_REF!r} is supported",
+    )
     parser.add_argument("--repository-url", default=ALLOWED_GITHUB_REPOSITORY)
     parser.add_argument(
         "--evidence-dir",
-        default="~/Downloads/voodoo-review-publication-evidence",
+        required=True,
+        help=(
+            "durable evidence directory; its resolved path must be the canonical evidence root "
+            f"{CANONICAL_EVIDENCE_ROOT} or a descendant"
+        ),
     )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--approval")
@@ -348,8 +445,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "mode": "execute" if args.execute else "plan",
         "status": "BLOCKED",
     }
+    evidence_dir: Path | None = None
 
     try:
+        evidence_dir = validate_evidence_dir(Path(args.evidence_dir))
         plan = build_plan(
             repo_root=Path.cwd(),
             expected_head=args.expected_head,
@@ -367,7 +466,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if not args.execute:
             evidence["status"] = "VERIFIED_PLAN"
-            evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
+            evidence_path, sha_path = write_evidence(evidence_dir, evidence)
             print("PUBLICATION_STATUS=VERIFIED_PLAN")
             print(f"HEAD={plan.head}")
             print(f"COMMITS={plan.commit_count}")
@@ -388,7 +487,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence["push_stderr"] = push.stderr.strip()
         evidence["remote_sha"] = remote_sha
         evidence["status"] = "IMPLEMENTED_VERIFIED_REMOTE_BRANCH"
-        evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
+        evidence_path, sha_path = write_evidence(evidence_dir, evidence)
 
         print("PUBLICATION_STATUS=IMPLEMENTED_VERIFIED_REMOTE_BRANCH")
         print(f"REMOTE_SHA={remote_sha}")
@@ -398,12 +497,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except PublicationError as exc:
         evidence["error"] = str(exc)
-        try:
-            evidence_path, sha_path = write_evidence(Path(args.evidence_dir), evidence)
-            print(f"EVIDENCE_FILE={evidence_path}", file=sys.stderr)
-            print(f"EVIDENCE_SHA256_FILE={sha_path}", file=sys.stderr)
-        except OSError as evidence_error:
-            print(f"EVIDENCE_WRITE_ERROR={evidence_error}", file=sys.stderr)
+        if evidence_dir is not None:
+            try:
+                evidence_path, sha_path = write_evidence(evidence_dir, evidence)
+                print(f"EVIDENCE_FILE={evidence_path}", file=sys.stderr)
+                print(f"EVIDENCE_SHA256_FILE={sha_path}", file=sys.stderr)
+            except (OSError, PublicationError) as evidence_error:
+                print(f"EVIDENCE_WRITE_ERROR={evidence_error}", file=sys.stderr)
         print("PUBLICATION_STATUS=BLOCKED", file=sys.stderr)
         print(f"BLOCK_REASON={exc}", file=sys.stderr)
         return 2

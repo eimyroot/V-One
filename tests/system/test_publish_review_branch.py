@@ -4,7 +4,9 @@ import hashlib
 import importlib.util
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -61,9 +63,42 @@ def create_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     return repo, remote, head
 
 
+def tag_refs(repo: Path) -> str:
+    return run(
+        "git",
+        "for-each-ref",
+        "--format=%(refname) %(objectname)",
+        "refs/tags/",
+        cwd=repo,
+    ).stdout
+
+
+def configure_adversarial_tag_fetch(repo: Path) -> None:
+    for key, value in (
+        ("remote.origin.tagOpt", "--tags"),
+        ("remote.origin.prune", "true"),
+        ("remote.origin.pruneTags", "true"),
+        ("fetch.prune", "true"),
+        ("fetch.pruneTags", "true"),
+    ):
+        run("git", "config", key, value, cwd=repo)
+    run(
+        "git",
+        "config",
+        "--add",
+        "remote.origin.fetch",
+        "+refs/tags/*:refs/tags/*",
+        cwd=repo,
+    )
+
+
 def test_policy_accepts_only_review_branches() -> None:
     policy = MODULE.PublicationPolicy()
+    policy.validate_repository_url(MODULE.ALLOWED_GITHUB_REPOSITORY)
     policy.validate_target_branch("review/admin-session-revocation-v1")
+
+    with pytest.raises(MODULE.PublicationError, match="not allowlisted"):
+        policy.validate_repository_url("https://example.invalid/not-allowed.git")
 
     for invalid in ("main", "local/test", "review/", "review/bad branch", "review/a..b"):
         with pytest.raises(MODULE.PublicationError):
@@ -119,6 +154,216 @@ def test_plan_dry_run_and_execute_are_fail_closed(tmp_path: Path) -> None:
     assert remote_sha == head
 
 
+def test_freshness_fetch_protects_complete_tag_set_under_adversarial_configuration(
+    tmp_path: Path,
+) -> None:
+    repo, remote, head = create_repository(tmp_path)
+    control = tmp_path / "generic-fetch-control"
+    run(
+        "git",
+        "clone",
+        "--no-tags",
+        "--branch",
+        "main",
+        str(remote),
+        str(control),
+        cwd=tmp_path,
+    )
+
+    for candidate in (repo, control):
+        candidate_head = run("git", "rev-parse", "HEAD", cwd=candidate).stdout.strip()
+        run("git", "tag", "local-only", candidate_head, cwd=candidate)
+        run("git", "tag", "same-name", candidate_head, cwd=candidate)
+        configure_adversarial_tag_fetch(candidate)
+
+    producer = tmp_path / "producer"
+    run("git", "clone", "--no-tags", "--branch", "main", str(remote), str(producer), cwd=tmp_path)
+    run("git", "config", "user.name", "VOODOO Test", cwd=producer)
+    run("git", "config", "user.email", "voodoo-test@example.invalid", cwd=producer)
+    remote_head = commit(producer, "feat: remote freshness", "remote.txt", "remote\n")
+    run("git", "tag", "remote-only", remote_head, cwd=producer)
+    run("git", "tag", "same-name", remote_head, cwd=producer)
+    run(
+        "git",
+        "push",
+        "origin",
+        "main",
+        "refs/tags/remote-only",
+        "refs/tags/same-name",
+        cwd=producer,
+    )
+
+    origin_main_before = run("git", "rev-parse", "origin/main", cwd=repo).stdout.strip()
+    same_name_before = run("git", "rev-parse", "refs/tags/same-name", cwd=repo).stdout.strip()
+    local_only_before = run("git", "rev-parse", "refs/tags/local-only", cwd=repo).stdout.strip()
+    assert same_name_before == head
+    assert local_only_before == head
+    assert remote_head != same_name_before
+    missing_remote_commit = subprocess.run(
+        ("git", "cat-file", "-e", f"{remote_head}^{{commit}}"),
+        cwd=repo,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert missing_remote_commit.returncode != 0
+    tags_before = tag_refs(repo)
+    assert "refs/tags/remote-only" not in tags_before
+
+    MODULE.fetch_origin_base(repo, "origin/main")
+
+    tags_after = tag_refs(repo)
+    same_name_after = run("git", "rev-parse", "refs/tags/same-name", cwd=repo).stdout.strip()
+    local_only_after = run("git", "rev-parse", "refs/tags/local-only", cwd=repo).stdout.strip()
+    origin_main_after = run("git", "rev-parse", "origin/main", cwd=repo).stdout.strip()
+    assert tags_after == tags_before
+    assert "refs/tags/remote-only" not in tags_after
+    assert same_name_after == same_name_before
+    assert local_only_after == local_only_before
+    assert origin_main_after == remote_head
+
+    control_tags_before = tag_refs(control)
+    run("git", "fetch", "--prune", "origin", cwd=control)
+    control_tags_after = tag_refs(control)
+    assert control_tags_after != control_tags_before
+    assert f"refs/tags/remote-only {remote_head}\n" in control_tags_after
+    assert f"refs/tags/same-name {remote_head}\n" in control_tags_after
+    assert "refs/tags/local-only" not in control_tags_after
+
+    print("TAG_CREATE_PROTECTED remote-only=absent/absent")
+    print(f"TAG_MOVE_PROTECTED same-name={same_name_before}/{same_name_after}")
+    print(f"TAG_DELETE_PROTECTED local-only={local_only_before}/{local_only_after}")
+    print(f"TAG_SET_IDENTICAL before={tags_before!r} after={tags_after!r}")
+    print(f"ORIGIN_MAIN_REFRESHED before={origin_main_before} after={origin_main_after}")
+    print(f"NEGATIVE_CONTROL before={control_tags_before!r} after={control_tags_after!r}")
+
+
+@pytest.mark.parametrize(
+    "base_ref",
+    (
+        "origin/release",
+        "main",
+        "refs/heads/main",
+        "origin/main^{commit}",
+        "origin/main~1",
+        "",
+    ),
+)
+def test_freshness_fetch_rejects_unsupported_base_ref(
+    tmp_path: Path,
+    base_ref: str,
+) -> None:
+    repo, _, _ = create_repository(tmp_path)
+
+    with pytest.raises(MODULE.PublicationError, match="unsupported --base-ref"):
+        MODULE.fetch_origin_base(repo, base_ref)
+
+
+def test_plan_rejects_dirty_worktree_and_unexpected_head(tmp_path: Path) -> None:
+    repo, remote, head = create_repository(tmp_path)
+    policy = MODULE.PublicationPolicy(allowed_repository_url=str(remote))
+    untracked = repo / "untracked.txt"
+    untracked.write_text("untracked\n", encoding="utf-8")
+
+    with pytest.raises(MODULE.PublicationError, match="worktree is not clean"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head=head,
+            repository_url=str(remote),
+            target_branch="review/dirty",
+            base_ref="origin/main",
+            expected_commit_count=2,
+            policy=policy,
+        )
+
+    untracked.unlink()
+    with pytest.raises(MODULE.PublicationError, match="unexpected HEAD"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head="a" * 40,
+            repository_url=str(remote),
+            target_branch="review/wrong-head",
+            base_ref="origin/main",
+            expected_commit_count=2,
+            policy=policy,
+        )
+
+
+def test_plan_rejects_non_ancestor_base(tmp_path: Path) -> None:
+    repo, remote, head = create_repository(tmp_path)
+    producer = tmp_path / "divergent-producer"
+    run("git", "clone", "--branch", "main", str(remote), str(producer), cwd=tmp_path)
+    run("git", "config", "user.name", "VOODOO Test", cwd=producer)
+    run("git", "config", "user.email", "voodoo-test@example.invalid", cwd=producer)
+    commit(producer, "feat: divergent remote", "divergent.txt", "divergent\n")
+    run("git", "push", "origin", "main", cwd=producer)
+
+    with pytest.raises(MODULE.PublicationError, match="not based on origin/main"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head=head,
+            repository_url=str(remote),
+            target_branch="review/non-ancestor",
+            base_ref="origin/main",
+            expected_commit_count=2,
+            policy=MODULE.PublicationPolicy(allowed_repository_url=str(remote)),
+        )
+
+
+def test_plan_rejects_unexpected_commit_count(tmp_path: Path) -> None:
+    repo, remote, head = create_repository(tmp_path)
+
+    with pytest.raises(MODULE.PublicationError, match="unexpected publication commit count"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head=head,
+            repository_url=str(remote),
+            target_branch="review/wrong-count",
+            base_ref="origin/main",
+            expected_commit_count=1,
+            policy=MODULE.PublicationPolicy(allowed_repository_url=str(remote)),
+        )
+
+
+def test_plan_rejects_merge_commits(tmp_path: Path) -> None:
+    repo, remote, _ = create_repository(tmp_path)
+    run("git", "switch", "-c", "topic", "origin/main", cwd=repo)
+    commit(repo, "feat: topic", "topic.txt", "topic\n")
+    run("git", "switch", "main", cwd=repo)
+    run("git", "merge", "--no-ff", "topic", "-m", "merge: topic", cwd=repo)
+    head = run("git", "rev-parse", "HEAD", cwd=repo).stdout.strip()
+    commit_count = int(
+        run("git", "rev-list", "--count", "origin/main..HEAD", cwd=repo).stdout
+    )
+
+    with pytest.raises(MODULE.PublicationError, match="contains merge commits"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head=head,
+            repository_url=str(remote),
+            target_branch="review/merge",
+            base_ref="origin/main",
+            expected_commit_count=commit_count,
+            policy=MODULE.PublicationPolicy(allowed_repository_url=str(remote)),
+        )
+
+
+def test_plan_rejects_diff_check_failures(tmp_path: Path) -> None:
+    repo, remote, _ = create_repository(tmp_path)
+    head = commit(repo, "feat: bad whitespace", "bad.txt", "trailing space \n")
+
+    with pytest.raises(MODULE.PublicationError, match="git diff --check"):
+        MODULE.build_plan(
+            repo_root=repo,
+            expected_head=head,
+            repository_url=str(remote),
+            target_branch="review/bad-whitespace",
+            base_ref="origin/main",
+            expected_commit_count=3,
+            policy=MODULE.PublicationPolicy(allowed_repository_url=str(remote)),
+        )
+
+
 def test_existing_remote_branch_blocks_new_plan(tmp_path: Path) -> None:
     repo, remote, head = create_repository(tmp_path)
     run(
@@ -149,10 +394,430 @@ def test_evidence_is_atomic_and_hash_verifiable(tmp_path: Path) -> None:
         "head": "a" * 40,
         "status": "VERIFIED_PLAN",
     }
-    evidence, sidecar = MODULE.write_evidence(tmp_path / "evidence", payload)
+    evidence_root = tmp_path / "evidence-root"
+    evidence, sidecar = MODULE.write_evidence(
+        evidence_root / "task",
+        payload,
+        evidence_root=evidence_root,
+    )
 
     expected = sidecar.read_text(encoding="utf-8").split()[0]
     actual = hashlib.sha256(evidence.read_bytes()).hexdigest()
     assert expected == actual
     assert evidence.stat().st_mode & 0o777 == 0o600
     assert sidecar.stat().st_mode & 0o777 == 0o600
+    assert sorted(path.name for path in evidence.parent.iterdir()) == [
+        evidence.name,
+        sidecar.name,
+    ]
+
+
+def _evidence_payload(status: str = "VERIFIED_PLAN") -> dict[str, object]:
+    return {
+        "timestamp_utc": "2026-07-30T05:00:00+00:00",
+        "head": "a" * 40,
+        "status": status,
+    }
+
+
+def _paths_for_publication_id(
+    evidence_dir: Path,
+    publication_id: str,
+) -> tuple[Path, Path]:
+    basename = (
+        "review-publication-20260730T050000+0000-"
+        f"{'a' * 12}-{publication_id}.json"
+    )
+    evidence = evidence_dir / basename
+    return evidence, evidence.with_suffix(".json.sha256")
+
+
+def _assert_checksum_pair(evidence: Path, sidecar: Path) -> None:
+    expected, filename = sidecar.read_text(encoding="utf-8").split()
+    assert filename == evidence.name
+    assert expected == hashlib.sha256(evidence.read_bytes()).hexdigest()
+
+
+def test_evidence_same_second_and_head_are_append_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_ids = iter(("01" * 16, "02" * 16))
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: next(publication_ids))
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+
+    first, first_sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("FIRST"),
+        evidence_root=evidence_root,
+    )
+    first_bytes = first.read_bytes()
+    first_sidecar_bytes = first_sidecar.read_bytes()
+    second, second_sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("SECOND"),
+        evidence_root=evidence_root,
+    )
+
+    assert first.name != second.name
+    assert first.read_bytes() == first_bytes
+    assert first_sidecar.read_bytes() == first_sidecar_bytes
+    _assert_checksum_pair(first, first_sidecar)
+    _assert_checksum_pair(second, second_sidecar)
+    assert len(list(evidence_dir.glob("*.json"))) == 2
+    assert len(list(evidence_dir.glob("*.json.sha256"))) == 2
+
+
+def test_forced_publication_id_collision_fails_without_overwrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_id = "03" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    evidence, sidecar = MODULE.write_evidence(
+        evidence_dir,
+        _evidence_payload("FIRST"),
+        evidence_root=evidence_root,
+    )
+    before = {evidence: evidence.read_bytes(), sidecar: sidecar.read_bytes()}
+
+    with pytest.raises(MODULE.PublicationError, match="already has a final path"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload("SECOND"),
+            evidence_root=evidence_root,
+        )
+
+    assert {path: path.read_bytes() for path in before} == before
+
+
+@pytest.mark.parametrize("existing", ("json", "sidecar", "pair"))
+def test_preexisting_final_paths_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing: str,
+) -> None:
+    publication_id = "04" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    evidence_dir.mkdir(parents=True)
+    evidence, sidecar = _paths_for_publication_id(evidence_dir, publication_id)
+    if existing in {"json", "pair"}:
+        evidence.write_bytes(b"existing-json")
+    if existing in {"sidecar", "pair"}:
+        sidecar.write_bytes(b"existing-sidecar")
+    before = {path: path.read_bytes() for path in evidence_dir.iterdir()}
+
+    with pytest.raises(MODULE.PublicationError, match="already has a final path"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    assert {path: path.read_bytes() for path in evidence_dir.iterdir()} == before
+
+
+def test_failure_before_sidecar_publication_leaves_no_final_or_temporary_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: "05" * 16)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    original_publish = MODULE._publish_no_clobber
+
+    def fail_before_sidecar(temporary: Path, target: Path) -> None:
+        if target.name.endswith(".json.sha256"):
+            raise OSError("failure before sidecar publication")
+        original_publish(temporary, target)
+
+    monkeypatch.setattr(MODULE, "_publish_no_clobber", fail_before_sidecar)
+    with pytest.raises(OSError, match="before sidecar"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    assert list(evidence_dir.iterdir()) == []
+
+
+def test_failure_after_sidecar_before_json_leaves_complete_orphan_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publication_id = "06" * 16
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: publication_id)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+    original_publish = MODULE._publish_no_clobber
+    prepared_json: bytes | None = None
+
+    def fail_before_json(temporary: Path, target: Path) -> None:
+        nonlocal prepared_json
+        if target.suffix == ".json":
+            prepared_json = temporary.read_bytes()
+            raise OSError("failure before JSON publication")
+        original_publish(temporary, target)
+
+    monkeypatch.setattr(MODULE, "_publish_no_clobber", fail_before_json)
+    with pytest.raises(OSError, match="before JSON"):
+        MODULE.write_evidence(
+            evidence_dir,
+            _evidence_payload(),
+            evidence_root=evidence_root,
+        )
+
+    evidence, sidecar = _paths_for_publication_id(evidence_dir, publication_id)
+    assert prepared_json is not None
+    assert not evidence.exists()
+    expected, filename = sidecar.read_text(encoding="utf-8").split()
+    assert filename == evidence.name
+    assert expected == hashlib.sha256(prepared_json).hexdigest()
+    assert sorted(path.name for path in evidence_dir.iterdir()) == [sidecar.name]
+
+
+def test_no_clobber_primitive_refuses_existing_destination(tmp_path: Path) -> None:
+    temporary = tmp_path / "temporary"
+    target = tmp_path / "target"
+    temporary.write_bytes(b"new")
+    target.write_bytes(b"existing")
+
+    with pytest.raises(MODULE.PublicationError, match="already exists"):
+        MODULE._publish_no_clobber(temporary, target)
+
+    assert temporary.read_bytes() == b"new"
+    assert target.read_bytes() == b"existing"
+
+
+def test_concurrent_same_identity_cannot_damage_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MODULE.secrets, "token_hex", lambda _: "07" * 16)
+    evidence_root = tmp_path / "evidence-root"
+    evidence_dir = evidence_root / "task"
+
+    def publish(status: str) -> tuple[Path, Path] | MODULE.PublicationError:
+        try:
+            return MODULE.write_evidence(
+                evidence_dir,
+                _evidence_payload(status),
+                evidence_root=evidence_root,
+            )
+        except MODULE.PublicationError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(publish, ("FIRST", "SECOND")))
+
+    successes = [result for result in results if isinstance(result, tuple)]
+    failures = [result for result in results if isinstance(result, MODULE.PublicationError)]
+    assert len(successes) == 1
+    assert len(failures) == 1
+    _assert_checksum_pair(*successes[0])
+    assert len(list(evidence_dir.glob("*.json"))) == 1
+    assert len(list(evidence_dir.glob("*.json.sha256"))) == 1
+    assert not list(evidence_dir.glob(".*.reserve"))
+    assert not list(evidence_dir.glob(".review-publication-*"))
+
+
+def test_evidence_dir_is_required() -> None:
+    with pytest.raises(SystemExit) as exc:
+        MODULE.parse_args(
+            [
+                "--expected-head",
+                "a" * 40,
+                "--expected-commit-count",
+                "2",
+                "--target-branch",
+                "review/test",
+            ]
+        )
+
+    assert exc.value.code == 2
+
+
+def test_evidence_path_contract_accepts_canonical_descendants(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+
+    assert MODULE.validate_evidence_dir(
+        evidence_root,
+        evidence_root=evidence_root,
+    ) == evidence_root.resolve()
+    assert MODULE.validate_evidence_dir(
+        evidence_root / "ordinary",
+        evidence_root=evidence_root,
+    ) == (evidence_root / "ordinary").resolve()
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_20260730T120000Z"
+    assert MODULE.validate_evidence_dir(
+        task_dir,
+        evidence_root=evidence_root,
+    ) == task_dir.resolve()
+
+
+def test_evidence_path_contract_rejects_escapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    invalid_paths = (
+        Path("/tmp/publication-evidence"),  # noqa: S108 - intentional rejection case
+        Path("~/Downloads/voodoo-review-publication-evidence"),
+        tmp_path / "V-ONE",
+        tmp_path / "V-ONE-EVIDENCE-EVIL",
+        evidence_root / ".." / "outside",
+    )
+
+    for invalid in invalid_paths:
+        with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+            MODULE.validate_evidence_dir(invalid, evidence_root=evidence_root)
+
+
+def test_evidence_path_contract_rejects_symlink_escape(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    evidence_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = evidence_root / "escaped-link"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks are unavailable: {exc}")
+
+    with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+        MODULE.validate_evidence_dir(link / "task", evidence_root=evidence_root)
+
+
+def test_write_evidence_rejects_legacy_default_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    home = tmp_path / "home"
+    legacy = home / "Downloads" / "voodoo-review-publication-evidence"
+    monkeypatch.setenv("HOME", str(home))
+    payload = {
+        "timestamp_utc": "2026-07-30T12:00:00+00:00",
+        "status": "BLOCKED",
+    }
+
+    with pytest.raises(MODULE.PublicationError, match="canonical durable evidence root"):
+        MODULE.write_evidence(
+            Path("~/Downloads/voodoo-review-publication-evidence"),
+            payload,
+            evidence_root=evidence_root,
+        )
+
+    assert not legacy.exists()
+
+
+def _main_args(evidence_dir: Path) -> list[str]:
+    return [
+        "--expected-head",
+        "a" * 40,
+        "--expected-commit-count",
+        "2",
+        "--target-branch",
+        "review/test",
+        "--evidence-dir",
+        str(evidence_dir),
+    ]
+
+
+def _stub_plan(evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> object:
+    plan = MODULE.PublicationPlan(
+        repo_root=str(evidence_root),
+        head="a" * 40,
+        base_ref="origin/main",
+        origin_fetch_url=MODULE.ALLOWED_GITHUB_REPOSITORY,
+        repository_url=MODULE.ALLOWED_GITHUB_REPOSITORY,
+        target_branch="review/test",
+        target_ref="refs/heads/review/test",
+        commit_count=2,
+        merge_commit_count=0,
+        diff_shortstat="2 files changed",
+        changed_file_count=2,
+        approval="PUBLISH_REVIEW exact",
+    )
+    monkeypatch.setattr(MODULE, "build_plan", lambda **_: plan)
+    monkeypatch.setattr(
+        MODULE,
+        "dry_run_publication",
+        lambda _: SimpleNamespace(stdout="dry run", stderr=""),
+    )
+    return plan
+
+
+def test_outside_root_is_blocked_before_plan_or_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    outside = tmp_path / "outside"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+
+    def unexpected_plan(**_: object) -> None:
+        pytest.fail("build_plan reached before evidence path validation")
+
+    monkeypatch.setattr(MODULE, "build_plan", unexpected_plan)
+
+    assert MODULE.main(_main_args(outside)) == 2
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=BLOCKED" in captured.err
+    assert not outside.exists()
+
+
+def test_valid_plan_writes_evidence_inside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_20260730T120000Z"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+    _stub_plan(evidence_root, monkeypatch)
+
+    assert MODULE.main(_main_args(task_dir)) == 0
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=VERIFIED_PLAN" in captured.out
+    evidence_files = list(task_dir.glob("*.json"))
+    sidecars = list(task_dir.glob("*.json.sha256"))
+    assert len(evidence_files) == 1
+    assert len(sidecars) == 1
+    assert evidence_files[0].is_relative_to(evidence_root)
+    assert sidecars[0].is_relative_to(evidence_root)
+
+
+def test_publication_error_writes_blocked_evidence_inside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence_root = tmp_path / "V-ONE-EVIDENCE"
+    task_dir = evidence_root / "CODEX" / "REVIEW_PUBLICATION_FAILURE"
+    monkeypatch.setattr(MODULE, "CANONICAL_EVIDENCE_ROOT", evidence_root)
+
+    def fail_after_validation(**_: object) -> None:
+        raise MODULE.PublicationError("deliberate failure")
+
+    monkeypatch.setattr(MODULE, "build_plan", fail_after_validation)
+
+    assert MODULE.main(_main_args(task_dir)) == 2
+    captured = capsys.readouterr()
+    assert "PUBLICATION_STATUS=BLOCKED" in captured.err
+    evidence_files = list(task_dir.glob("*.json"))
+    sidecars = list(task_dir.glob("*.json.sha256"))
+    assert len(evidence_files) == 1
+    assert len(sidecars) == 1
+    assert '"status": "BLOCKED"' in evidence_files[0].read_text(encoding="utf-8")
+    assert evidence_files[0].is_relative_to(evidence_root)
+    assert sidecars[0].is_relative_to(evidence_root)
