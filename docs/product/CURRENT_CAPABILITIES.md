@@ -45,7 +45,8 @@ limitations are therefore part of every claim.
 | Local checkpoint verifier | VERIFIED | 8 targeted tests; real checkpoint verification | local filesystem only |
 | ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | four node types; no persistent graph store |
 | Nested manifest mutation detection | VERIFIED | verifier regression tests plus two historical ProofGraph V6 checkpoints reverified with zero warnings and zero nested mismatches | fresh runtime evidence for the current HEAD is still pending |
-| Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | local candidate finalization only; runtime capture, release, and remote publication remain separate |
+| Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | finalization remains explicit and separate from capture; release and remote publication remain separate |
+| Repository-owned runtime candidate capture | IMPLEMENTED | deterministic Git/Docker-boundary fixtures; candidate→finalize→independent verify tests | R3 owner and independent review pending; no commit-bound fresh checkpoint yet |
 | Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
@@ -81,8 +82,10 @@ HTTP:
 
 Local CLI:
   voodoo evidence verify <checkpoint>
+  voodoo evidence capture-runtime <new-candidate>
   voodoo evidence finalize <candidate> <destination>
   python -m voodoo_product evidence verify <checkpoint>
+  python -m voodoo_product evidence capture-runtime <new-candidate>
   python -m voodoo_product evidence finalize <candidate> <destination>
 ```
 

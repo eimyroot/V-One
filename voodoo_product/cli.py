@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
+from .checkpoint_capture import capture_runtime_candidate, render_capture_report
 from .checkpoint_evidence import render_report, verify_checkpoint
 from .checkpoint_producer import finalize_checkpoint, render_finalization_report
 
@@ -33,6 +34,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="emit canonical single-line JSON",
     )
+
+    capture_runtime = evidence_commands.add_parser(
+        "capture-runtime",
+        help="capture one local runtime checkpoint candidate",
+    )
+    capture_runtime.add_argument(
+        "candidate",
+        help="new absolute checkpoint candidate directory outside the repository",
+    )
+    capture_runtime.add_argument(
+        "--canonical",
+        action="store_true",
+        help="emit canonical single-line JSON",
+    )
     return parser
 
 
@@ -46,4 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = finalize_checkpoint(arguments.candidate, arguments.destination)
         print(render_finalization_report(report, canonical=arguments.canonical))
         return 0 if report["finalized"] else 1
+    if arguments.command == "evidence" and arguments.evidence_command == "capture-runtime":
+        report = capture_runtime_candidate(arguments.candidate)
+        print(render_capture_report(report, canonical=arguments.canonical))
+        return 0 if report["captured"] else 1
     raise RuntimeError("unreachable command dispatch")
