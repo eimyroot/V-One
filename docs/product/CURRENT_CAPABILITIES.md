@@ -3,10 +3,13 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
-| Current remote baseline | `main@81522699a9cf7c413e0d9f7c7afcc867e0df8d02` |
+| Inventory audit date | `2026-07-30` |
+| Inventory audit base | `afd03c5653278c98fb3ca5494ae3c14355f08655` |
+| Exact live Git identity | See `CURRENT_PRODUCT_STATE.md` and query Git directly |
+| Runtime attestation after historical checkpoint | UNKNOWN — NOT VERIFIED after latest source/governance changes |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
-| Latest milestone evidence | checkpoint finalizer merged; 298 tests/readiness passed and fresh runtime verified for feature commit `190758e...`; current-main runtime re-attestation pending |
+| Latest historical runtime evidence | checkpoint finalizer milestone; 298 tests/readiness passed and fresh runtime verified for feature commit `190758e...`; this evidence does not attest the current HEAD |
 
 ## Reading this document
 
@@ -17,7 +20,7 @@ limitations are therefore part of every claim.
 
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|
-| FastAPI `/api/v1` control plane | VERIFIED | system tests; composed application routes | fresh Docker closure for the documentation commit is pending |
+| FastAPI `/api/v1` control plane | VERIFIED | system tests; composed application routes | fresh Docker closure after the latest source/governance changes is pending |
 | Static command-center console | VERIFIED | product platform and HTTP tests | operator UX is a controlled-pilot surface |
 | Local bootstrap and credential login | VERIFIED | authentication and bootstrap tests | no released external identity provider |
 | Context-bound bearer sessions | VERIFIED | token, identity, and session lifecycle tests | local session model; enterprise OIDC is blocked |

@@ -6,19 +6,26 @@
 
 ```text
 AS_OF: 2026-07-30
-VERIFIED_REMOTE_BRANCH: main
-VERIFIED_REMOTE_COMMIT: 81522699a9cf7c413e0d9f7c7afcc867e0df8d02
-MERGED_PR: #42
-MERGED_FEATURE_COMMIT: 190758e27b38a1139ff51a4e00bb3767634b19ea
-LOCAL_WORKTREE_STATUS: UNKNOWN — čeká na post-merge local reality check
-CURRENT_PHASE: POST-MERGE STABILIZATION + CURRENT-HEAD RUNTIME RE-ATTESTATION
+AUDIT_BASE_BRANCH: main
+AUDIT_BASE_COMMIT: afd03c5653278c98fb3ca5494ae3c14355f08655
+OBSERVED_REMOTE_TRACKING_BRANCH: origin/main
+OBSERVED_REMOTE_TRACKING_COMMIT: eb47933a36592418842397df3d8f7ac655c238d6
+OBSERVED_LOCAL_REMOTE_RELATION: local main was one unpublished AGENTS commit ahead at audit preflight
+AUDIT_PREFLIGHT_WORKTREE: clean before this documentation patch
+CURRENT_PHASE: LOCAL AGENT GOVERNANCE COMMITTED + CURRENT-HEAD RUNTIME RE-ATTESTATION PENDING
+CURRENT_HEAD_CI: UNKNOWN — NOT VERIFIED after the latest source/governance changes
+CURRENT_HEAD_RUNTIME_ATTESTATION: UNKNOWN — NOT VERIFIED after the latest source/governance changes
 RELEASE_STATE: BLOCKED — není release-verified
-PRODUCTION_EFFECTS: VERIFIED DISABLED / FAIL-CLOSED
+PRODUCTION_EFFECTS: source policy remains fail-closed; current-HEAD runtime state was not re-attested
 ```
 
-## Co dnes skutečně funguje
+Exact current repository identity is authoritative from live Git state (`git rev-parse HEAD`, current
+branch, worktree status, and tracking refs), not from this version-controlled snapshot.
 
-### VERIFIED
+## Aktuální zdrojový a důkazní stav
+
+Následující capability jsou přítomné v aktuálním source tree a mají dřívější cílené testovací
+důkazy. Tento audit neprovedl runtime re-attestaci po nejnovějších source/governance změnách.
 
 - FastAPI `/api/v1` control plane a statická command-center konzole.
 - Lokální bootstrap, login, context-bound sessions, logout a administrativní revokace sessions.
@@ -30,9 +37,21 @@ PRODUCTION_EFFECTS: VERIFIED DISABLED / FAIL-CLOSED
 - Lokální checkpoint verifier a deterministický ProofGraph v1 JSON.
 - Repository-owned checkpoint finalizer s fail-closed snapshot/copy/staging verification a atomickým publish krokem.
 - Hash-locked dependencies, lokální lint/compile/test/readiness gates a Docker build/smoke workflow.
-- Produkční efekty zůstávají vypnuté a fail-closed.
+- Source policy drží produkční efekty vypnuté a fail-closed; current-HEAD runtime stav je `UNKNOWN`.
 
-## Čeho jsme právě dosáhli
+## Auditované source milníky
+
+- Při auditním preflightu obsahoval pozorovaný
+  `origin/main@eb47933a36592418842397df3d8f7ac655c238d6` publisher hardening a
+  repository-owned publication guardrails.
+- Auditní base `main@afd03c5653278c98fb3ca5494ae3c14355f08655` přidal root `AGENTS.md` jako
+  repository-wide agent governance contract.
+- Při auditním preflightu nebyl AGENTS commit publikován na `origin/main` a lokální `main` byl
+  o jeden commit napřed.
+- Pro source/governance změny po historickém runtime checkpointu nebyly v tomto úkolu spuštěny CI,
+  runtime, Docker, release ani deployment gates.
+
+## Historický runtime checkpoint
 
 PR #42 byl mergnut do `main` jako merge commit:
 
@@ -70,6 +89,9 @@ GitHub comparison potvrdil, že merge commit `81522699...` nepřidal proti featu
 
 ## Co lze od platformy očekávat dnes
 
+Tato očekávání vycházejí z aktuálního source inventory a historických scoped testů, nikoli z fresh
+runtime attestace pro current HEAD.
+
 VOODOO One je nyní **development / controlled-pilot authorization and evidence control plane**.
 
 Lze od něj očekávat:
@@ -87,11 +109,13 @@ Nelze od něj zatím očekávat unrestricted production automation, autonomní p
 
 ### Nejbližší práce
 
-1. **Post-merge local reality check** — ověřit čistý lokální repo stav a synchronizovat lokální `main` na `81522699...`.
-2. **Fresh runtime checkpoint pro current `main`** — vytvořit nový checkpoint přímo pro merge commit `81522699...`.
-3. **Policy Decision Graph v1** — pokračovat v deterministickém a vysvětlitelném authorization modelu.
-4. **Isolated Runner contracts** — signed short-lived grants, receipts, heartbeat/cancel/fencing a postcondition verification.
-5. **Read-only CyberCore boundary** — až po review výše uvedených kontraktů.
+1. **Review a commit current-state patch** — po schválení zachovat přesnou source identitu.
+2. **Samostatně autorizovat publikaci** — pokud má být lokální AGENTS governance dostupná vzdáleně.
+3. **Fresh runtime checkpoint pro budoucí publikovaný canonical HEAD** — provést až po přesném
+   source/remote srovnání; historický checkpoint nerecyklovat jako current-HEAD evidence.
+4. **Policy Decision Graph v1** — pokračovat v deterministickém a vysvětlitelném authorization modelu.
+5. **Isolated Runner contracts** — signed short-lived grants, receipts, heartbeat/cancel/fencing a postcondition verification.
+6. **Read-only CyberCore boundary** — až po review výše uvedených kontraktů.
 
 ### Stále BLOCKED / PROPOSED
 
@@ -108,18 +132,20 @@ Nelze od něj zatím očekávat unrestricted production automation, autonomní p
 
 ```text
 VERIFIED:
-- remote main = 81522699a9cf7c413e0d9f7c7afcc867e0df8d02
-- PR #42 merged
-- checkpoint verifier + repository-owned finalizer jsou na main
+- audit base = main@afd03c5653278c98fb3ca5494ae3c14355f08655
+- observed remote = origin/main@eb47933a36592418842397df3d8f7ac655c238d6
+- lokální main byl při auditním preflightu o jeden nepublikovaný AGENTS commit před origin/main
+- publisher hardening byl pozorován v origin/main
+- root AGENTS.md byl přítomný v auditním base; vzdálená publikace nebyla pozorována
+- checkpoint verifier + repository-owned finalizer jsou přítomné v source tree
 - feature commit 190758e... má nezávisle ověřený fresh runtime checkpoint
-- production effects jsou disabled / fail-closed
 
-PARTIALLY VERIFIED:
-- runtime stav current main: source tree odpovídá ověřenému feature tree,
-  ale runtime provenance zatím není znovu svázána s merge commitem 81522699...
+IMPLEMENTED:
+- current-state dokumentace odděluje auditní pozorování, verzovanou product truth a live Git identitu
 
 UNKNOWN:
-- aktuální lokální branch/HEAD/worktree/index do provedení post-merge reality checku
+- CI a runtime stav po nejnovějších source/governance změnách
+- current-HEAD production-effects runtime stav; source policy zůstává fail-closed
 - úplný aktuální P0/P1 finding set bez nového explicitního auditu
 
 BLOCKED:
@@ -129,7 +155,8 @@ BLOCKED:
 
 ## NEXT SAFE STEP
 
-Provedení krátkého post-merge local reality checku a následně nový fresh runtime checkpoint přímo pro `81522699a9cf7c413e0d9f7c7afcc867e0df8d02`.
+Zkontrolovat a samostatně commitnout tento omezený documentation-only patch. Publikace,
+current-HEAD runtime re-attestace a release zůstávají oddělené, neautorizované kroky.
 
 Capability-level detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)  
 Delivery order: [`ROADMAP.md`](ROADMAP.md)
