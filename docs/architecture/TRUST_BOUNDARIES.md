@@ -36,6 +36,28 @@
         |
         v
 [Deterministic JSON claims and ProofGraph]
+
+PROPOSED isolated Runner boundary (not implemented):
+
+[V-One authorization and lifecycle]
+        |
+        v
+[Durable dispatch / immutable grant reference]
+        |
+        v
+[Runner admission + atomic one-time consumption]
+        |
+        v
+[Digest-bound retrieval + capability registry]
+        |
+        v
+[Rootless capsule / separate OS identity / network denied]
+        |
+        v
+[Independent postcondition verifier]
+        |
+        v
+[Bounded receipt and evidence -> V-One ingestion]
 ```
 
 ## TB-01 — HTTP client to application
@@ -230,11 +252,54 @@ AI may draft and explain. AI may not:
 - enable production effects;
 - suppress missing evidence.
 
+## TB-11 — V-One to isolated Runner v1
+
+**Current status:** PROPOSED by ADR-0008; not implemented.
+
+Authoritative boundary:
+
+- V-One owns identity, policy, approvals, grant issuance, cancellation intent, execution lifecycle,
+  receipt ingestion, audit, and production-effect gating;
+- the Runner owns durable one-time consumption, capsule lifecycle, resource enforcement, attempt
+  observations, independent postcondition execution, and Runner receipt claims;
+- the Runner never authorizes itself, and AI or CyberCore input remains proposal-only.
+
+Target controls:
+
+- one grant authorizes one attempt; atomic durable consumption occurs before any side effect;
+- canonical versioned capability registry; arbitrary shell is not a capability and unknown
+  capabilities fail closed;
+- payload and target retrieval uses immutable digest-bound references and rehashes bytes inside the
+  Runner boundary;
+- separate Runner OS identity, fresh rootless capsule, read-only base, bounded writable workspace,
+  resource limits, and network deny by default;
+- cancellation, bounded leases, monotonic fencing, heartbeat, duplicate-delivery safety, and
+  fail-closed recovery;
+- postcondition verification is independent from the handler; uncertain post-state is
+  `INDETERMINATE`;
+- grants, receipts, dispatch records, logs, and general evidence contain no secrets;
+- production effects remain blocked.
+
+Rollout blockers and residual risks:
+
+- current persisted approvals cannot authoritatively issue ADR-0007 grants with all required
+  bindings;
+- grant/receipt authenticity, transport, trust store, key lifecycle, durable dispatch and consume
+  stores, capsule technology, target-side fencing, secret delivery, and receipt reconciliation are
+  not implemented;
+- a separate OS identity and rootless capsule do not eliminate kernel, runtime, provider, or
+  supply-chain compromise;
+- exactly-once external effect is unavailable without provider idempotency or target-side fencing;
+- mutating rollout requires the verification gates in
+  `docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md` and independent R3 review;
+- production effects require a separate R4 owner decision and release evidence.
+
 ## Security review priorities
 
-1. isolated runner grant and receipt contracts;
-2. external evidence anchoring and signing;
-3. output redaction and raw-log authorization;
-4. workspace-scoped identity;
-5. CyberCore read-only intake schema;
-6. multi-platform supply-chain verification.
+1. isolated Runner durable consumption, isolation, and postcondition-verification design review;
+2. grant and receipt authenticity, trust policy, and key lifecycle;
+3. external evidence anchoring and signing;
+4. output redaction and raw-log authorization;
+5. workspace-scoped identity;
+6. CyberCore read-only intake schema;
+7. multi-platform supply-chain verification.
