@@ -128,27 +128,36 @@ credentials or raw secrets. Duplicate and out-of-order delivery is expected and 
    policy version, approval evidence, execution ID, expiry, and one-time semantics into the grant.
 3. The outbox exposes an immutable dispatch reference. Transport redelivery does not create a new
    attempt or a new grant.
-4. Runner ingress authenticates the protocol peer when that mechanism is defined, strictly parses
-   all contracts, verifies cross-contract bindings, rejects unsupported versions, and checks
-   cancellation, expiry, registry, environment, and local admission gates.
-5. The Runner atomically consumes the grant and creates the attempt lease/fence in one durable
-   transaction before any payload fetch that can mutate state or any capability side effect.
-6. The Runner retrieves payload and target material only through approved content-addressed
+4. Runner ingress authenticates the protocol peer when that mechanism is defined and strictly
+   parses all contracts. Malformed bytes, unsupported schema/version, an invalid self-digest, or an
+   unparseable or otherwise contract-invalid grant are protocol rejections and produce no
+   `execution-receipt/v1`. The future transport may return a bounded negative acknowledgement or no
+   response; correlation is included only when safely available and is never treated as
+   authoritative identity when derived from invalid data.
+5. For a structurally and digest-valid grant, ingress verifies cross-contract bindings and checks
+   cancellation, expiry, registry, environment, and local admission gates. A rejection at this
+   stage may produce a grant-bound `REJECTED` receipt before consume.
+6. The Runner atomically consumes the grant and creates the attempt identity, immutable
+   `runner_receipt_id`, lease, fence, and authoritative admission/cancellation decision binding in
+   one durable transaction before any payload fetch that can mutate state or any capability side
+   effect.
+7. The Runner retrieves payload and target material only through approved content-addressed
    adapters, enforces size/type/depth limits, and recomputes exact digests before capsule exposure.
-7. The registry resolves one exact versioned capability to a fixed handler, isolation profile,
+8. The registry resolves one exact versioned capability to a fixed handler, isolation profile,
    input schema, target kinds, network policy, resource limits, and independent precondition and
    postcondition verification plans.
-8. After consume and immediately before any possible side effect, an independent precondition
+9. After consume and immediately before any possible side effect, an independent precondition
    verifier observes the target and validates the authorized expected state, version, ETag, digest,
    or equivalent concurrency token.
-9. The governed target gateway atomically enforces that expected state and the current fence at
+10. The governed target gateway or a constrained provider-native conditional adapter atomically
+   enforces that expected state and the current fence at
    mutation time. A capability whose target cannot provide compare-and-swap, conditional mutation,
    or an independently reviewed equivalent remains blocked for mutating use.
-10. The Runner creates a fresh rootless capsule with a read-only base and bounded writable
+11. The Runner creates a fresh rootless capsule with a read-only base and bounded writable
     workspace, executes one attempt, and records bounded observations.
-11. After execution, cancellation, timeout, or handler failure, the independent postcondition
+12. After execution, cancellation, timeout, or handler failure, the independent postcondition
     verifier observes the target without executing handler- or payload-provided verification code.
-12. The Runner emits one terminal receipt claim bound to the grant and evidence digests. V-One
+13. The Runner emits one terminal receipt claim bound to the grant and evidence digests. V-One
     validates and ingests it, reconciles lifecycle state, and retains authoritative audit history.
 
 Secrets are never fields in a grant, receipt, dispatch record, or log. If a future capability
@@ -162,8 +171,13 @@ internal state separately and maps exactly one terminal observation to the accep
 `execution-receipt/v1` status, outcome, and postcondition fields.
 
 ```text
-RECEIVED
-  -> REJECTED                         invalid, stale, cancelled, unknown, or unsupported
+PROTOCOL_INPUT
+  -> PROTOCOL_REJECTED                invalid envelope/bytes/schema/version/self-digest/grant;
+                                      no execution-receipt/v1
+  -> VALID_GRANT                      structurally and digest-valid, bindable grant
+
+VALID_GRANT
+  -> REJECTED                         admission denied before consume
   -> CONSUMED                         durable atomic one-time claim; attempt count becomes one
 
 CONSUMED
@@ -193,6 +207,7 @@ Normative receipt mapping:
 
 | Internal terminal observation | Receipt `status` | `outcome` | `postcondition_status` |
 |---|---|---|---|
+| Protocol/envelope/parse rejection | No execution receipt | Not applicable | Not applicable |
 | Admission rejected before consume | `REJECTED` | `EXPECTED_EFFECT_NOT_VERIFIED` | `NOT_RUN` |
 | Effect independently verified | `SUCCEEDED` | `EXPECTED_EFFECT_VERIFIED` | `PASSED` |
 | Known failed effect or consumed preflight failure | `FAILED` | `EXPECTED_EFFECT_NOT_VERIFIED` | `FAILED` |
@@ -200,6 +215,12 @@ Normative receipt mapping:
 | Worker, lease, fence, or capsule state lost | `INTERRUPTED` | `INDETERMINATE` | `INDETERMINATE` |
 | Cancellation with known non-success post-state | `CANCELLED` | `EXPECTED_EFFECT_NOT_VERIFIED` | `FAILED` |
 | Cancellation with uncertain post-state | `CANCELLED` | `INDETERMINATE` | `INDETERMINATE` |
+
+Protocol rejection and grant admission rejection are distinct. Only a structurally and
+digest-valid grant that can be bound by exact grant ID, grant digest, and execution ID may produce
+a `REJECTED` receipt; examples include an expired or pre-cancelled valid grant, a syntax-valid but
+unregistered capability, or an environment/admission-gate rejection. Invalid or unparseable
+ingress never produces a contract-valid receipt.
 
 `INDETERMINATE` is never an execution receipt status. It is used only as the receipt outcome and
 postcondition status permitted by ADR-0007. Terminal delivery may be retried, but it must reproduce
@@ -215,6 +236,12 @@ recovery never creates a second attempt from the same grant.
   digest is an integrity violation and cannot create a second claim, attempt, or receipt identity.
 - Lookup, digest comparison, claim insertion, and attempt creation occur in one serializable
   transaction or an equivalent atomic operation before any side effect.
+- The same durable transaction allocates and persists one immutable `runner_receipt_id` with the
+  consume claim, attempt identity, lease, and fence. Terminal bytes may be finalized later, but
+  duplicate delivery, recovery, and receipt redelivery always use that identity.
+- Different terminal bytes for the same `runner_receipt_id` are an integrity violation: they are
+  rejected and audit-signalled. A crash before effect, after effect, during verification, or before
+  delivery cannot allocate a second terminal receipt identity.
 - After consumption, validation, retrieval, capsule startup, handler failure, cancellation, timeout,
   or Runner crash cannot make the grant reusable.
 - Duplicate delivery returns the existing rejection/attempt/terminal reference and never invokes a
@@ -228,7 +255,15 @@ recovery never creates a second attempt from the same grant.
 
 - V-One owns cancellation intent; the Runner owns best-effort capsule termination and reports what
   it observed. Cancellation is not rollback and does not prove absence of side effects.
-- Admission checks cancellation before consume. After consume, the Runner records cancellation,
+- The Runner may consume only against an authoritative V-One admission/cancellation decision bound
+  exactly to the grant and carrying an unambiguous decision identity or monotonic generation/epoch.
+  The atomic consume record stores the decision identity/generation against which admission was
+  accepted. Without a demonstrable linearization mechanism, consume is blocked. Transport, token
+  format, and storage mechanism remain child R3 decisions.
+- A cancellation committed authoritatively before that admission linearization point prevents
+  consume and yields a valid-grant `REJECTED` receipt. A cancellation committed after it is a
+  best-effort stop intent for an existing attempt, not rollback or proof that no effect occurred.
+- After consume, the Runner records cancellation,
   prevents not-yet-started side effects where possible, revokes the capsule lease, and fences stale
   workers.
 - Each consumed attempt has a monotonic fence token. Any handler-side mutating gateway and every
@@ -240,6 +275,27 @@ recovery never creates a second attempt from the same grant.
   effect stopped. Recovery therefore verifies post-state and uses `INDETERMINATE` when uncertain.
 - If a target cannot enforce fencing at its mutation boundary, that capability remains blocked for
   mutating use unless an R3 review accepts a concrete compensating design.
+
+Cancellation timing and terminal precedence are normative:
+
+| Timing / observation | Lifecycle and receipt mapping |
+|---|---|
+| Cancel before dispatch | V-One does not dispatch; if a valid grant reaches admission, reject before consume as `REJECTED` / `EXPECTED_EFFECT_NOT_VERIFIED` / `NOT_RUN` |
+| Cancel before consume | Authoritative cancellation precedes linearization; no consume; valid-grant `REJECTED` mapping |
+| Cancel concurrent with consume | Decision identity/generation establishes one order: cancellation-first rejects without consume; consume-first creates one attempt and treats cancellation as stop intent |
+| Cancel after consume, before effect | Attempt remains consumed; stop if possible, verify post-state, then use the applicable attempted-status mapping |
+| Cancel during effect | Stop best effort; verify post-state; cancellation is `CANCELLED` only when it is the proven terminal cause |
+| Cancel after verified effect | Fresh independent `PASSED` evidence takes precedence: `SUCCEEDED` / `EXPECTED_EFFECT_VERIFIED` / `PASSED` |
+| Lost or delayed acknowledgement | Does not change linearization, reset consumption, or determine outcome; recover from durable decision, consume, and receipt records |
+
+Terminal-result precedence is: fresh independent `PASSED` evidence always yields `SUCCEEDED`,
+including after late or concurrent cancellation; a proven cancellation terminal cause with known
+non-success yields `CANCELLED` / `EXPECTED_EFFECT_NOT_VERIFIED` / `FAILED`; a known non-success from
+another cause yields `FAILED` / `EXPECTED_EFFECT_NOT_VERIFIED` / `FAILED`; timeout with unknown
+post-state yields `TIMED_OUT` / `INDETERMINATE` / `INDETERMINATE`; lease, fence, worker, or capsule
+loss with unknown post-state yields `INTERRUPTED` / `INDETERMINATE` / `INDETERMINATE`; and a proven
+cancellation terminal cause with unknown post-state yields `CANCELLED` / `INDETERMINATE` /
+`INDETERMINATE`. Late cancellation never overwrites independently verified success.
 
 ## Payload and target retrieval boundaries
 
@@ -267,6 +323,13 @@ recovery never creates a second attempt from the same grant.
 - The governed target gateway must atomically enforce both the expected target version/state and the
   current fence at mutation time. A read-then-write check without conditional mutation is
   insufficient.
+- Every mutation traverses exactly one reviewed path: either the governed target gateway or a
+  constrained provider-native conditional adapter that atomically enforces the same authorized
+  expected state/version and current fence. The handler receives no credential, endpoint, socket,
+  mount, provider SDK configuration, or network reachability for an alternate direct mutation
+  path; target credentials are available only to that gateway/adapter, and egress allowlisting
+  cannot create a bypass. If non-bypassability cannot be demonstrated, the mutating capability
+  remains blocked.
 - Drift detected before mutation produces no side effect and a fail-closed terminal result.
   Missing, stale, conflicting, or unprovable pre-state is never treated as success.
 - If a provider cannot enforce compare-and-swap, conditional requests, version matching, or an
@@ -331,19 +394,23 @@ These are acceptance requirements, not claims about the current runtime.
 
 ## Receipt lifecycle
 
-1. `REJECTED` receipt: admission failed before consume; postcondition is `NOT_RUN`.
-2. Attempt receipt: after consume, exactly one terminal Runner receipt identity describes the
+1. Protocol rejection: invalid envelope or contract input creates no execution receipt; any future
+   transport response is a bounded negative acknowledgement or no response.
+2. `REJECTED` receipt: a valid, exactly bound grant failed admission before consume; postcondition
+   is `NOT_RUN`.
+3. Attempt receipt: consume durably allocates exactly one immutable Runner receipt identity, whose
+   terminal bytes may be finalized later and describe the
    attempt and binds the exact grant, Runner identity, timestamps, status, outcome, output digest,
    and postcondition digest as defined by ADR-0007.
-3. Delivery: receipt transport may retry. V-One deduplicates by Runner receipt identity and rejects
+4. Delivery: receipt transport may retry. V-One deduplicates by Runner receipt identity and rejects
    conflicting bytes or cross-grant bindings.
-4. Ingestion: V-One validates the full contract and, when future authenticity work is accepted, its
+5. Ingestion: V-One validates the full contract and, when future authenticity work is accepted, its
    envelope. A parsed or digest-valid receipt alone is not trusted evidence.
-5. Reconciliation: V-One maps the accepted receipt to its authoritative lifecycle and local receipt
+6. Reconciliation: V-One maps the accepted receipt to its authoritative lifecycle and local receipt
    ledger without conflating the Runner receipt ID with the ledger entry ID.
-6. Evidence retention: raw output and postcondition observations remain bounded external evidence
+7. Evidence retention: raw output and postcondition observations remain bounded external evidence
    referenced by digest, with authorization, retention, redaction, and integrity controls.
-7. Missing receipt: lease expiry or loss triggers investigation and independent postcondition
+8. Missing receipt: lease expiry or loss triggers investigation and independent postcondition
    verification. It never permits grant reuse; uncertainty is `INDETERMINATE`.
 
 Signed envelopes and trust-store semantics remain an open, separately reviewed R3 decision. This
@@ -362,8 +429,10 @@ ADR does not call digest-only receipts signed or authenticated.
 - Secrets are absent from grants, receipts, dispatch records, logs, and general evidence.
 - Precondition verification is independent from the capability handler and runs immediately before
   mutation.
-- The target gateway atomically enforces the authorized expected state/version and current fence;
-  providers without an enforceable conditional mutation or approved equivalent remain blocked.
+- Every mutation traverses exactly one non-bypassable reviewed path: the governed target gateway or
+  a constrained provider-native conditional adapter that atomically enforces the authorized
+  expected state/version and current fence. Handler credentials, connectivity, and configuration
+  cannot expose an alternate path; providers without demonstrable enforcement remain blocked.
 - Postcondition verification is independent from the capability handler.
 - `INDETERMINATE` is used only as receipt outcome and postcondition status, never as receipt status.
 - Production effects remain disabled.
