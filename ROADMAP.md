@@ -17,6 +17,31 @@
 - **UNKNOWN** — evidence is unavailable;
 - **BLOCKED** — intentionally unavailable or unsafe to activate.
 
+## MVP delivery map
+
+The detailed product-delivery map lives in
+[`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md).
+
+| Phase | Status | Summary |
+|---|---|---|
+| MVP-0 | VERIFIED | Control-plane foundation with identity, approvals, execution lifecycle, evidence, and production effects disabled |
+| MVP-1 | PARTIALLY VERIFIED | Deterministic contract and decision foundation, including ADR-0007 pure execution-contract value objects and reviewed ADR-0008 evidence |
+| MVP-2 | PROPOSED | Operator and approver immutable-request workflow |
+| MVP-3 | PROPOSED | Isolated read-only Runner pilot |
+| MVP-4 | BLOCKED | Governed non-production mutation pilot |
+| MVP-5 | PROPOSED | Productized pilot and integration layer |
+
+The central product promise remains:
+
+```text
+operator requests one concrete capability
+-> exact scope and approval are visible
+-> one short-lived one-time grant is issued
+-> one registered capability executes in an isolated Runner
+-> independent post-state verification runs
+-> VOODOO shows the actual outcome and evidence
+```
+
 ## Program sequence
 
 ### EPIC-000 — Governed control-plane foundation
@@ -72,9 +97,13 @@ Delivered:
 - deterministic ProofGraph v1 JSON;
 - repository-owned frozen-snapshot finalization with fail-closed verification;
 - repository-owned runtime candidate capture;
-- canonical capture→finalize→independent verify closure for
-  `main@8a5f36b218c3aa6dce2e4cf771512875f136d839`, with native Docker runtime
-  verified, smoke passed, healthcheck healthy, and production effects disabled;
+- historical capture→finalize→independent verify closure for
+  `main@8a5f36b218c3aa6dce2e4cf771512875f136d839`;
+- latest post-merge development checkpoint for
+  `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`, with 433 tests, readiness,
+  dependency audit, product-image build and recorded smoke gate passed, and production effects
+  disabled; checkpoint archive SHA-256
+  `80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2`;
 - regression coverage, ADR-0002, and ADR-0004.
 
 Next:
@@ -119,9 +148,14 @@ Implemented foundation: a pure compatibility evaluator reproduces current enviro
 The accepted read-only PDG v1 slice deterministically projects caller-supplied current facts,
 permission observations, approval-policy decisions, approvals, lifecycle/safety state, and optional
 evidence references into a canonical graph and digest. It has no persistence, API, execution gate,
-runtime authorization authority, or runtime integration. The canonical runtime checkpoint attests
-exactly `main@8a5f36b218c3aa6dce2e4cf771512875f136d839`; it does not attest PDG v1 or
-subsequent source changes.
+runtime authorization authority, or runtime integration. The latest post-merge runtime checkpoint
+attests the source tree and development image at
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`; it includes PDG v1 source and tests but does not
+prove any broader runtime authority or integration.
+
+The pure deterministic execution-contract value objects accepted in ADR-0007 are a separate
+representation layer. They are not the signed grant envelope, isolated runner runtime, or
+production mutation boundary.
 
 Goal:
 
@@ -167,6 +201,8 @@ Move execution behind a durable boundary with:
 - postcondition verification.
 
 Production-changing adapters remain BLOCKED until this epic and its security review are complete.
+See the detailed MVP delivery map for the phase-by-phase path from the accepted contract layer to
+the proposed runner pilot.
 
 ### EPIC-006 — Core read-only knowledge boundary
 

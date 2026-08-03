@@ -89,9 +89,21 @@ read-only PDG v1 library -> deterministic policy-decision graph + digest
 - an `ALLOW` projection is not an execution grant and has no runtime authorization authority.
 
 PDG v1 is owner-accepted and locally source/test VERIFIED for this read-only projection scope. The
-latest runtime checkpoint attests exactly
-`main@8a5f36b218c3aa6dce2e4cf771512875f136d839`; it does not attest PDG v1 or
-subsequent source changes.
+latest runtime checkpoint attests the repository and development product image at
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`. It includes the PDG v1 source and tests but does
+not upgrade the read-only projection into runtime authorization authority or integration.
+
+### Pure execution-contract value objects
+
+- accepted `execution-target/v1`, `approval-evidence-set/v1`, `execution-grant/v1`, and
+  `execution-receipt/v1` deterministic value contracts from ADR-0007;
+- canonical serialization, digest calculation, strict parsing, and cross-contract binding checks;
+- no I/O, no persistence, no API wiring, no service composition, no signing, and no Runner runtime;
+- representation only, not authorization authority.
+
+ADR-0007 closes the deterministic contract shape between V-One authorization and a future isolated
+Runner. It does not implement issuance, authenticity envelopes, durable one-time consumption, or
+runtime execution.
 
 ### Persistence
 
@@ -170,10 +182,13 @@ The principal target change is to replace that shared-process boundary with:
 ```text
 VOODOO One
   -> durable queue or outbox
-  -> signed short-lived execution grant
+  -> short-lived execution-grant envelope (authenticity mechanism OPEN)
   -> isolated rootless runner
-  -> structured signed receipt
+  -> structured receipt envelope (authenticity mechanism OPEN)
 ```
+
+The reviewed ADR-0008 boundary and its threat model describe that target architecture only. They are
+not implemented in the current runtime.
 
 ## Target architecture
 
@@ -184,7 +199,7 @@ Users, AI proposal sources, CyberCore
         VOODOO One API and policy
  identity -> decision graph -> approvals
                  |
-          signed execution grant
+       execution-grant envelope
                  |
                  v
       Durable execution transport
@@ -195,7 +210,7 @@ Users, AI proposal sources, CyberCore
  resource limits | network deny by default
  heartbeat | lease | fence | postconditions
                  |
-          structured signed receipt
+           receipt envelope
                  |
        +---------+---------+
        |                   |
@@ -236,5 +251,10 @@ Initial integration must be:
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 - [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
+- [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md)
+- [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md)
 - [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
+- [`docs/adr/ADR-0007-execution-grant-receipt-contract-v1.md`](docs/adr/ADR-0007-execution-grant-receipt-contract-v1.md)
+- [`docs/adr/ADR-0008-isolated-runner-boundary-v1.md`](docs/adr/ADR-0008-isolated-runner-boundary-v1.md)
+- [`docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
 - [`docs/adr/`](docs/adr/)

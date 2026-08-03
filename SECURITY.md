@@ -23,6 +23,8 @@ details in logs. Repository security advisories must be used once enabled by the
 - authentication routes depend on the configured identity-provider boundary,
 - unreleased identity providers abort startup without local-authentication fallback,
 - production effects disabled unless explicitly released,
+- ADR-0007 execution-contract value objects are accepted as representation only; authoritative
+  issuance and isolated Runner runtime remain proposed,
 - application SQL selected only from the reviewed statement catalog,
 - unavailable database dialects fail closed without SQL fallback,
 - untrusted HTTP hosts and inline browser execution denied by default,
@@ -36,4 +38,6 @@ details in logs. Repository security advisories must be used once enabled by the
 symlinks, special files, incomplete manifest coverage and inconsistent Git/source/runtime claims.
 It never executes checkpoint code, contacts Docker or a registry, changes a database, or enables
 production effects. Remote byte verification and signed attestations remain outside the current
-boundary.
+boundary. The proposed isolated Runner threat model is documented in
+[`docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
+and is not implemented runtime control.

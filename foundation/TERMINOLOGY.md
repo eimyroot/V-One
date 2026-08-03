@@ -94,13 +94,21 @@ compensation properties.
 
 ### Execution grant
 
-A short-lived authorization binding one execution to an exact artifact, target, policy, capability,
-expiry, nonce, and fence. This is PROPOSED.
+The pure deterministic `execution-grant/v1` value object accepted by ADR-0007. It binds one
+execution to an exact artifact, target, policy, capability, expiry, nonce, and fence as a canonical
+representation. Authoritative issuance, signatures, and one-time runtime consumption remain
+PROPOSED.
+
+### Authoritative grant issuance
+
+The governed operation that emits a short-lived execution grant from approved evidence and policy.
+It is separate from the pure deterministic grant representation and remains PROPOSED.
 
 ### Runner
 
 An isolated process or service that validates a grant, executes only allowed capabilities, verifies
-postconditions, and emits a structured receipt. The isolated runner is PROPOSED.
+postconditions, and emits a structured receipt. The isolated Runner runtime is PROPOSED and is
+described by ADR-0008 and the reviewed threat model, not by current runtime behavior.
 
 ### Fence
 

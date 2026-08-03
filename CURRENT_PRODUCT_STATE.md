@@ -1,31 +1,60 @@
 # VOODOO — CURRENT PRODUCT STATE
 
-> Tento dokument je proměnlivý důkazní snapshot. Není náhradou živého Git stavu,
-> provedených testů ani commit-bound runtime evidence.
+> Toto je proměnlivý důkazní snapshot. Není náhradou živého Git stavu, provedených testů ani
+> commit-bound runtime evidence.
 
 ## Identita a hranice tvrzení
 
 ```text
-AS_OF: 2026-07-30
+AS_OF: 2026-08-03
 LIVE_BRANCH_AT_RECONCILIATION_PREFLIGHT: main
-LIVE_HEAD_AT_RECONCILIATION_PREFLIGHT: 8a5f36b218c3aa6dce2e4cf771512875f136d839
-LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@8a5f36b218c3aa6dce2e4cf771512875f136d839
-RUNTIME_EVIDENCE_CLASS: DEVELOPMENT_RUNTIME_VERIFIED_NOT_RELEASE
-PDG_V1_SOURCE_TEST_STATUS: OWNER_ACCEPTED_AND_LOCALLY_VERIFIED
-PDG_V1_RUNTIME_ATTESTATION: NOT_ATTESTED_BY_LATEST_CHECKPOINT
-RELEASE_STATE: BLOCKED — není release-verified
+LIVE_HEAD_AT_RECONCILIATION_PREFLIGHT: 57c7bf2277616c4445039865ac7cf81c5fada858
+LATEST_VERIFIED_GIT_BASELINE: main@57c7bf2277616c4445039865ac7cf81c5fada858
+LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
+RUNTIME_EVIDENCE_CLASS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
+ADR_0007_CONTRACT_LAYER: VERIFIED source/test scope; pure deterministic value contracts only
+ADR_0008_DESIGN: PROPOSED
+ADR_0008_OWNER_DECISION: REQUIRED
+ADR_0008_REVIEW_COMMIT: 0fa69411b246c4bd80b8a2eaa989e60fd8bca663
+ADR_0008_REVIEW_PUBLICATION: VERIFIED_REMOTE_BRANCH
+ADR_0008_REVIEW_PR: 54 MERGED
+ADR_0008_MERGE_COMMIT: 57c7bf2277616c4445039865ac7cf81c5fada858
+DOCS_MVP_PATCH: VERIFIED_EVIDENCE; NOT_COMMITTED_AT_RECONCILIATION_PREFLIGHT
+PORTABLE_BUNDLE: VERIFIED evidence, not runtime evidence
+RELEASE_STATE: BLOCKED
 PRODUCTION_EFFECTS: DISABLED in the verified local-development runtime checkpoint
 ```
 
 Tyto identity nesmějí být slučovány:
 
-1. **Živá Git identita** je vždy autoritativně zjištěna příkazy nad aktuálním repozitářem.
-2. **Runtime-attested baseline** je commit
-   `8a5f36b218c3aa6dce2e4cf771512875f136d839` a pouze jeho zachycený artefakt.
-3. **PDG v1 source/test evidence** je owner-accepted a lokálně VERIFIED pro read-only projection
-   scope; checkpoint pro `8a5f36b...` PDG v1 ani pozdější source změny neattestuje.
-4. **Release stav** zůstává `BLOCKED`; lokální development-runtime evidence není release,
-   deployment ani produkční autorizace.
+1. **Živá Git identita** je autoritativně zjištěna příkazy nad aktuálním repozitářem a pro tuto
+   synchronizaci je `main@57c7bf2277616c4445039865ac7cf81c5fada858`.
+2. **Latest runtime-attested baseline** je post-merge checkpoint
+   `d57d37111b8bc9471a136b6c618aad8e920f1aff`. Starší `8a5f36b...` capture/finalize evidence
+   zůstává historickým důkazem konkrétního checkpoint workflow, nikoliv nejnovější runtime baseline.
+3. **ADR-0007 contract layer** je pure deterministic representation only; authoritative issuance,
+   authenticity envelopes, and isolated Runner runtime remain separate and not implemented.
+4. **ADR-0008 review commit** `0fa69411b246c4bd80b8a2eaa989e60fd8bca663` byl publikován na
+   exact review branch a mergnut přes PR #54 jako `57c7bf2277616c4445039865ac7cf81c5fada858`.
+   Tím se ADR automaticky nestává ACCEPTED a nevzniká runtime implementace.
+5. **Documentation/MVP patch** je samostatný, evidence-verified docs/test-only change. V okamžiku
+   reconciliation preflight ještě nebyl commitnut ani publikován.
+6. **Release stav** zůstává `BLOCKED`; lokální evidence, review merge ani dokumentační synchronizace
+   samy o sobě nepředstavují release ani deployment.
+
+## Co je VERIFIED na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
+
+- canonical checkout byl fast-forwardnut na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
+  a uživatelský terminálový výstup po operaci hlásil čisté `## main`;
+- remote `main` ukazuje na `57c7bf2277616c4445039865ac7cf81c5fada858`;
+- review commit `0fa69411b246c4bd80b8a2eaa989e60fd8bca663` byl publikován exact publisherem
+  a mergnut přes PR #54;
+- ADR-0007 pure deterministic execution-contract value objects jsou source/test VERIFIED;
+- read-only Policy Decision Graph v1 zůstává owner-accepted a source/test VERIFIED pro svůj
+  read-only slice;
+- portable bundle, V2/V2.1 documentation evidence a publication evidence jsou evidence,
+  nikoliv runtime evidence;
+- latest runtime-attested baseline zůstává `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`.
 
 ## Aktuální source capability
 
@@ -39,73 +68,69 @@ Aktuální source tree obsahuje:
 - checksum-verified SQLite migrace a reviewovaný SQL statement catalog;
 - audit a receipt ledgers s nezávislou kontrolou integrity;
 - bounded local adapters a governed sandbox filesystem effects;
-- lokální checkpoint verifier, deterministický ProofGraph v1 JSON a repository-owned checkpoint
+- lokální checkpoint verifier, deterministic ProofGraph v1 JSON a repository-owned checkpoint
   finalizer;
-- **read-only Policy Decision Graph v1** jako čistou deterministickou projekci caller-supplied
-  authoritative snapshotu.
+- read-only deterministic Policy Decision Graph v1 jako čistou deterministickou projekci;
+- ADR-0007 pure execution-contract value objects jako source/test VERIFIED layer bez runtime
+  authority.
 
 Policy Decision Graph v1 vrací `ALLOW` nebo `DENY`, `execution_eligible`, reason codes,
-limitations, deterministicky řazené nodes/edges a digest. Nemá autorizační pravomoc, není runtime
+limitations, deterministically řazené nodes/edges a digest. Nemá autorizační pravomoc, není runtime
 gate, nic nevykonává ani nepersistuje a není napojen do API, service, execution lifecycle,
-databáze nebo CyberCore. Zachovává současné `ApprovalPolicyDecision.reason_codes` a nové
-projekční kódy používají namespace `PDG_*`. Budoucí approval payload, policy-version a expiry
-binding jsou limitations, nikoli nově vynalezená deny policy.
+databáze nebo CyberCore. Zachovává současné `ApprovalPolicyDecision.reason_codes` a nové projekční
+kódy používají namespace `PDG_*`.
 
-ADR-0006 je owner-accepted pro tento omezený projection-only slice. Přijatý corrected review
-patch má SHA-256:
+ADR-0007 accepted pure deterministic contracts:
 
-```text
-47304e1268af92a4196e9c61d2e2576792c540abca4c26326b8eee99b61951a0
-```
+- `execution-target/v1`;
+- `approval-evidence-set/v1`;
+- `execution-grant/v1`;
+- `execution-receipt/v1`.
 
-## Kanonický runtime checkpoint
+Tyto kontrakty jsou hodnotová reprezentace, nikoliv signed envelope, issuer, runtime Runner nebo
+production effect.
+
+## Nejnovější runtime checkpoint
 
 Pro committed baseline
-`main@8a5f36b218c3aa6dce2e4cf771512875f136d839` existuje kanonická evidence:
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff` existuje ověřená post-merge evidence:
 
 ```text
-EVIDENCE_DIRECTORY:
-/Users/eimyna/00_DEV/V-ONE-EVIDENCE/CODEX/CANONICAL_MAIN_CLOSURE_20260730T151146Z_8a5f36b
-EVIDENCE_SHA256_MANIFEST:
-1cf2cc77cb10a3a2a31caa4be418448d4f0e4d7cda8a4d8fe52fb61bfa279f94
-FINAL_VERIFY: valid=true, errors=[], warnings=[]
-RUNTIME_CLASS: DEVELOPMENT_RUNTIME_VERIFIED_NOT_RELEASE
-IMAGE_ID: sha256:b3d1c3e7cca161dd185cb71cf6400052426e6120222f75f456e2236774419b6d
-IMAGE: voodoo-one:capture-8a5f36b218c3-97bbc4d394b3
-RUNTIME_BUNDLE_SHA256:
-fca9620a3a8f69f491828468ec3c2305f2e6574f5c5a7e51cd7954b5db8c4a23
-PLATFORM: linux/amd64
-SMOKE: PASSED
-HEALTH: HEALTHY
+EVIDENCE_ARCHIVE:
+POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
+EVIDENCE_ARCHIVE_SHA256:
+80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
+EVIDENCE_MANIFEST_SHA256:
+f2851d70523122134bef007bd589872b810326a924f9fc187e2bec1da0aed0a2
+STATUS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
+FULL_TEST_SUITE: 433 passed
+PRODUCT_READINESS: PASSED
+DEPENDENCY_AUDIT: no known vulnerabilities reported
+PRODUCT_IMAGE_BUILD: PASSED
+PRODUCT_IMAGE_SMOKE: PASSED according to checkpoint result
+PRODUCT_IMAGE_ID:
+sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
+WORKTREE: CLEAN
+STAGING: EMPTY
 PRODUCTION_EFFECTS: DISABLED
-CHECKPOINT_OUTER_MANIFEST_SHA256:
-88671ebbfa527de47f03aacbe598791bc8c46bba2c8fb206493fadc088b81e12
-CHECKPOINT_FINALIZED: true
+RELEASE: NOT_PERFORMED
+DEPLOYMENT: NOT_PERFORMED
 ```
 
-Evidence je omezena na lokální development runtime. Neprokazuje registry push, remote write,
-signing, release, deployment ani production effects. Neattestuje PDG v1 ani source změny
-následující po přesně uvedeném baseline commitu.
+Evidence je omezena na lokální development checkpoint. Neprokazuje registry push, vzdálené
+podepisování, release, deployment ani produkční efekt. Neattestuje pozdější review commit
+`0fa69411b246c4bd80b8a2eaa989e60fd8bca663`, merge commit `57c7bf2277616c4445039865ac7cf81c5fada858`
+ani tento documentation/MVP patch.
 
-## Dodaný milník a další pořadí
+Starší `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize evidence zůstává
+historicky relevantní pro checkpoint workflow, ale není nejnovější runtime-attested baseline.
 
-EPIC-002 je uzavřen na committed baseline `8a5f36b...`: repository-owned checkpoint
-finalization a canonical-main runtime closure mají přesnou lokální evidence identity.
-
-ADR-0006 a read-only PDG v1 tvoří přijatý foundation slice širšího target Policy Decision Graphu.
-Nejsou execution-policy integrací. Další bezpečný delivery pořadník je:
-
-1. execution grant / receipt contract s explicitní vazbou identity, scope, freshness a evidence;
-2. isolated runner contract a teprve potom jeho oddělená implementace;
-3. read-only CyberCore proposal boundary;
-4. mutační nebo autonomní integrace pouze po samostatném návrhu, review a autorizaci.
-
-## Co zůstává PROPOSED nebo BLOCKED
+## Co zůstává PROPOSED, NOT IMPLEMENTED nebo BLOCKED
 
 - autoritativní runtime Policy Decision Graph a capability-policy engine;
 - isolated runner capsules a signed short-lived execution grants;
 - released OIDC a PostgreSQL backend;
-- signed checkpoints/receipts a external evidence anchoring;
+- signed checkpoints/receipts and external evidence anchoring;
 - remote byte attestation, širší SBOM/provenance a multi-arch release evidence;
 - mutační CyberCore integration;
 - unrestricted production release a production effects;
@@ -115,21 +140,26 @@ Nejsou execution-policy integrací. Další bezpečný delivery pořadník je:
 
 ```text
 VERIFIED:
-- reconciliation preflight observed main@8a5f36b218c3aa6dce2e4cf771512875f136d839
-- canonical runtime evidence manifest matches its required SHA-256
-- canonical verification reports valid=true, errors=[], warnings=[]
-- runtime evidence class is DEVELOPMENT_RUNTIME_VERIFIED_NOT_RELEASE
-- verified checkpoint smoke passed, health was healthy, and production effects were disabled
-- corrected PDG patch identity matches the owner-accepted SHA-256
+- reconciliation preflight observed main@57c7bf2277616c4445039865ac7cf81c5fada858
+- review commit 0fa69411b246c4bd80b8a2eaa989e60fd8bca663 was published and merged through PR #54
+- publication evidence archive and final independent verification match their recorded SHA-256 values
+- post-merge runtime checkpoint archive and internal manifest match their recorded SHA-256 values
+- checkpoint result records Ruff, compile, focused gates, 433 full tests, readiness, dependency audit,
+  product-image build, and recorded smoke gate as passed
+- runtime evidence class is IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
+- production effects were disabled; release and deployment were not performed
+- ADR-0007 pure deterministic execution-contract value objects are source/test VERIFIED
 - read-only PDG v1 is locally source/test VERIFIED for its projection-only scope
 
 IMPLEMENTED:
 - read-only Policy Decision Graph v1 exists as a pure library with no runtime integration
 - ADR-0006 records owner acceptance without adding runtime authority
-- documentation separates live Git, commit-bound runtime evidence, subsequent source changes, and release
+- ADR-0008 lifecycle-semantics documentation correction is present on main but the ADR remains PROPOSED
+- documentation separates live Git, commit-bound runtime evidence, subsequent source changes, and
+  documentation-evidence state
 
 NOT VERIFIED:
-- runtime attestation for PDG v1 or any source change after `8a5f36b218c3aa6dce2e4cf771512875f136d839`
+- runtime attestation for `0fa69411...`, merge commit `57c7bf22...`, or this documentation/MVP patch
 - release, deployment, registry publication, remote signing, or production operation
 
 BLOCKED:
@@ -138,8 +168,8 @@ BLOCKED:
 - public commercial distribution
 ```
 
-Capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+Dokumentace capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 
-Delivery order: [`ROADMAP.md`](ROADMAP.md)
+Dokumentace delivery order: [`ROADMAP.md`](ROADMAP.md)
 
 Accepted decision: [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)

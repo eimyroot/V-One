@@ -39,6 +39,11 @@
 - database-sequenced receipt ordering independent of timestamps and random IDs,
 - non-root read-only Docker runtime with dropped capabilities.
 
+ADR-0007 accepts the pure deterministic execution-contract value objects as representation only.
+ADR-0008 and [`../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
+describe the proposed isolated Runner boundary and threat model; runtime isolation controls remain
+not implemented.
+
 `VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
 startup before the service accepts traffic. This prevents a SQLite-specific service layer from being
 misrepresented as production-ready PostgreSQL support. The statement catalog has no cross-dialect

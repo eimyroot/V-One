@@ -3,15 +3,18 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
-| Inventory audit date | `2026-07-30` |
-| Inventory audit base | `8a5f36b218c3aa6dce2e4cf771512875f136d839` |
+| Inventory audit date | `2026-08-03` |
+| Inventory reconciliation base | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
 | Exact live Git identity | See `CURRENT_PRODUCT_STATE.md` and query Git directly |
-| Latest runtime-attested committed baseline | `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` |
+| Latest verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
+| Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
-| Canonical runtime evidence | `DEVELOPMENT_RUNTIME_VERIFIED_NOT_RELEASE`; native Docker runtime verified, smoke passed, healthcheck healthy, production effects disabled |
-| Runtime-evidence manifest SHA-256 | `1cf2cc77cb10a3a2a31caa4be418448d4f0e4d7cda8a4d8fe52fb61bfa279f94` |
-| PDG v1 evidence boundary | Owner-accepted and locally source/test VERIFIED; the latest runtime checkpoint does not attest PDG v1 or subsequent source changes |
+| Latest runtime evidence | `IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT`; 433 tests, readiness, dependency audit, product-image build and recorded smoke gate passed; production effects disabled |
+| Latest runtime-evidence archive SHA-256 | `80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2` |
+| PDG v1 evidence boundary | Owner-accepted and source/test VERIFIED; the `d57d371...` checkpoint includes its source/tests but does not provide runtime authorization authority or integration |
+| ADR-0007 contract layer | Source/test VERIFIED pure deterministic execution-target, approval-evidence-set, grant, and receipt value objects |
+| ADR-0008 lifecycle-semantics review | Exact commit `0fa69411...` published and merged via PR #54 as `57c7bf22...`; ADR remains PROPOSED |
 
 ## Reading this document
 
@@ -22,7 +25,7 @@ limitations are therefore part of every claim.
 
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|
-| FastAPI `/api/v1` control plane | VERIFIED | system tests; composed application routes | fresh Docker closure after the latest source/governance changes is pending |
+| FastAPI `/api/v1` control plane | VERIFIED | system tests, composed application routes, and the `d57d371...` post-merge checkpoint | development-only; no release or deployment |
 | Static command-center console | VERIFIED | product platform and HTTP tests | operator UX is a controlled-pilot surface |
 | Local bootstrap and credential login | VERIFIED | authentication and bootstrap tests | no released external identity provider |
 | Context-bound bearer sessions | VERIFIED | token, identity, and session lifecycle tests | local session model; enterprise OIDC is blocked |
@@ -49,12 +52,13 @@ limitations are therefore part of every claim.
 | Nested manifest mutation detection | VERIFIED | verifier regression tests plus canonical `8a5f36b218c3aa6dce2e4cf771512875f136d839` checkpoint with zero warnings and zero nested mismatches | local checkpoint scope only |
 | Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | finalization remains explicit and separate from capture; release and remote publication remain separate |
 | Repository-owned runtime candidate capture | VERIFIED | canonical `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize→independent verify closure | local development runtime evidence; not release or deployment |
+| ADR-0007 pure execution-contract value objects | VERIFIED | deterministic contract and binding tests; source/test evidence | no runtime authority, signing, issuer, or Runner consumption |
 | Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
 | Signed execution grants | PROPOSED | target contract only | no grant issuer or verifier exists |
 | Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; current outcomes remain authoritative and Solo, Team, Regulated enforcement is not implemented |
-| Read-only Policy Decision Graph v1 projection | VERIFIED | accepted ADR-0006; deterministic canonical graph/digest and focused plus full local tests | caller-supplied unsigned snapshot; no persistence, API, runtime authorization authority, execution gate, or attestation by the latest runtime checkpoint |
+| Read-only Policy Decision Graph v1 projection | VERIFIED | accepted ADR-0006; deterministic canonical graph/digest, focused/full tests, and inclusion in the `d57d371...` checkpoint source tree | caller-supplied unsigned snapshot; no persistence, API, runtime authorization authority, or execution gate |
 | Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and runtime enforcement are not implemented |
 | CyberCore read-only intake | PROPOSED | architectural boundary only | no integration endpoint or persistence |
 | AI Change Copilot | PROPOSED | vision only | AI has no authorization authority |
