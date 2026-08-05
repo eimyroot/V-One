@@ -3,19 +3,27 @@
 | Field | Value |
 |---|---|
 | Document status | Living delivery plan |
-| Source of current capability truth | `docs/product/CURRENT_CAPABILITIES.md` |
+| Authority scope | Delivery order and exit gates; does not prove implementation or adoption |
+| Source of documented capability truth | `docs/product/CURRENT_CAPABILITIES.md` |
+| Evidence baseline | `CURRENT_PRODUCT_STATE.md` |
+| Live-state boundary | Phase statuses are documented at the cited baseline and require direct verification for a later HEAD, CI or runtime |
 | Production status | BLOCKED until an explicit governed release |
 | Update rule | Update with every accepted milestone or material scope change |
+| Governance | `docs/governance/DOCUMENTATION_POLICY.md` and `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
 
 ## Status vocabulary
 
-- **VERIFIED** — supported by current repository evidence and executed verification;
-- **IMPLEMENTED** — exists in the current code or documentation but has not met every stated
-  verification scope;
-- **PROPOSED** — accepted direction without implementation;
+- **VERIFIED** — all stated gates for the exact claim and scope are evidenced at the documented baseline;
+- **PARTIALLY_VERIFIED** — an exact subset is verified and the missing gates are listed;
+- **IMPLEMENTED** — exists in code or documentation but has not met every stated verification scope;
+- **PROPOSED** — intended or under review; not necessarily adopted and not implemented;
 - **INFERRED** — derived from evidence but not directly demonstrated;
-- **UNKNOWN** — evidence is unavailable;
+- **UNKNOWN** — evidence is unavailable or conflicting;
 - **BLOCKED** — intentionally unavailable or unsafe to activate.
+
+Roadmap status is a planning classification. It becomes `LIVE_VERIFIED` only after the current
+repository and required gates are checked directly. A roadmap edit, merge or milestone label cannot
+create a capability, release or deployment.
 
 ## MVP delivery map
 
@@ -25,7 +33,7 @@ The detailed product-delivery map lives in
 | Phase | Status | Summary |
 |---|---|---|
 | MVP-0 | VERIFIED | Control-plane foundation with identity, approvals, execution lifecycle, evidence, and production effects disabled |
-| MVP-1 | PARTIALLY VERIFIED | Deterministic contract and decision foundation, including ADR-0007 pure execution-contract value objects and reviewed ADR-0008 evidence |
+| MVP-1 | PARTIALLY_VERIFIED | Deterministic contract and decision foundation, including ADR-0007 pure execution-contract value objects and reviewed ADR-0008 evidence |
 | MVP-2 | PROPOSED | Operator and approver immutable-request workflow |
 | MVP-3 | PROPOSED | Isolated read-only Runner pilot |
 | MVP-4 | BLOCKED | Governed non-production mutation pilot |
@@ -46,7 +54,7 @@ operator requests one concrete capability
 
 ### EPIC-000 — Governed control-plane foundation
 
-**Status:** VERIFIED for the development and controlled-pilot scope.
+**Status at documented baseline:** VERIFIED for the development and controlled-pilot scope.
 
 Delivered:
 
@@ -65,7 +73,7 @@ Remaining limitations:
 
 ### EPIC-001 — Execution safety and recovery
 
-**Status:** VERIFIED for the current local adapter scope.
+**Status at documented baseline:** VERIFIED for the local adapter scope.
 
 Delivered:
 
@@ -84,7 +92,7 @@ Next:
 
 ### EPIC-002 — ProofGraph local checkpoint verification
 
-**Status:** VERIFIED.
+**Status at documented baseline:** VERIFIED.
 
 Delivered:
 
@@ -114,7 +122,7 @@ Next:
 
 ### EPIC-003 — Product documentation foundation
 
-**Status:** IMPLEMENTED by the documentation-foundation change; verification is repository-local.
+**Status at documented baseline:** IMPLEMENTED by the documentation-foundation change; verification is repository-local.
 
 Scope:
 
@@ -137,7 +145,7 @@ Exit criteria:
 
 ### EPIC-004 — Policy Decision Graph
 
-**Status:** VERIFIED for the read-only PDG v1 projection foundation; broader authoritative policy
+**Status at documented baseline:** VERIFIED for the read-only PDG v1 projection foundation; broader authoritative policy
 and runtime enforcement remain PROPOSED.
 
 Accepted foundation: [`ADR-0006`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md).

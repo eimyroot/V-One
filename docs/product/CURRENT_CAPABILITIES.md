@@ -3,9 +3,12 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
+| Authority scope | Authoritative human-readable capability classification only for the stated audit date and evidence baseline |
 | Inventory audit date | `2026-08-03` |
 | Inventory reconciliation base | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
-| Exact live Git identity | See `CURRENT_PRODUCT_STATE.md` and query Git directly |
+| Exact live Git identity | Query Git directly; `CURRENT_PRODUCT_STATE.md` is a dated snapshot, not a live lookup |
+| Live-state boundary | Not authoritative for a later HEAD, dirty worktree, CI run, runtime, release or deployment |
+| Governance source | `docs/governance/DOCUMENTATION_POLICY.md` and `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
 | Latest verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
 | Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
@@ -18,10 +21,14 @@
 
 ## Reading this document
 
-A capability may be VERIFIED for tests but not for unrestricted production. Evidence scope and
+A capability may be `VERIFIED` for tests but not for unrestricted production. Evidence scope and
 limitations are therefore part of every claim.
 
-## Capability matrix
+Every row is `DOCUMENTED_CURRENT` at the reconciliation baseline. Treat it as `LIVE_VERIFIED` only
+after checking the active repository, relevant tests, CI or runtime. When the live state conflicts
+with this inventory, the technical evidence wins and this document must be updated.
+
+## Capability matrix at the documented baseline
 
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|

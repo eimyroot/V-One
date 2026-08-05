@@ -3,13 +3,26 @@
 | Field | Value |
 |---|---|
 | Document status | PROPOSED product-delivery map |
+| Map adoption state | PROPOSED — phase evidence does not by itself adopt this sequencing document |
+| Current capability source | `docs/product/CURRENT_CAPABILITIES.md` |
+| Snapshot source | `CURRENT_PRODUCT_STATE.md` |
 | Current verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
 | Latest runtime-attested baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
+| Live-state boundary | These identities are documented snapshots; query Git, tests, CI and runtime directly for current state |
 | ADR-0008 review commit | `0fa69411b246c4bd80b8a2eaa989e60fd8bca663`, merged via PR #54 |
 | ADR-0007 | VERIFIED acceptance of pure deterministic contracts only |
-| ADR-0008 | PROPOSED - owner decision REQUIRED |
+| ADR-0008 | PROPOSED — owner decision REQUIRED |
 | Production effects | BLOCKED |
 | Release status | DEVELOPMENT / CONTROLLED PILOT ONLY |
+| Governance | `docs/governance/DOCUMENTATION_POLICY.md` and `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+
+## Reading this map
+
+- Phase status describes evidence at the documented baseline, not automatically the live repository.
+- `PROPOSED` does not mean adopted or implemented.
+- `PARTIALLY_VERIFIED` requires the verified subset and missing gates to be explicit.
+- A merge, review commit or documentation update cannot enable production effects, issue a release or
+  convert ADR-0008 from `PROPOSED` to `ACCEPTED`.
 
 ## MVP product promise
 
@@ -88,7 +101,7 @@ broad multi-tenant enterprise deployment.
 
 ## MVP-0 VERIFIED control-plane foundation
 
-**Status:** VERIFIED for the development and controlled-pilot scope.
+**Status at documented baseline:** VERIFIED for the development and controlled-pilot scope.
 
 Delivered:
 
@@ -105,7 +118,7 @@ Remaining limitation:
 
 ## MVP-1 PARTIALLY VERIFIED contract and decision foundation
 
-**Status:** PARTIALLY VERIFIED.
+**Status at documented baseline:** PARTIALLY_VERIFIED.
 
 Delivered:
 
@@ -133,7 +146,7 @@ Exit gate:
 
 ## MVP-2 PROPOSED operator and approver workflow
 
-**Status:** PROPOSED.
+**Status:** PROPOSED — not implemented.
 
 Goal:
 
@@ -162,7 +175,7 @@ Acceptance criteria:
 
 ## MVP-3 PROPOSED isolated read-only Runner pilot
 
-**Status:** PROPOSED.
+**Status:** PROPOSED — not implemented.
 
 Goal:
 
@@ -232,7 +245,7 @@ Exit gate:
 
 ## MVP-5 PROPOSED productized pilot and integration layer
 
-**Status:** PROPOSED.
+**Status:** PROPOSED — not implemented.
 
 Goal:
 

@@ -6,10 +6,12 @@
 |---|---|
 | Soubor | `VOODOO_PRODUCT_DECISION_DELIVERY_CONSTITUTION.md` |
 | Verze | `1.0.0` |
-| Stav | `PROPOSED_FOR_ADOPTION` |
+| Stav | `PROPOSED_FOR_ADOPTION` — dokument není účinný bez splnění sekce 22 |
 | Vlastník | vlastník projektu VOODOO |
-| Nadřazený dokument | `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` |
-| Očekávaný SHA-256 nadřazeného dokumentu | `ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918` |
+| Nadřazený dokument | `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` do případné formální adopce `PROJECT_CONSTITUTION.md` |
+| Vztah k `PROJECT_CONSTITUTION.md` | `PROJECT_CONSTITUTION.md` je v dodané sadě `Normative Draft`; po jeho adopci musí být tento dokument před vlastní adopcí znovu reconciliován |
+| Adopční evidence | explicitní owner approval, adoption commit/date a záznam v `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+| Očekávaný SHA-256 nadřazeného dokumentu | `12b257539cc1a8051aa8970246dff5965146a583485bb605e5feee5a723f5d63` |
 | Účel | určit, co VOODOO staví, proč, v jakém pořadí, kdo rozhoduje a jak se prokazuje skutečná hodnota |
 | Revize | po významném milníku nebo nejméně jednou za 90 dní |
 
@@ -21,10 +23,13 @@
 
 ```text
 WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md
-= jak se technická práce bezpečně provádí a ověřuje
+= aktuální deklarovaný technický provozní standard
+
+PROJECT_CONSTITUTION.md
+= návrh nejvyšší inženýrské ústavy; účinný až po formální adopci
 
 TENTO DOKUMENT
-= co stavíme, proč to stavíme, kdo rozhoduje a v jakém pořadí postupujeme
+= návrh produktové, rozhodovací a delivery ústavy; účinný až po splnění sekce 22
 ```
 
 ## Hlavní zásada
@@ -93,19 +98,36 @@ Další role se nepřidávají, dokud konkrétní problém neprokáže jejich po
 
 # 1. NORMATIVNÍ POSTAVENÍ
 
-Při konfliktu platí toto pořadí:
+Tento dokument je `PROPOSED_FOR_ADOPTION`. Dokud není splněna sekce 22, poskytuje návrhový a
+koordinační rámec, ale nesmí přebít účinný technický standard, přijaté ADR nebo povinné policy.
 
-1. systémová, bezpečnostní a právní pravidla platformy,
-2. `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`,
-3. explicitní aktuální zadání vlastníka projektu,
-4. tento dokument,
-5. schválené ADR a verzované kontrakty,
-6. roadmapa, README a ostatní dokumentace,
+## 1.1 Aktuální fail-closed interpretace před adopcí
+
+Při konfliktu platí:
+
+1. závazná systémová, bezpečnostní, právní a smluvní pravidla platformy;
+2. aktuálně deklarovaný technický standard `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`;
+3. přijatá ADR v jejich přesném rozsahu a mandatory policy, pokud neodporují vyšším závazným pravidlům;
+4. explicitní aktuální zadání vlastníka, pouze pokud neoslabuje bezpečnostní nebo právní požadavky;
+5. tento dokument jako návrh;
+6. roadmapa, README a ostatní popisná dokumentace;
 7. osobní preference implementátora.
 
-Tento dokument neduplikuje technické prováděcí podrobnosti nadřazené ústavy. Doplňuje ji v oblastech produktu, priorit, rozhodování, dodávky hodnoty a řízení životního cyklu.
+Přesný účinný stav musí být veden v
+`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`. Nejasný konflikt je `BLOCKED`, nikoliv
+příležitost k domněnce.
 
-Pokud není nadřazený dokument dostupný nebo jeho integrita nebyla ověřena, významná technická implementace je `BLOCKED` nebo `PARTIALLY VERIFIED`.
+## 1.2 Stav po případné adopci `PROJECT_CONSTITUTION.md`
+
+Pokud bude `PROJECT_CONSTITUTION.md` formálně adoptován, stane se nadřazenou inženýrskou ústavou.
+Tento dokument musí být před vlastní adopcí znovu zkontrolován a jeho hierarchie, role a výjimky musí
+být sladěny s přijatou verzí ústavy.
+
+Tento dokument neduplikuje technické prováděcí podrobnosti nadřazeného standardu. Doplňuje jej v
+oblastech produktu, priorit, rozhodování, dodávky hodnoty a řízení životního cyklu.
+
+Pokud není nadřazený dokument dostupný nebo jeho integrita nebyla ověřena, významná technická
+implementace je `BLOCKED` nebo `PARTIALLY_VERIFIED`.
 
 ---
 
@@ -693,15 +715,21 @@ Projekt má mít minimum kanonických zdrojů:
 
 | Dokument | Jediná odpovědnost |
 |---|---|
+| `GOVERNANCE.md` | orientační mapa dokumentů; sama není normativní autoritou |
+| `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` | účinný adopční stav, deklarovaná autorita, konflikty a přesné adopční důkazy |
+| `PROJECT_CONSTITUTION.md` | návrh nejvyšší inženýrské ústavy; do adopce není účinný |
 | `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` | jak se technická práce provádí, testuje, ověřuje a reportuje |
-| tento dokument | co se staví, proč, kdo rozhoduje a jak probíhá dodávka hodnoty |
-| `CURRENT_PRODUCT_STATE.md` | aktuální důkazní snapshot svázaný s konkrétním commitem |
-| `README.md` | aktuální účel a bezpečný start |
-| `ARCHITECTURE.md` | skutečná současná architektura |
-| `SECURITY.md` | podporovaný bezpečnostní stav a reporting |
+| tento dokument | návrh toho, co se staví, proč, kdo rozhoduje a jak probíhá dodávka hodnoty |
+| `docs/governance/DOCUMENTATION_POLICY.md` | povinná pravidla pro pravdivost, statusy, evidence a údržbu dokumentace |
+| `CURRENT_PRODUCT_STATE.md` | datovaný důkazní snapshot svázaný s konkrétním commitem; není živý Git stav |
+| `docs/product/CURRENT_CAPABILITIES.md` | autoritativní lidsky čitelný inventář capability statusů k uvedenému baseline |
+| `ROADMAP.md` | plán pořadí práce; nedokazuje implementaci |
+| `README.md` | účel a bezpečný start, nikoliv důkaz funkčnosti |
+| `ARCHITECTURE.md` | dokumentovaná současná a cílová architektura k uvedenému baseline |
+| `SECURITY.md` | podporovaný bezpečnostní stav, invarianty a reporting |
 | `CONTRIBUTING.md` | praktický workflow změn |
-| `CHANGELOG.md` | skutečně provedené změny |
-| ADR | jednotlivá významná rozhodnutí |
+| `CHANGELOG.md` | skutečně provedené změny svázané s verzí nebo commitem |
+| přijaté ADR | jednotlivá významná rozhodnutí v přesném rozsahu |
 | runbook/postmortem | provoz a poučení z incidentů |
 
 Stejná informace nesmí mít dva nezávislé kanonické zdroje.
@@ -729,7 +757,10 @@ RELEASE_STATE:
 NEXT_SAFE_STEP:
 ```
 
-Každá položka musí být `VERIFIED`, `PARTIALLY VERIFIED`, `INFERRED`, `UNKNOWN` nebo `BLOCKED` podle skutečných důkazů.
+Každá capability nebo tvrzení musí používat jednu ze stavových hodnot:
+`VERIFIED`, `PARTIALLY_VERIFIED`, `IMPLEMENTED`, `PROPOSED`, `INFERRED`, `UNKNOWN` nebo `BLOCKED`.
+K tomu se samostatně uvádí důkazní původ `DECLARED`, `ADOPTED`, `DOCUMENTED_CURRENT`,
+`LIVE_VERIFIED`, `INFERRED` nebo `UNKNOWN`.
 
 ---
 
@@ -798,12 +829,15 @@ Dokument je účinný teprve, když:
 - je uložen vedle nadřazené technické ústavy v kanonickém repozitáři,
 - jeho SHA-256 je skutečně vypočítán a uložen,
 - je uveden v README nebo governance mapě,
-- je schválen vlastníkem,
+- je schválen vlastníkem přes dohledatelný adoption record,
+- adopční datum, commit, verze a SHA-256 jsou zapsány v
+  `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`,
 - existuje `CURRENT_PRODUCT_STATE.md`,
 - R2–R4 změny používají rozhodovací kartu,
 - sprinty respektují WIP limit a vertikální outcome,
 - milestone review používá sekci 20,
-- dokument není v konfliktu s nadřazenou ústavou.
+- dokument není v konfliktu s účinným technickým standardem, mandatory policy, přijatými ADR ani
+  případně adoptovanou `PROJECT_CONSTITUTION.md`.
 
 Do té doby je stav `PROPOSED_FOR_ADOPTION`.
 

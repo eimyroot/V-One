@@ -2,10 +2,24 @@
 
 | Field | Value |
 |---|---|
-| Document status | Accepted descriptive architecture |
-| Current implementation | Modular monolith |
+| Document status | Accepted descriptive architecture — acceptance is declared here and must be traceable to repository or owner evidence |
+| Documented implementation baseline | See `CURRENT_PRODUCT_STATE.md` and `docs/product/CURRENT_CAPABILITIES.md` |
+| Current implementation at documented baseline | Modular monolith |
 | Target evolution | Governed control plane plus isolated execution plane |
-| Normative authority | Subordinate to the engineering constitution and accepted ADRs |
+| Normative authority | Subordinate to the currently effective governance hierarchy and accepted ADRs |
+| Live-state boundary | Not authoritative for a later HEAD, worktree, CI, runtime, release or deployment |
+| Adoption and authority record | `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+
+## Authority and freshness boundary
+
+This document combines a documented current architecture with a clearly marked target architecture.
+Statements under **documented current** sections are `DOCUMENTED_CURRENT` at the baseline referenced by
+`CURRENT_PRODUCT_STATE.md`; they become `LIVE_VERIFIED` only after direct repository, test, CI or
+runtime verification.
+
+`PROJECT_CONSTITUTION.md` is a `Normative Draft` in the supplied document set. Until it is formally
+adopted, this architecture is governed by the effective hierarchy recorded in
+`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`, not by the draft's self-declared authority.
 
 ## Architectural purpose
 
@@ -15,7 +29,7 @@ audit, receipts, and checkpoint evidence verification.
 It deliberately does not own broad infrastructure discovery, vendor-specific intelligence, or an
 unrestricted execution runtime.
 
-## Current system context
+## Documented current system context
 
 ```text
 Authenticated operator / reviewer / auditor
@@ -52,7 +66,7 @@ read-only PDG v1 library -> deterministic policy-decision graph + digest
      +-- not wired into runtime authorization or execution
 ```
 
-## Current components
+## Documented current components
 
 ### HTTP and console boundary
 
@@ -115,7 +129,7 @@ runtime execution.
 
 ### Execution boundary
 
-Current adapters are intentionally narrow:
+At the documented baseline, adapters are intentionally narrow:
 
 - inert echo;
 - bounded sandbox file output;
@@ -133,7 +147,7 @@ that is an explicit limitation, not the target architecture.
 - deterministic ProofGraph v1 projection covering checkpoint, Git commit, source tree, and container
   image identity.
 
-## Current data flow
+## Documented current data flow
 
 ```text
 bootstrap or login
@@ -167,7 +181,7 @@ bootstrap or login
 The detailed trust-boundary inventory is maintained in
 [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md).
 
-The most important current boundary is:
+The most important documented current boundary is:
 
 ```text
 trusted governance state
@@ -249,6 +263,10 @@ Initial integration must be:
 - [`ROADMAP.md`](ROADMAP.md)
 - [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md)
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+- [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md)
+- [`GOVERNANCE.md`](GOVERNANCE.md)
+- [`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`](docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md)
+- [`docs/governance/DOCUMENTATION_POLICY.md`](docs/governance/DOCUMENTATION_POLICY.md)
 - [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
 - [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md)

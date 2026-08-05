@@ -3,9 +3,20 @@
 | Field | Value |
 |---|---|
 | Document status | Current and target trust-boundary inventory |
+| Evidence baseline | See `CURRENT_PRODUCT_STATE.md` and `docs/product/CURRENT_CAPABILITIES.md` |
 | Security posture | Deny by default and fail closed |
 | Production effects | BLOCKED until separately released |
-| Update trigger | Any material identity, execution, persistence, evidence, or integration change |
+| Normative authority | Descriptive inventory subordinate to effective governance, `SECURITY.md` and accepted ADRs |
+| Live-state boundary | Statuses are documented at the cited baseline and require direct verification for a later HEAD or runtime |
+| Update trigger | Any material identity, execution, persistence, evidence or integration change |
+
+## Authority and status semantics
+
+- `Documented status at baseline` means `DOCUMENTED_CURRENT`, not automatically `LIVE_VERIFIED`.
+- `VERIFIED` is limited to the evidence scope stated for that boundary.
+- `PROPOSED` is not adopted, implemented or released unless a separate accepted ADR and evidence prove it.
+- A merged review document does not by itself convert a proposed boundary into an implemented runtime control.
+- Conflicts with `SECURITY.md`, accepted ADRs or the effective governance hierarchy fail closed as `BLOCKED`.
 
 ## Boundary map
 
@@ -69,7 +80,7 @@ PROPOSED isolated Runner boundary (not implemented):
 
 ## TB-01 — HTTP client to application
 
-**Current status:** VERIFIED for the current test scope.
+**Documented status at baseline:** VERIFIED for the current test scope.
 
 Controls:
 
@@ -87,7 +98,7 @@ Residual risks:
 
 ## TB-02 — Credential and session material
 
-**Current status:** VERIFIED for local authentication.
+**Documented status at baseline:** VERIFIED for local authentication.
 
 Controls:
 
@@ -105,7 +116,7 @@ Residual risks:
 
 ## TB-03 — Governance services to persistence
 
-**Current status:** VERIFIED for SQLite.
+**Documented status at baseline:** VERIFIED for SQLite.
 
 Controls:
 
@@ -123,10 +134,10 @@ Residual risks:
 
 ## TB-04 — Governance to execution adapter
 
-**Current status:** IMPLEMENTED and VERIFIED for narrow local capabilities; target isolation is
+**Documented status at baseline:** IMPLEMENTED and VERIFIED for narrow local capabilities; target isolation is
 PROPOSED.
 
-Current controls:
+Documented current controls:
 
 - allowlisted adapter names;
 - typed payload validation;
@@ -156,7 +167,7 @@ control plane
 
 ## TB-05 — Sandbox filesystem
 
-**Current status:** VERIFIED for current tests.
+**Documented status at baseline:** VERIFIED for current tests.
 
 Controls:
 
@@ -174,7 +185,7 @@ Residual risks:
 
 ## TB-06 — Audit and receipt evidence
 
-**Current status:** VERIFIED for chain integrity.
+**Documented status at baseline:** VERIFIED for chain integrity.
 
 Controls:
 
@@ -190,7 +201,7 @@ Residual risks:
 
 ## TB-07 — Local checkpoint verification
 
-**Current status:** VERIFIED.
+**Documented status at baseline:** VERIFIED.
 
 The checkpoint is untrusted input.
 
@@ -214,9 +225,9 @@ Residual risks:
 
 ## TB-08 — CI and supply chain
 
-**Current status:** VERIFIED for current repository CI configuration; signed provenance is PROPOSED.
+**Documented status at baseline:** VERIFIED for current repository CI configuration; signed provenance is PROPOSED.
 
-Current controls:
+Documented current controls:
 
 - hash-locked dependencies;
 - pinned workflow actions;
@@ -232,7 +243,7 @@ Residual risks:
 
 ## TB-09 — CyberCore or external intelligence input
 
-**Current status:** PROPOSED.
+**Documented status at baseline:** PROPOSED.
 
 Initial boundary must allow only normalized read-only metadata and immutable references.
 
@@ -247,7 +258,7 @@ Forbidden in the first slice:
 
 ## TB-10 — AI proposal source
 
-**Current status:** PROPOSED.
+**Documented status at baseline:** PROPOSED.
 
 AI output is untrusted proposal content until validated.
 
@@ -261,7 +272,7 @@ AI may draft and explain. AI may not:
 
 ## TB-11 — V-One to isolated Runner v1
 
-**Current status:** PROPOSED by ADR-0008; not implemented. ADR-0007 accepted the deterministic
+**Documented status at baseline:** PROPOSED by ADR-0008; not implemented. ADR-0007 accepted the deterministic
 contract layer above, but that representation does not authorize execution by itself.
 
 Authoritative boundary:
@@ -311,3 +322,13 @@ Rollout blockers and residual risks:
 5. workspace-scoped identity;
 6. CyberCore read-only intake schema;
 7. multi-platform supply-chain verification.
+
+
+## Related governance and evidence
+
+- [`GOVERNANCE.md`](../../GOVERNANCE.md)
+- [`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`](../governance/AUTHORITY_AND_ADOPTION_REGISTER.md)
+- [`docs/governance/DOCUMENTATION_POLICY.md`](../governance/DOCUMENTATION_POLICY.md)
+- [`CURRENT_PRODUCT_STATE.md`](../../CURRENT_PRODUCT_STATE.md)
+- [`docs/product/CURRENT_CAPABILITIES.md`](../product/CURRENT_CAPABILITIES.md)
+- [`SECURITY.md`](../../SECURITY.md)

@@ -1,16 +1,37 @@
 # Security policy
 
+| Field | Value |
+|---|---|
+| Document class | Mandatory security policy |
+| Adoption evidence | Must be confirmed from repository history or explicit owner record; file presence alone is not adoption |
+| Applies to | VOODOO One source, runtime, operations, evidence and release decisions |
+| Security posture | Deny by default, least privilege and fail closed |
+| Live-state boundary | This document defines policy; it does not prove the current `main`, runtime configuration, release or deployment state |
+| Related authority record | `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+
 ## Supported state
 
-Only the latest commit on `main` is maintained. Production effects remain disabled until a tagged
-release explicitly changes this statement and all production gates are evidenced.
+The support policy applies only to the latest commit on `main` **after that commit is identified
+directly from the live repository**. A commit recorded in documentation is a dated snapshot, not proof
+of the current remote or local `main`.
+
+Production effects remain disabled until a tagged governed release explicitly changes this statement,
+all production gates are evidenced, and the release decision is recorded. A tag, merge, documentation
+change, local test run or environment-variable drift cannot independently enable production effects.
 
 ## Reporting
 
 Do not open public issues for suspected vulnerabilities or include secrets, customer data or exploit
 details in logs. Repository security advisories must be used once enabled by the repository owner.
 
+If no private reporting channel is enabled, disclose only that private reporting is `BLOCKED`; do not
+move sensitive details into a public issue, chat transcript, CI log or evidence archive.
+
 ## Security invariants
+
+These are policy invariants. Capability-level claims such as `VERIFIED` remain limited to the exact
+test, commit, CI or runtime evidence cited by `CURRENT_PRODUCT_STATE.md` and
+`docs/product/CURRENT_CAPABILITIES.md`.
 
 - deny by default and least privilege,
 - no requester self-approval,

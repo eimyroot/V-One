@@ -4,33 +4,41 @@
 |---|---|
 | Document ID | VES-000 |
 | Version | 1.0.0-draft |
-| Status | Normative Draft |
-| Authority | Highest Engineering Authority |
-| Owner | Chief Architecture Office |
-| Applies to | Entire repository |
+| Status | Normative Draft — not effective until formally adopted |
+| Declared target authority | Highest Engineering Authority after adoption |
+| Effective authority | Not established by this file; see `GOVERNANCE.md` and `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+| Owner | Project owner; the declared `Chief Architecture Office` role must be resolved before adoption |
+| Applies to | Entire repository after adoption |
 | Review cycle | Quarterly and after material incidents |
+| Adoption evidence | Required: explicit owner decision or accepted ADR, repository-wide conflict analysis, adoption commit and date |
+
+> Draft boundary: this document is a normative proposal. Until the adoption evidence above exists, it MUST NOT be treated as superseding the currently effective technical operating standard, accepted ADRs, or mandatory policies.
 
 > The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED**, **MAY**, and **OPTIONAL** are normative.
 
 ## 1. Purpose
 
-This Constitution defines the highest engineering authority for VOODOO OS and all derived VOODOO engineering projects.
+This draft is intended to define the highest engineering authority for VOODOO One and explicitly adopted derived VOODOO engineering projects after formal adoption.
 
 Its purpose is to preserve security, architectural integrity, operational resilience, auditability, maintainability, and controlled evolution.
 
-## 2. Order of authority
+## 2. Proposed order of authority after adoption
 
-The governing order is:
+After this Constitution is formally adopted, the proposed governing order is:
 
-1. `PROJECT_CONSTITUTION.md`
-2. approved Architecture Decision Records
-3. normative governance standards
-4. mandatory policies
-5. approved procedures
-6. implementation documentation
-7. source code
+1. binding external legal, contractual, platform-security, and safety requirements;
+2. `PROJECT_CONSTITUTION.md`;
+3. accepted Architecture Decision Records within their explicit scope;
+4. adopted normative governance standards;
+5. adopted mandatory policies;
+6. approved procedures and runbooks;
+7. implementation and product documentation;
+8. source code and runtime artifacts.
 
-Lower-authority artifacts MUST NOT silently contradict higher-authority artifacts.
+Until adoption, the effective hierarchy is the one recorded in
+`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`. Lower-authority artifacts MUST NOT silently
+contradict higher-authority artifacts, and a conflict with unclear adoption status MUST fail closed
+as `BLOCKED` until the project owner resolves it.
 
 ## 3. Core principles
 
@@ -150,12 +158,31 @@ Work is complete only when all applicable conditions hold:
 - CI succeeds,
 - temporary exceptions are documented.
 
-## 16. Amendment
+## 16. Adoption and effective authority
 
-This Constitution MAY be amended only through a reviewed ADR and repository-wide compatibility analysis.
+This draft becomes effective only when all of the following are recorded:
+
+1. explicit project-owner approval or an accepted adoption ADR;
+2. repository-wide compatibility analysis against the current technical operating standard, accepted
+   ADRs, security policy, documentation policy, and product constitution;
+3. resolution of the owner and authority fields in this document;
+4. version changed from a draft version to an adopted version;
+5. adoption date and exact Git commit recorded in
+   `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`;
+6. governance map and documentation index updated;
+7. automated documentation checks passing.
+
+Presence in the repository, merge, review, or use by an AI assistant does not by itself constitute
+adoption.
+
+## 17. Amendment
+
+After adoption, this Constitution MAY be amended only through a reviewed ADR and repository-wide
+compatibility analysis. Before adoption, changes remain draft revisions and MUST NOT be represented
+as amendments to effective governance.
 
 No amendment may silently weaken an existing security or auditability guarantee.
 
-## 17. Final rule
+## 18. Final rule
 
 Every accepted change MUST leave the system at least as understandable, secure, recoverable, and governable as it was before.

@@ -1,7 +1,16 @@
 # VOODOO — CURRENT PRODUCT STATE
 
-> Toto je proměnlivý důkazní snapshot. Není náhradou živého Git stavu, provedených testů ani
-> commit-bound runtime evidence.
+| Pole | Hodnota |
+|---|---|
+| Třída dokumentu | Datovaný důkazní snapshot |
+| Autorita | Dokumentovaný stav pouze k uvedenému `AS_OF` a baseline |
+| Live-state autorita | Živý Git, nově spuštěné testy, CI, artefakty a runtime pozorování |
+| Governance | `docs/governance/DOCUMENTATION_POLICY.md` |
+| Adopce / autorita dokumentů | `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+
+> Toto je proměnlivý důkazní snapshot. Není náhradou živého Git stavu, nově provedených testů ani
+> commit-bound runtime evidence. Po jakékoli změně HEAD, worktree, CI, runtime nebo release je nutné
+> snapshot obnovit nebo explicitně označit jako zastaralý.
 
 ## Identita a hranice tvrzení
 
@@ -42,7 +51,7 @@ Tyto identity nesmějí být slučovány:
 6. **Release stav** zůstává `BLOCKED`; lokální evidence, review merge ani dokumentační synchronizace
    samy o sobě nepředstavují release ani deployment.
 
-## Co je VERIFIED na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
+## Co bylo VERIFIED při reconciliation na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
 
 - canonical checkout byl fast-forwardnut na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
   a uživatelský terminálový výstup po operaci hlásil čisté `## main`;
@@ -56,9 +65,9 @@ Tyto identity nesmějí být slučovány:
   nikoliv runtime evidence;
 - latest runtime-attested baseline zůstává `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`.
 
-## Aktuální source capability
+## Dokumentovaná source capability k reconciliation baseline
 
-VOODOO One je nyní **development / controlled-pilot authorization and evidence control plane**.
+VOODOO One je v tomto snapshotu klasifikováno jako **development / controlled-pilot authorization and evidence control plane**.
 Aktuální source tree obsahuje:
 
 - FastAPI `/api/v1` control plane a statickou command-center konzoli;
@@ -125,7 +134,7 @@ ani tento documentation/MVP patch.
 Starší `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize evidence zůstává
 historicky relevantní pro checkpoint workflow, ale není nejnovější runtime-attested baseline.
 
-## Co zůstává PROPOSED, NOT IMPLEMENTED nebo BLOCKED
+## Co je v tomto snapshotu PROPOSED nebo BLOCKED a není runtime implementováno
 
 - autoritativní runtime Policy Decision Graph a capability-policy engine;
 - isolated runner capsules a signed short-lived execution grants;
@@ -173,3 +182,29 @@ Dokumentace capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/pro
 Dokumentace delivery order: [`ROADMAP.md`](ROADMAP.md)
 
 Accepted decision: [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
+
+
+## Obnovení snapshotu
+
+Před aktualizací tohoto souboru musí být zachyceno minimálně:
+
+```bash
+git rev-parse --show-toplevel
+git branch --show-current
+git rev-parse HEAD
+git status --short --branch
+git log -5 --oneline --decorate
+```
+
+Dále musí být uvedeny přesné příkazy a výsledky relevantních testů, CI nebo runtime evidence.
+Aktualizace musí změnit `AS_OF`, svázat tvrzení s přesným commitem, uvést dirty/clean worktree a
+oddělit:
+
+- `DECLARED`;
+- `ADOPTED`;
+- `DOCUMENTED_CURRENT`;
+- `LIVE_VERIFIED`;
+- `INFERRED`;
+- `UNKNOWN`.
+
+Pouhé přepsání commitu bez nové evidence je zakázané.
