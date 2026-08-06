@@ -24,6 +24,7 @@ CORE_DOCUMENTS = {
     "docs/product/MVP_DELIVERY_MAP.md",
     "docs/governance/ADR0008_R3_EVIDENCE_INDEX.md",
     "docs/governance/DOCUMENTATION_POLICY.md",
+    "docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md",
     "docs/adr/ADR-0007-execution-grant-receipt-contract-v1.md",
     "docs/adr/ADR-0008-isolated-runner-boundary-v1.md",
     "docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md",
@@ -365,3 +366,49 @@ def test_proposed_organization_approval_adr_preserves_current_safety_boundary() 
     assert "default-off runtime compatibility path only" in capabilities
     assert "Solo, Team, Regulated enforcement is not implemented" in capabilities
     assert "| Policy Decision Graph | PROPOSED | ADR-0003" in capabilities
+
+# GOVERNANCE_V3_CANDIDATE_TESTS_BEGIN
+
+def test_technical_standard_v3_candidate_is_hash_bound_and_not_adopted() -> None:
+    import hashlib
+
+    relative = "WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md"
+    document_path = ROOT / relative
+    sidecar_path = ROOT / f"{relative}.sha256"
+    document = document_path.read_text(encoding="utf-8")
+    actual_sha256 = hashlib.sha256(document_path.read_bytes()).hexdigest()
+    sidecar_fields = sidecar_path.read_text(encoding="utf-8").strip().split()
+
+    assert sidecar_fields == [
+        "36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed",
+        relative,
+    ]
+    assert actual_sha256 == "36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed"
+    assert "PROPOSED_SUCCESSOR_REVISION" in document
+    assert "2026-08-06-v3-candidate" in document
+    assert "ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918" in document
+    assert "docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md" in document
+    assert "Vestavěný adopční záznam" not in document
+    assert "ADOPTION_COMMIT:" not in document
+    assert "EFFECTIVE_STATUS: ADOPTED" in document
+    assert "ADOPTED_CONTENT_COMMIT: <candidate commit A>" in document
+
+
+def test_authority_register_preserves_predecessor_and_externalizes_adoption() -> None:
+    register = _read("docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md")
+    governance = _read("GOVERNANCE.md")
+
+    assert "EFFECTIVE_STATUS: ADOPTED" in register
+    assert "CONTENT_SHA256: ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918" in register
+    assert "CANDIDATE_CONTENT_SHA256: 36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed" in register
+    assert "EFFECTIVE_STATUS: PROPOSED" in register
+    assert "CANDIDATE_CONTENT_COMMIT: REQUIRED_IN_LATER_OWNER_ADOPTION_RECORD" in register
+    assert "The record must not contain the hash of the commit that stores the record itself." in register
+    assert "ADOPTION_RECORD_COMMIT:" not in register
+    assert "PROPOSED_SUCCESSOR_REVISION" in governance
+    assert "36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed" in governance
+    assert "PROJECT_CONSTITUTION.md" in governance
+    assert "PROPOSED_FOR_ADOPTION" in governance
+
+
+# GOVERNANCE_V3_CANDIDATE_TESTS_END
