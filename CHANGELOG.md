@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Recorded PR #54 and merge commit `57c7bf2277616c4445039865ac7cf81c5fada858` as the current
+  verified Git baseline for the ADR-0008 lifecycle-semantics documentation correction.
+- Retained `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` as the latest runtime-attested
+  development checkpoint and `8a5f36b...` only as historical capture/finalize workflow evidence.
+- Synchronized the repository documentation graph around the current Git baseline, the ADR-0007
+  contract layer, the still-PROPOSED ADR-0008 design, the repository-owned evidence index, and the
+  MVP delivery map.
+- Added repository-owned evidence and MVP delivery map artifacts without changing runtime source,
+  release state, deployment state, or production behavior.
+
 ## 0.9.0-rc2-dev — unreleased
 
 - Established a clean, review-gated repository baseline from the verified RC1 artifact.

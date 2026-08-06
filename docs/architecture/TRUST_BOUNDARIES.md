@@ -37,6 +37,13 @@
         v
 [Deterministic JSON claims and ProofGraph]
 
+ADR-0007 accepted contract layer:
+
+[execution-target / approval-evidence-set / execution-grant / execution-receipt]
+        |
+        v
+[Pure deterministic representation only; no runtime authority]
+
 PROPOSED isolated Runner boundary (not implemented):
 
 [V-One authorization and lifecycle]
@@ -254,7 +261,8 @@ AI may draft and explain. AI may not:
 
 ## TB-11 — V-One to isolated Runner v1
 
-**Current status:** PROPOSED by ADR-0008; not implemented.
+**Current status:** PROPOSED by ADR-0008; not implemented. ADR-0007 accepted the deterministic
+contract layer above, but that representation does not authorize execution by itself.
 
 Authoritative boundary:
 
@@ -286,7 +294,7 @@ Rollout blockers and residual risks:
   bindings;
 - grant/receipt authenticity, transport, trust store, key lifecycle, durable dispatch and consume
   stores, capsule technology, target-side fencing, secret delivery, and receipt reconciliation are
-  not implemented;
+  not implemented; ADR-0007 value contracts do not replace those runtime controls;
 - a separate OS identity and rootless capsule do not eliminate kernel, runtime, provider, or
   supply-chain compromise;
 - exactly-once external effect is unavailable without provider idempotency or target-side fencing;

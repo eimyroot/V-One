@@ -23,6 +23,18 @@ Every target capability must define:
 - rollback or disable strategy;
 - current status.
 
+## Verified foundation
+
+ADR-0007 accepts the pure deterministic value-contract slice:
+
+- `execution-target/v1`;
+- `approval-evidence-set/v1`;
+- `execution-grant/v1`;
+- `execution-receipt/v1`.
+
+This foundation is representation only. Authoritative issuance, signed envelopes, durable one-time
+consumption, and isolated Runner runtime remain PROPOSED.
+
 ## T1 — Policy Decision Graph
 
 **Status:** VERIFIED read-only projection foundation; authoritative policy, approval binding,
@@ -70,6 +82,9 @@ policy enforcement remain PROPOSED.
 
 **Status:** PROPOSED
 
+The grant envelope and issuer/runtime path build on the accepted deterministic grant value contract,
+but they are not implemented yet.
+
 A grant must bind:
 
 ```text
@@ -114,6 +129,9 @@ The runner must provide:
 ## T4 — Structured execution receipts
 
 **Status:** PROPOSED
+
+The runtime receipt envelope and ingest path build on the accepted deterministic receipt value
+contract, but they are not implemented yet.
 
 Target receipt fields include:
 
