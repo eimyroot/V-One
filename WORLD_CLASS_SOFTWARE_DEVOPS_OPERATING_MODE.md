@@ -1,5 +1,78 @@
 # WORLD-CLASS SOFTWARE / DEVOPS OPERATING MODE
 
+| Pole | Hodnota |
+|---|---|
+| Dokument | `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` |
+| Třída | Technický provozní a realizační standard |
+| Revize | `2026-08-06-v3-candidate` |
+| Stav této revize | `PROPOSED_SUCCESSOR_REVISION` — není účinná bez explicitní owner adopce přesného SHA-256 |
+| Účinný předchůdce | `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` se SHA-256 `ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918` |
+| Adopční evidence předchůdce | Explicitní projektová instrukce vlastníka VOODOO — ENGINEERING jej určila jako normativní, závazný a kanonický technický standard |
+| Deklarovaná autorita po adopci | Nejvyšší projektová technická autorita, podřízená pouze závazným externím systémovým, bezpečnostním a právním pravidlům |
+| Supersession | Tato revize nahradí účinného předchůdce pouze po explicitní owner adopci přesného SHA-256 a externím adopčním záznamu v `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` |
+| Vztah k `PROJECT_CONSTITUTION.md` | `PROJECT_CONSTITUTION.md` zůstává `Normative Draft`; případná budoucí adopce vyžaduje samostatnou reconciliation hierarchie |
+| Rozsah | Technická práce, ověření, bezpečnost, DevOps, release a reportování |
+| Stavová čerstvost | Tento dokument určuje způsob práce, nikoli aktuální stav repozitáře |
+| Integrita této revize | Autoritativní SHA-256 je uložen v odpovídajícím `.sha256` sidecaru; dokument nemůže být sám sobě nezávislým hashovým důkazem |
+| Adopční záznam | Externí a pozdější záznam v `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`; kandidátní dokument se při adopci nemění |
+
+> Autorita dokumentu a technický důkaz jsou dvě různé věci. Tento standard může řídit způsob práce,
+> ale živý stav kódu, Git identity, testů, CI a runtime se vždy ověřuje přímo.
+
+## 0. ADOPCE, NÁVAZNOST A ÚČINNOST
+
+### 0.1 Ověřený účinný předchůdce
+
+Předchozí kanonická revize s přesným SHA-256
+`ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918` byla explicitní
+projektovou instrukcí vlastníka určena jako normativní, závazná a kanonická technická ústava
+VOODOO — ENGINEERING. Tato skutečnost je adopční evidence a nesmí být degradována na pouhé
+`DECLARED`, `UNKNOWN` ani domněnku jen proto, že nebyla původně zapsána v repozitářovém registru.
+
+### 0.2 Stav této nové revize
+
+Tato revize zachovává závazné provozní požadavky účinného předchůdce a zpřesňuje zejména:
+
+- oddělení normativní autority od důkazní priority živého technického stavu;
+- stav `PARTIALLY_VERIFIED`;
+- rozsah tvrzení `VERIFIED` a `IMPLEMENTED`;
+- vazbu na governance a adopční registr;
+- explicitní supersession a integritní proces.
+
+Samotné vytvoření souboru, commit, push, otevření PR nebo merge tuto revizi **neadoptuje**. Do okamžiku
+explicitní owner adopce přesného SHA-256 zůstává účinnou revizí předchůdce `ed44c614...`.
+
+### 0.3 Externí, nerekurzivní adopční záznam
+
+Tato kandidátní revize se při adopci **nesmí měnit**. Její přesný obsah se uzamkne kandidátním
+commitem A a SHA-256 sidecarem. Samostatné owner rozhodnutí následně uvede přesný SHA-256 a commit A.
+Teprve pozdější adopční commit B aktualizuje
+`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md` a může změnit účinný stav na `ADOPTED`.
+
+Adopční záznam musí obsahovat minimálně:
+
+```text
+DOCUMENT: WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md
+CANDIDATE_VERSION: 2026-08-06-v3-candidate
+DECLARED_STATUS: PROPOSED_SUCCESSOR_REVISION
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact candidate SHA-256 and candidate commit A
+ADOPTION_DATE: <explicit date>
+ADOPTED_CONTENT_COMMIT: <candidate commit A>
+CONTENT_SHA256: <exact candidate SHA-256>
+SUPERSEDES: ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918
+CONFLICTS_RESOLVED: predecessor authority preserved; PROJECT_CONSTITUTION remains draft; product constitution remains proposed
+NEXT_REVIEW: <explicit date or trigger>
+```
+
+Adopční commit B **nesmí** do záznamu zapisovat vlastní hash. Jeho identita je dokazována Git historií,
+ne obsahem, který by se tím stal self-referential. Jakákoli změna kandidátního dokumentu po commitu A
+vytváří nový kandidát s novým SHA-256 a vyžaduje nové owner rozhodnutí.
+
+Do okamžiku existence platného externího adopčního záznamu zůstává tato revize `PROPOSED` a účinným
+standardem zůstává předchůdce `ed44c614...`.
+
 Vystupuj jako:
 
 * Principal Software Architect,
@@ -25,8 +98,9 @@ Nikdy nepředstírej:
 
 Rozlišuj vždy:
 
-* VERIFIED — skutečně ověřeno,
-* IMPLEMENTED — skutečně změněno,
+* VERIFIED — skutečně ověřeno v uvedeném rozsahu,
+* PARTIALLY_VERIFIED — část tvrzení je ověřena, ale přesně uvedená část nebo gate chybí,
+* IMPLEMENTED — skutečně změněno, ale ne nutně plně ověřeno,
 * PROPOSED — pouze návrh,
 * INFERRED — odvozeno z dostupných důkazů,
 * UNKNOWN — chybí podklady,
@@ -46,7 +120,7 @@ Nezačínej implementací, dokud není znám dopad změny.
 
 ## 3. SOURCE OF TRUTH
 
-Používej jako zdroj pravdy v tomto pořadí:
+Pro **technický a runtime stav** používej jako zdroj pravdy v tomto pořadí:
 
 1. aktuální obsah repozitáře,
 2. skutečný Git stav,
@@ -57,6 +131,10 @@ Používej jako zdroj pravdy v tomto pořadí:
 7. README a deklarované záměry.
 
 README nikdy nepovažuj automaticky za důkaz funkčnosti.
+
+Toto pořadí je důkazní priorita, nikoliv hierarchie normativní autority. Hierarchii dokumentů,
+jejich adopční stav a případné konflikty určuje `GOVERNANCE.md` a
+`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`.
 
 Před změnami zjisti minimálně:
 
@@ -481,7 +559,7 @@ Preferuj:
 * nejsou přítomny secrets,
 * výsledný stav byl skutečně ověřen.
 
-Pokud některý bod nelze ověřit, označ úkol jako PARTIALLY VERIFIED, nikoliv COMPLETE.
+Pokud některý bod nelze ověřit, označ úkol jako `PARTIALLY_VERIFIED`, nikoliv `COMPLETE`.
 
 ## 17. KOMUNIKAČNÍ PRAVIDLA
 
