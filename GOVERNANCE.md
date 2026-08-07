@@ -13,19 +13,24 @@
 ## Účinný technický standard
 
 1. `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`
-   - účinný předchůdce je explicitně owner-adoptovaný a hash-bound;
-   - účinný SHA-256 zůstává
-     `ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918`;
+   - účinná revize: `2026-08-06-v3-candidate`;
+   - deklarovaný kandidátní stav obsahu: `PROPOSED_SUCCESSOR_REVISION` — historická identita neměnného kandidáta;
+   - efektivní stav: `ADOPTED` na základě explicitního owner rozhodnutí zaznamenaného v
+     `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`;
+   - účinný content SHA-256:
+     `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`;
+   - adoptovaný content commit A:
+     `46793950622ece6f02d7495bcfc72d04af20c155`;
    - určuje způsob technické práce, ověření, bezpečnosti, DevOps, release a reportování.
 
-## Navržený nástupce technického standardu
+## Historický předchůdce a supersession
 
-- kandidátní revize: `2026-08-06-v3-candidate`;
-- stav: `PROPOSED_SUCCESSOR_REVISION`;
-- content SHA-256: `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`;
-- commit ani merge kandidáta nemění jeho stav na `ADOPTED`;
-- adopce vyžaduje samostatné owner rozhodnutí nad přesným SHA-256 a kandidátním commitem A;
-- pozdější adopční commit B aktualizuje pouze externí register a nevkládá do něj vlastní Git hash.
+- předchozí owner-adoptovaný a hash-bound standard měl SHA-256
+  `ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918`;
+- jeho historická adopce zůstává platným záznamem;
+- jeho aktuální stav je `SUPERSEDED_BY_EXACT_OWNER_ADOPTED_SUCCESSOR`;
+- supersession vznikla owner adopcí přesného kandidáta, nikoli samotným commitem, pushem, PR nebo mergem;
+- jakákoli změna adoptovaného dokumentu vyžaduje nový SHA-256 a nové explicitní owner rozhodnutí.
 
 ## Ostatní ústavní dokumenty
 
