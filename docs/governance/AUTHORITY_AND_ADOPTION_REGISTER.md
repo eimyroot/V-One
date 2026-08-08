@@ -106,7 +106,7 @@ and synchronization into `main` remain separate technical operations and evidenc
 |---|---|---|
 | `PROJECT_CONSTITUTION.md` | `PROPOSED` / `Normative Draft` | Not effective until separately adopted by the owner. |
 | `VOODOO_PRODUCT_DECISION_DELIVERY_CONSTITUTION.md` | `PROPOSED_FOR_ADOPTION` | Not effective until its adoption conditions are satisfied. |
-| `GOVERNANCE.md` | Descriptive navigation map | Candidate-preparation language remains a historical navigation snapshot until separately reconciled; this register is authoritative for the owner adoption recorded here. |
+| `GOVERNANCE.md` | Descriptive navigation map | Reconciled after owner adoption to reflect the effective successor status; this register remains authoritative for the owner adoption recorded here. |
 | `SECURITY.md` | Mandatory security policy in its documented scope | Must not be weakened by unclear governance. |
 | Accepted ADRs | Effective only in their explicitly accepted scope | A merged `PROPOSED` ADR is not automatically accepted. |
 
