@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `7`, verify evidence integrity again, and only then
+one new instance, require health schema version `8`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -70,6 +70,12 @@ Migration `0007_active_sessions.sql` adds the persistent local-session allowlist
 purpose-derived HMAC reference, user ID and bounded timestamps. Existing v2 tokens have no matching
 row and therefore fail closed until the operator signs in again. Session rows are immutable and
 explicit revocation deletes only the selected active row while the audit chain preserves evidence.
+
+Migration `0008_immutable_review_binding.sql` binds submitted change-request review content and new
+approval evidence to the same deterministic SHA-256 identity. It prevents review-relevant request
+content from changing after submission, requires new approval rows to carry the submitted review
+digest, and makes approval evidence immutable. Existing historical submitted or terminal rows are
+preserved without inventing a retroactive review-content digest.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.

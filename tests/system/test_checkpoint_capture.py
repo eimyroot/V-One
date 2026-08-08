@@ -170,7 +170,7 @@ class FakeRuntimeRunner:
                         {
                             "status": "HEALTHY",
                             "database_backend": "sqlite",
-                            "schema_version": 7,
+                            "schema_version": 8,
                             "production_effects": self.production_effects,
                         }
                     )
