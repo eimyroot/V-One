@@ -41,8 +41,8 @@
 
 ADR-0007 accepts the pure deterministic execution-contract value objects as representation only.
 ADR-0008 and [`../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
-describe the proposed isolated Runner boundary and threat model; runtime isolation controls remain
-not implemented.
+are owner-adopted for the exact isolated Runner design and safety-invariant scope; runtime isolation
+controls remain not implemented.
 
 `VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
 startup before the service accepts traffic. This prevents a SQLite-specific service layer from being

@@ -3,8 +3,9 @@
 | Field | Value |
 |---|---|
 | Document status | Current evidence index |
-| ADR-0008 status | PROPOSED |
-| Owner decision | REQUIRED |
+| ADR-0008 declared status in immutable reviewed bytes | PROPOSED |
+| ADR-0008 effective status | ADOPTED by explicit owner decision on 2026-08-08 |
+| Owner decision | VERIFIED for the exact hash-bound scope recorded below |
 | Runtime effect | None |
 | Raw evidence | Remains outside Git under the external evidence root |
 | Portability rule | Machine-local paths are non-portable metadata |
@@ -22,7 +23,8 @@ It distinguishes:
 - bundle evidence;
 - documentation synchronization evidence;
 - repository-owned publication evidence;
-- PR and merge evidence.
+- PR and merge evidence;
+- explicit owner-adoption evidence.
 
 It does not claim runtime implementation, release authorization, or production activation.
 
@@ -90,11 +92,29 @@ This is development checkpoint evidence, not unrestricted production evidence.
 | `MERGE_COMMIT=57c7bf2277616c4445039865ac7cf81c5fada858` | The exact merge commit now on `main` | Runtime evidence for the merged tree |
 | `MERGE_VERIFICATION_REPORT_SHA256=93bf10f7499bfa6259b82dbf525ac8f2052ff38bceb4d91c0b76eb40dbe97c9e` | Independent PR/merge verification report identity | Release, deployment, or production enablement |
 
+## Owner adoption chain
+
+| Digest or identity | What it proves | What it does not prove |
+|---|---|---|
+| `ADOPTED_CONTENT_COMMIT=8834abd5fe7b5a6f2ee7cf266997334fb26b7e8a` | Exact repository commit containing the adopted ADR and bound threat-model bytes | Runtime implementation, release, or deployment |
+| `ADR_CONTENT_SHA256=97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b` | Exact ADR-0008 bytes adopted by the owner | Isolated Runner runtime behavior |
+| `THREAT_MODEL_SHA256=71d2c5feceb71291e5919d8cfb37d099186c24648622573bba6e8b49a75bf06b` | Exact threat-model bytes bound by the owner decision | Runtime enforcement of those controls |
+| `ADOPTION_DATE=2026-08-08` | Date of the explicit owner decision | Publication, merge, release, or deployment |
+| `SCOPE=isolated Runner boundary v1 design and safety invariants only` | Exact scope of the owner decision | Implementation authorization |
+| `PRODUCTION_EFFECTS=BLOCKED` | Production effects remain outside the adopted scope | Runtime proof |
+| `IMPLEMENTATION_AUTHORIZATION=NOT_IMPLIED` | Adoption does not authorize implementation by itself | A future implementation decision |
+
+The authoritative effective-status record is
+[`AUTHORITY_AND_ADOPTION_REGISTER.md`](AUTHORITY_AND_ADOPTION_REGISTER.md). The adopted ADR and
+threat-model files themselves remain byte-identical to the reviewed blobs.
+
 ## Evidence interpretation
 
 The review commit, patch, bundle, documentation evidence, publication evidence, and merge evidence
-prove their scoped object, archive, branch, and Git identities. They do not prove runtime execution,
-production readiness, ADR acceptance, release authorization, or deployment.
+prove their scoped object, archive, branch, and Git identities. Those artifacts alone did not prove
+ADR acceptance. Acceptance is separately established by the explicit owner decision over the exact
+hash-bound ADR and threat-model bytes and by the external adoption record. None of those facts prove
+runtime execution, production readiness, release authorization, or deployment.
 
 The portable bundle proves that the reviewed commit can be transported independently of the source
 repository prerequisites. It does not prove that the isolated Runner exists, that a release has been
@@ -104,7 +124,8 @@ Bundle verification does not prove runtime implementation.
 
 The historical repository-owned publication plan was plan-only. A later separately authorized
 publisher execution created the exact review branch, and PR #54 merged the reviewed commit into
-`main`. Neither event changes the ADR status or provides runtime attestation.
+`main`. Neither event adopted the ADR or provided runtime attestation; the later explicit owner
+decision on 2026-08-08 changed only the effective design-decision status.
 
 Raw evidence remains outside Git under the external evidence root. Machine-local paths such as the
 review worktree and temporary verification repositories are non-portable metadata and must not be
@@ -112,15 +133,14 @@ used as the sole proof of repository state.
 
 ## Status boundaries
 
-- `ADR-0008` remains `PROPOSED`.
-- The owner decision remains `REQUIRED`.
+- The immutable ADR-0008 bytes retain their embedded `PROPOSED` declared status.
+- ADR-0008 effective status is ADOPTED.
+- Owner decision is VERIFIED for the exact hash-bound scope recorded above.
 - The reviewed patch `a39a8febd258b27e3b756e1df6b6fa2b795614642b5874dff66a5990d6c2ac02` is closed
   for the exact R3 findings listed in the review evidence.
 - The isolated Runner runtime is not implemented.
-- ADR-0008 remains PROPOSED.
-- Owner decision remains REQUIRED.
 - Authoritative grant issuance, authenticity envelopes, trust stores, key rotation, durable
   one-time claim stores, governed mutation gateways, and production effects remain `NOT IMPLEMENTED`
   or `BLOCKED` according to the product documents.
-- Exact review publication and PR #54 merge are VERIFIED; runtime implementation, ADR acceptance,
-  release, deployment, and production effects are not implied.
+- Exact review publication, PR #54 merge, and owner adoption are distinct VERIFIED evidence events;
+  runtime implementation, release, deployment, and production effects are not implied.

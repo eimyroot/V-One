@@ -44,7 +44,7 @@ ADR-0007 accepted contract layer:
         v
 [Pure deterministic representation only; no runtime authority]
 
-PROPOSED isolated Runner boundary (not implemented):
+OWNER-ADOPTED ADR-0008 target boundary (runtime not implemented):
 
 [V-One authorization and lifecycle]
         |
@@ -261,8 +261,9 @@ AI may draft and explain. AI may not:
 
 ## TB-11 — V-One to isolated Runner v1
 
-**Current status:** PROPOSED by ADR-0008; not implemented. ADR-0007 accepted the deterministic
-contract layer above, but that representation does not authorize execution by itself.
+**Design status:** ADOPTED by explicit owner decision on 2026-08-08. **Runtime status:** PROPOSED /
+not implemented. ADR-0007 accepted the deterministic contract layer above, but that representation
+does not authorize execution by itself.
 
 Authoritative boundary:
 
@@ -304,7 +305,7 @@ Rollout blockers and residual risks:
 
 ## Security review priorities
 
-1. isolated Runner durable consumption, isolation, and postcondition-verification design review;
+1. ADR-0008 child R3 decisions for durable consumption, isolation technology, and postcondition runtime enforcement;
 2. grant and receipt authenticity, trust policy, and key lifecycle;
 3. external evidence anchoring and signing;
 4. output redaction and raw-log authorization;

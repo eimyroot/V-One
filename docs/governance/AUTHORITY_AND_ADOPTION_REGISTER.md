@@ -4,8 +4,8 @@
 |---|---|
 | Document class | Governance authority and adoption register |
 | Candidate preparation date | `2026-08-06` |
-| Owner adoption date | `2026-08-06` |
-| Scope | VOODOO One governance documents and technical operating-standard succession |
+| Latest recorded owner adoption date | `2026-08-08` |
+| Scope | VOODOO One governance documents, accepted ADRs, and technical operating-standard succession |
 | Live repository authority | None; live Git, tests, CI, artifacts and runtime remain separate evidence sources |
 | Owner adoption effect | An explicit owner decision over an exact content SHA-256 and candidate commit creates adoption when recorded here without modifying the adopted content |
 | Governing rule | Missing or conflicting adoption evidence fails closed as `UNKNOWN` or `BLOCKED` |
@@ -110,7 +110,33 @@ and synchronization into `main` remain separate technical operations and evidenc
 | `SECURITY.md` | Mandatory security policy in its documented scope | Must not be weakened by unclear governance. |
 | Accepted ADRs | Effective only in their explicitly accepted scope | A merged `PROPOSED` ADR is not automatically accepted. |
 
-## 7. Adoption-record integrity requirements
+## 7. ADR-0008 owner adoption record — isolated Runner boundary v1
+
+```text
+DOCUMENT: docs/adr/ADR-0008-isolated-runner-boundary-v1.md
+VERSION_OR_CANDIDATE_VERSION: ADR-0008-isolated-runner-boundary-v1
+DECLARED_STATUS: PROPOSED
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact ADR SHA-256, content commit, and bound threat-model SHA-256
+ADOPTION_DATE: 2026-08-08
+ADOPTED_CONTENT_COMMIT: 8834abd5fe7b5a6f2ee7cf266997334fb26b7e8a
+CONTENT_SHA256: 97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b
+SUPERSEDES: none; resolves the owner-decision-required state for these exact reviewed bytes
+CONFLICTS_RESOLVED: immutable reviewed bytes preserved; design and safety invariants adopted; isolated Runner runtime remains unimplemented; production effects remain BLOCKED; implementation authorization is not implied
+NEXT_REVIEW: before first isolated Runner runtime implementation or any material change to the adopted boundary
+BOUND_THREAT_MODEL: docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md
+BOUND_THREAT_MODEL_SHA256: 71d2c5feceb71291e5919d8cfb37d099186c24648622573bba6e8b49a75bf06b
+PRODUCTION_EFFECTS: BLOCKED
+IMPLEMENTATION_AUTHORIZATION: NOT_IMPLIED
+```
+
+The adopted ADR and bound threat-model bytes remain unchanged. Their embedded `PROPOSED` labels are
+the historical declared status of those immutable reviewed bytes; this external record is the
+effective owner-adoption evidence. No runtime code, release, deployment, or production effect is
+authorized by this record.
+
+## 8. Adoption-record integrity requirements
 
 Every later normative, mandatory, constitutional, or accepted artifact must have a non-self-referential
 record containing:

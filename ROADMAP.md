@@ -25,7 +25,7 @@ The detailed product-delivery map lives in
 | Phase | Status | Summary |
 |---|---|---|
 | MVP-0 | VERIFIED | Control-plane foundation with identity, approvals, execution lifecycle, evidence, and production effects disabled |
-| MVP-1 | PARTIALLY VERIFIED | Deterministic contract and decision foundation, including ADR-0007 pure execution-contract value objects and reviewed ADR-0008 evidence |
+| MVP-1 | PARTIALLY VERIFIED | Deterministic contract and decision foundation, including ADR-0007 pure execution-contract value objects and the owner-adopted ADR-0008 design/safety boundary; runtime remains unimplemented |
 | MVP-2 | PROPOSED | Operator and approver immutable-request workflow |
 | MVP-3 | PROPOSED | Isolated read-only Runner pilot |
 | MVP-4 | BLOCKED | Governed non-production mutation pilot |
@@ -184,7 +184,8 @@ Exit criteria:
 
 ### EPIC-005 — Isolated Runner Capsules
 
-**Status:** PROPOSED.
+**Status:** PROPOSED implementation. ADR-0008 design and safety invariants are owner-adopted; this
+does not authorize runtime implementation.
 
 Goal:
 
@@ -274,10 +275,16 @@ Prerequisites include:
 
 ## Immediate priority order
 
-1. specify the execution grant and structured receipt contract;
-2. design and implement the isolated runner boundary against the reviewed contracts;
-3. implement the read-only CyberCore boundary only after execution contracts are reviewed;
-4. keep CyberCore mutation out of scope until artifact binding, isolated execution, and
+1. implement the MVP-2 operator/approver immutable-request slice against ADR-0007 contracts and the
+   owner-adopted ADR-0008 boundary;
+2. prepare separately reviewable child R3 decisions required before any isolated Runner runtime
+   implementation, including authoritative issuance, authenticity/trust, durable consumption,
+   transport, and capsule enforcement;
+3. implement a read-only isolated Runner vertical slice only after explicit implementation
+   authorization and the required child decisions;
+4. implement the read-only CyberCore boundary only after the execution boundary remains reviewable
+   and non-authoritative intelligence separation is preserved;
+5. keep CyberCore mutation out of scope until artifact binding, isolated execution, and
    postcondition evidence are separately authorized.
 
 ## Explicit no-go items

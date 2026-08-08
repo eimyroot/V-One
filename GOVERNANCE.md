@@ -42,6 +42,23 @@
   - `PROPOSED_FOR_ADOPTION`;
   - není účinný bez splnění vlastních adopčních podmínek.
 
+## Explicitně přijatá architektonická rozhodnutí
+
+- `docs/adr/ADR-0008-isolated-runner-boundary-v1.md`
+  - deklarovaný stav neměnných reviewed bytes: `PROPOSED`;
+  - efektivní stav: `ADOPTED` explicitním owner rozhodnutím z `2026-08-08`;
+  - adoptovaný content commit:
+    `8834abd5fe7b5a6f2ee7cf266997334fb26b7e8a`;
+  - content SHA-256:
+    `97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b`;
+  - bound threat-model SHA-256:
+    `71d2c5feceb71291e5919d8cfb37d099186c24648622573bba6e8b49a75bf06b`;
+  - scope adopce: isolated Runner boundary v1 design and safety invariants only;
+  - `IMPLEMENTATION_AUTHORIZATION=NOT_IMPLIED`;
+  - production effects remain `BLOCKED`;
+  - autoritativní adopční evidence je v
+    `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`.
+
 ## Proměnlivý důkazní stav
 
 - `CURRENT_PRODUCT_STATE.md`

@@ -22,8 +22,8 @@ and release documentation.
 | How will organization roles and approval profiles work? | [`adr/ADR-0003-organization-roles-and-configurable-approval-policy.md`](adr/ADR-0003-organization-roles-and-configurable-approval-policy.md) |
 | What is the accepted read-only Policy Decision Graph v1 boundary? | [`adr/ADR-0006-read-only-policy-decision-graph-v1.md`](adr/ADR-0006-read-only-policy-decision-graph-v1.md) — ACCEPTED, projection-only, no runtime integration |
 | What is the accepted pure execution-contract boundary? | [`adr/ADR-0007-execution-grant-receipt-contract-v1.md`](adr/ADR-0007-execution-grant-receipt-contract-v1.md) — ACCEPTED, deterministic value contracts only |
-| What is the proposed isolated Runner boundary? | [`adr/ADR-0008-isolated-runner-boundary-v1.md`](adr/ADR-0008-isolated-runner-boundary-v1.md) — PROPOSED, owner decision REQUIRED |
-| What is the proposed Runner threat model? | [`security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](security/ISOLATED_RUNNER_THREAT_MODEL_V1.md) |
+| What is the owner-adopted isolated Runner boundary design? | [`adr/ADR-0008-isolated-runner-boundary-v1.md`](adr/ADR-0008-isolated-runner-boundary-v1.md) — effective status ADOPTED; runtime implementation not implied |
+| What is the owner-adopted Runner threat-model design? | [`security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](security/ISOLATED_RUNNER_THREAT_MODEL_V1.md) — bound to the ADR-0008 owner decision; runtime controls not implemented |
 | How are local checkpoint candidates finalized? | [`adr/ADR-0004-repository-owned-checkpoint-finalization.md`](adr/ADR-0004-repository-owned-checkpoint-finalization.md) |
 
 ## Structure
