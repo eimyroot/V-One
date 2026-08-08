@@ -112,8 +112,8 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
     database.initialize()
 
     rows = migration_rows(database)
-    assert database.schema_version() == 7
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 6, 7]
+    assert database.schema_version() == 8
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 6, 7, 8]
     assert [row[1] for row in rows] == [
         "0001_core_schema.sql",
         "0002_auth_rate_limits.sql",
@@ -122,6 +122,7 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
         "0005_workspace_environment_boundary.sql",
         "0006_external_identity_bindings.sql",
         "0007_active_sessions.sql",
+        "0008_immutable_review_binding.sql",
     ]
     assert all(len(str(row[2])) == 64 for row in rows)
     assert all(str(row[3]).endswith("+00:00") for row in rows)
@@ -157,7 +158,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
             "SELECT id, username, password_hash FROM users WHERE id = 'usr_legacy'"
         ).fetchone()
     assert tuple(user) == ("usr_legacy", "legacy-admin", "preserved-hash")
-    assert database.schema_version() == 7
+    assert database.schema_version() == 8
 
 
 def test_initialization_is_idempotent(tmp_path: Path) -> None:
@@ -209,7 +210,7 @@ def test_receipt_sequence_migration_reconstructs_chain_links(tmp_path: Path) -> 
     with database.connect() as migrated:
         rows = migrated.execute("SELECT sequence, id FROM receipts ORDER BY sequence").fetchall()
     assert [tuple(row) for row in rows] == [(1, "rcpt_z"), (2, "rcpt_a")]
-    assert database.schema_version() == 7
+    assert database.schema_version() == 8
     service = ProductService(
         ProductConfig(
             environment="test",
@@ -350,7 +351,7 @@ def test_execution_lease_migration_marks_legacy_running_execution_expired(
             "SELECT fence, lease_expires_at FROM executions WHERE id = 'exec_running'"
         ).fetchone()
     assert tuple(execution) == (1, started_at)
-    assert database.schema_version() == 7
+    assert database.schema_version() == 8
 
 
 def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
@@ -392,7 +393,7 @@ def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
     database = SQLiteProductDatabase(path)
     database.initialize()
 
-    assert database.schema_version() == 7
+    assert database.schema_version() == 8
     with database.connect() as migrated:
         legacy = migrated.execute(
             "SELECT environment, status FROM change_requests WHERE id = 'cr_legacy'"
@@ -443,6 +444,113 @@ def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
         )
 
 
+def test_review_binding_migration_preserves_legacy_history_without_backfill(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "schema-v7-review-binding.sqlite3"
+    create_schema_version(path, 7)
+    created_at = "2026-08-08T18:45:00.000+00:00"
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            """
+            INSERT INTO users(id, username, password_hash, role, active, created_at)
+            VALUES ('usr_admin', 'admin', 'unused', 'administrator', 1, ?)
+            """,
+            (created_at,),
+        )
+        connection.execute(
+            """
+            INSERT INTO users(id, username, password_hash, role, active, created_at)
+            VALUES ('usr_operator', 'operator', 'unused', 'operator', 1, ?)
+            """,
+            (created_at,),
+        )
+        connection.execute(
+            """
+            INSERT INTO workspaces(id, name, environment, created_at)
+            VALUES ('wrk_main', 'Main', 'local', ?)
+            """,
+            (created_at,),
+        )
+        connection.execute(
+            """
+            INSERT INTO change_requests(
+                id, workspace_id, title, description, risk, environment, adapter,
+                payload_json, status, requested_by, created_at, updated_at
+            ) VALUES (
+                'cr_legacy_pending', 'wrk_main', 'Legacy pending', '', 'R1', 'local',
+                'echo', '{}', 'REVIEW_REQUIRED', 'usr_admin', ?, ?
+            )
+            """,
+            (created_at, created_at),
+        )
+        connection.execute(
+            """
+            INSERT INTO change_requests(
+                id, workspace_id, title, description, risk, environment, adapter,
+                payload_json, status, requested_by, created_at, updated_at
+            ) VALUES (
+                'cr_legacy_approved', 'wrk_main', 'Legacy approved', '', 'R1', 'local',
+                'echo', '{}', 'APPROVED', 'usr_admin', ?, ?
+            )
+            """,
+            (created_at, created_at),
+        )
+        connection.execute(
+            """
+            INSERT INTO approvals(
+                id, request_id, approver_id, decision, reason, created_at
+            ) VALUES (
+                'appr_legacy', 'cr_legacy_approved', 'usr_operator',
+                'APPROVED', 'legacy approval', ?
+            )
+            """,
+            (created_at,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    database = SQLiteProductDatabase(path)
+    database.initialize()
+
+    assert database.schema_version() == 8
+    with database.connect() as migrated:
+        pending = migrated.execute(
+            """
+            SELECT review_content_sha256
+            FROM change_requests WHERE id = 'cr_legacy_pending'
+            """
+        ).fetchone()
+        approval = migrated.execute(
+            """
+            SELECT review_content_sha256
+            FROM approvals WHERE id = 'appr_legacy'
+            """
+        ).fetchone()
+    assert pending["review_content_sha256"] is None
+    assert approval["review_content_sha256"] is None
+
+    service = ProductService(
+        ProductConfig(
+            environment="test",
+            database_path=path,
+            sandbox_root=tmp_path / "sandboxes",
+            session_signing_secret="s" * 64,
+            bootstrap_token="b" * 48,
+        ),
+        database=database,
+    )
+    with pytest.raises(RuntimeError, match="review content binding is missing"):
+        service.approve_change_request(
+            actor_id="usr_operator",
+            request_id="cr_legacy_pending",
+            decision="APPROVED",
+            reason="must not fabricate historical review assurance",
+        )
+
+
 def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
     database = SQLiteProductDatabase(
@@ -459,7 +567,7 @@ def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(DatabaseMigrationError, match="history drift detected"):
         database.initialize()
 
-    assert database.schema_version() == 7
+    assert database.schema_version() == 8
 
 
 def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: Path) -> None:
@@ -474,7 +582,7 @@ def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: 
 
 def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
-    (migrations / "0008_broken.sql").write_text(
+    (migrations / "0009_broken.sql").write_text(
         "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
         encoding="utf-8",
     )
@@ -530,8 +638,8 @@ def test_concurrent_initialization_serializes_without_duplicate_history(tmp_path
         list(executor.map(initialize, range(8)))
 
     database = SQLiteProductDatabase(path)
-    assert database.schema_version() == 7
-    assert len(migration_rows(database)) == 7
+    assert database.schema_version() == 8
+    assert len(migration_rows(database)) == 8
 
 
 def test_postgresql_backend_fails_before_creating_local_database(tmp_path: Path) -> None:
@@ -559,7 +667,7 @@ def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> N
 
     assert response.status_code == 200
     assert response.json()["database_backend"] == "sqlite"
-    assert response.json()["schema_version"] == 7
+    assert response.json()["schema_version"] == 8
     assert response.json()["production_effects"] == "DISABLED"
 
     service = app.state.voodoo_product_service

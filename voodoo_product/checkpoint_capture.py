@@ -658,7 +658,7 @@ def _capture_runtime(
     expected_health: dict[str, object] = {
         "status": "HEALTHY",
         "database_backend": "sqlite",
-        "schema_version": 7,
+        "schema_version": 8,
         "production_effects": "DISABLED",
     }
     if any(health.get(key) != value for key, value in expected_health.items()):

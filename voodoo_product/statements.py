@@ -142,7 +142,9 @@ GET_CHANGE_REQUEST = _read(
 SELECT_CHANGE_REQUEST_STATUS = _read(
     "change_requests.select_status",
     """
-    SELECT cr.status, cr.environment, w.environment AS workspace_environment
+    SELECT cr.status, cr.workspace_id, cr.title, cr.description, cr.risk,
+           cr.environment, cr.adapter, cr.payload_json, cr.requested_by,
+           cr.review_content_sha256, w.environment AS workspace_environment
     FROM change_requests cr
     JOIN workspaces w ON w.id = cr.workspace_id
     WHERE cr.id = ?
@@ -150,13 +152,18 @@ SELECT_CHANGE_REQUEST_STATUS = _read(
 )
 MARK_CHANGE_REQUEST_SUBMITTED = _write(
     "change_requests.mark_submitted",
-    "UPDATE change_requests SET status = 'REVIEW_REQUIRED', updated_at = ? WHERE id = ?",
+    """
+    UPDATE change_requests
+    SET review_content_sha256 = ?, status = 'REVIEW_REQUIRED', updated_at = ?
+    WHERE id = ?
+    """,
 )
 SELECT_CHANGE_REQUEST_APPROVAL_CONTEXT = _read(
     "change_requests.select_approval_context",
     """
-    SELECT cr.status, cr.environment, cr.risk, cr.requested_by,
-           w.environment AS workspace_environment
+    SELECT cr.status, cr.workspace_id, cr.title, cr.description, cr.risk,
+           cr.environment, cr.adapter, cr.payload_json, cr.requested_by,
+           cr.review_content_sha256, w.environment AS workspace_environment
     FROM change_requests cr
     JOIN workspaces w ON w.id = cr.workspace_id
     WHERE cr.id = ?
@@ -195,8 +202,9 @@ COUNT_CHANGE_REQUESTS_BY_RISK = _read(
 INSERT_APPROVAL = _write(
     "approvals.insert",
     """
-    INSERT INTO approvals(id, request_id, approver_id, decision, reason, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO approvals(
+        id, request_id, approver_id, decision, reason, review_content_sha256, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
 )
 COUNT_APPROVED = _read(

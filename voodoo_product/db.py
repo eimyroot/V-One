@@ -51,8 +51,17 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "requested_by",
         "created_at",
         "updated_at",
+        "review_content_sha256",
     },
-    "approvals": {"id", "request_id", "approver_id", "decision", "reason", "created_at"},
+    "approvals": {
+        "id",
+        "request_id",
+        "approver_id",
+        "decision",
+        "reason",
+        "review_content_sha256",
+        "created_at",
+    },
     "executions": {
         "id",
         "request_id",
@@ -121,6 +130,13 @@ REQUIRED_TRIGGERS = {
     "trg_workspaces_environment_immutable",
     "trg_executions_environment_insert",
     "trg_active_sessions_immutable",
+    "trg_change_requests_review_content_immutable",
+    "trg_change_requests_review_digest_insert",
+    "trg_change_requests_review_digest_transition",
+    "trg_change_requests_review_digest_required",
+    "trg_approvals_review_binding_insert",
+    "trg_approvals_immutable_update",
+    "trg_approvals_immutable_delete",
 }
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000

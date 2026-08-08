@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from typing import Any
@@ -131,10 +132,13 @@ class ChangeRequestService:
             self._require_workspace_environment(row)
             if row["status"] != "DRAFT":
                 raise RuntimeError("only a draft can be submitted")
+            if row["review_content_sha256"] is not None:
+                raise RuntimeError("draft review content binding must be empty")
+            review_content_sha256 = self._review_content_sha256(row)
             now = self._clock()
             connection.execute(
                 sql.MARK_CHANGE_REQUEST_SUBMITTED,
-                (now, request_id),
+                (review_content_sha256, now, request_id),
             )
             self.audit_ledger.append(
                 connection,
@@ -142,7 +146,7 @@ class ChangeRequestService:
                 action="change_request.submit",
                 target_type="change_request",
                 target_id=request_id,
-                payload={},
+                payload={"review_content_sha256": review_content_sha256},
             )
         return self.get_change_request(request_id)
 
@@ -165,10 +169,16 @@ class ChangeRequestService:
             if request_row is None:
                 raise LookupError("change request not found")
             self._require_workspace_environment(request_row)
-            if request_row["status"] not in {"REVIEW_REQUIRED", "APPROVED"}:
+            if request_row["status"] != "REVIEW_REQUIRED":
                 raise RuntimeError("request is not awaiting review")
             if request_row["requested_by"] == actor_id:
                 raise PermissionError("requester cannot approve their own change")
+            review_content_sha256 = request_row["review_content_sha256"]
+            if review_content_sha256 is None:
+                raise RuntimeError("request review content binding is missing")
+            review_content_sha256 = str(review_content_sha256)
+            if self._review_content_sha256(request_row) != review_content_sha256:
+                raise RuntimeError("request review content binding does not match persisted content")
             policy_decision = (
                 self._approval_policy_decision(request_row)
                 if decision == "APPROVED"
@@ -184,7 +194,15 @@ class ChangeRequestService:
             try:
                 connection.execute(
                     sql.INSERT_APPROVAL,
-                    (approval_id, request_id, actor_id, decision, reason.strip(), now),
+                    (
+                        approval_id,
+                        request_id,
+                        actor_id,
+                        decision,
+                        reason.strip(),
+                        review_content_sha256,
+                        now,
+                    ),
                 )
             except DatabaseIntegrityError as exc:
                 raise RuntimeError("approver already decided this request") from exc
@@ -214,6 +232,7 @@ class ChangeRequestService:
                 payload={
                     "reason": reason,
                     "resulting_status": next_status,
+                    "review_content_sha256": review_content_sha256,
                     **(
                         {"approval_policy": policy_decision.to_dict()}
                         if policy_decision is not None
@@ -250,6 +269,27 @@ class ChangeRequestService:
             policy_input,
             evaluator=self._approval_policy_evaluator,
         )
+
+    @staticmethod
+    def _review_content_sha256(value: DatabaseRow | dict[str, Any]) -> str:
+        try:
+            payload = json.loads(str(value["payload_json"]))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("change request payload is not valid canonical JSON") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("change request payload must be a JSON object")
+        subject = {
+            "schema": "change-request-review/v1",
+            "workspace_id": str(value["workspace_id"]),
+            "title": str(value["title"]),
+            "description": str(value["description"]),
+            "risk": str(value["risk"]),
+            "environment": str(value["environment"]),
+            "adapter": str(value["adapter"]),
+            "payload": payload,
+            "requested_by": str(value["requested_by"]),
+        }
+        return hashlib.sha256(canonical_json(subject).encode("utf-8")).hexdigest()
 
     @staticmethod
     def _require_workspace_environment(value: DatabaseRow) -> None:
