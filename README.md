@@ -26,7 +26,7 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 | Local checkpoint ProofGraph verifier | VERIFIED |
 | Repository-owned checkpoint finalizer | VERIFIED |
 | Latest runtime-attested committed baseline | VERIFIED for `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` post-merge development checkpoint |
-| ADR-0008 lifecycle-semantics review | MERGED through PR #54 at `main@57c7bf2277616c4445039865ac7cf81c5fada858`; design remains PROPOSED |
+| ADR-0008 isolated Runner boundary design | ADOPTED by explicit owner decision on 2026-08-08 for the exact hash-bound design/safety scope; runtime implementation remains PROPOSED |
 | Read-only Policy Decision Graph v1 | VERIFIED deterministic projection/test scope; no runtime authority or integration |
 | Isolated execution runner | PROPOSED |
 | Production effects | BLOCKED and disabled by default |

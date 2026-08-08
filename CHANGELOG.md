@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recorded explicit owner adoption of the exact ADR-0008 isolated Runner boundary design and bound
+  threat model on 2026-08-08; implementation authorization remains not implied and production
+  effects remain blocked.
 - Recorded PR #54 and merge commit `57c7bf2277616c4445039865ac7cf81c5fada858` as the current
   verified Git baseline for the ADR-0008 lifecycle-semantics documentation correction.
 - Retained `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` as the latest runtime-attested

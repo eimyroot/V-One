@@ -238,8 +238,10 @@ def test_mvp_delivery_map_and_evidence_index_state_boundaries() -> None:
     ):
         assert digest in evidence_index
 
-    assert "ADR-0008 remains PROPOSED." in evidence_index
-    assert "Owner decision remains REQUIRED." in evidence_index
+    assert "ADR-0008 effective status is ADOPTED." in evidence_index
+    assert "Owner decision is VERIFIED for the exact hash-bound scope recorded above." in evidence_index
+    assert "ADR_CONTENT_SHA256=97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b" in evidence_index
+    assert "THREAT_MODEL_SHA256=71d2c5feceb71291e5919d8cfb37d099186c24648622573bba6e8b49a75bf06b" in evidence_index
     assert "Raw evidence remains outside Git" in evidence_index
     assert "Bundle verification does not prove runtime implementation." in evidence_index
 
@@ -405,8 +407,15 @@ def test_authority_register_preserves_predecessor_and_externalizes_adoption() ->
     assert "CANDIDATE_CONTENT_COMMIT: REQUIRED_IN_LATER_OWNER_ADOPTION_RECORD" in register
     assert "The record must not contain the hash of the commit that stores the record itself." in register
     assert "ADOPTION_RECORD_COMMIT:" not in register
+    assert "DOCUMENT: docs/adr/ADR-0008-isolated-runner-boundary-v1.md" in register
+    assert "ADOPTED_CONTENT_COMMIT: 8834abd5fe7b5a6f2ee7cf266997334fb26b7e8a" in register
+    assert "CONTENT_SHA256: 97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b" in register
+    assert "BOUND_THREAT_MODEL_SHA256: 71d2c5feceb71291e5919d8cfb37d099186c24648622573bba6e8b49a75bf06b" in register
+    assert "IMPLEMENTATION_AUTHORIZATION: NOT_IMPLIED" in register
     assert "PROPOSED_SUCCESSOR_REVISION" in governance
     assert "36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed" in governance
+    assert "ADR-0008-isolated-runner-boundary-v1.md" in governance
+    assert "97180eef53c1798c0c2bac3fac73dc7e143561e6eb71709a5057d5ce936e202b" in governance
     assert "PROJECT_CONSTITUTION.md" in governance
     assert "PROPOSED_FOR_ADOPTION" in governance
 

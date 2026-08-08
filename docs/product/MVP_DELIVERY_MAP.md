@@ -7,7 +7,7 @@
 | Latest runtime-attested baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | ADR-0008 review commit | `0fa69411b246c4bd80b8a2eaa989e60fd8bca663`, merged via PR #54 |
 | ADR-0007 | VERIFIED acceptance of pure deterministic contracts only |
-| ADR-0008 | PROPOSED - owner decision REQUIRED |
+| ADR-0008 | ADOPTED design/safety scope by explicit owner decision on 2026-08-08; implementation authorization not implied |
 | Production effects | BLOCKED |
 | Release status | DEVELOPMENT / CONTROLLED PILOT ONLY |
 
@@ -113,22 +113,26 @@ Delivered:
 - ADR-0007 accepted deterministic execution-target, approval-evidence-set, execution-grant, and
   execution-receipt value contracts;
 - strict representation, canonical digest, and cross-contract binding tests;
-- ADR-0008 isolated Runner boundary and threat model reviewed as source evidence;
+- ADR-0008 isolated Runner boundary and threat model reviewed as source evidence and subsequently
+  owner-adopted for the exact design/safety bytes on 2026-08-08;
 - R3-01 through R3-04 closed for exact patch
   `a39a8febd258b27e3b756e1df6b6fa2b795614642b5874dff66a5990d6c2ac02`.
 
 Still required:
 
-- owner decision on ADR-0008;
 - authoritative grant issuance;
 - authenticity/signature envelope and trust policy;
 - durable one-time claim store;
 - runtime integration.
 
-Exit gate:
+Owner-decision gate:
 
-- ADR-0008 accepted by an explicit owner decision without weakening its safety boundaries;
-- contract/runtime responsibility matrix approved;
+- VERIFIED: ADR-0008 was adopted by an explicit owner decision without weakening its safety
+  boundaries; production effects remain BLOCKED and implementation authorization is not implied.
+
+Remaining exit criteria:
+
+- implementation slices preserve the adopted contract/runtime responsibility matrix;
 - no documentation claim treats design evidence as runtime implementation.
 
 ## MVP-2 PROPOSED operator and approver workflow
@@ -296,14 +300,14 @@ This does not authorize unrestricted production use.
 
 ## Immediate priority order
 
-1. commit and review this documentation/MVP synchronization separately from PR #54;
-2. obtain the explicit ADR-0008 owner decision;
-3. implement the operator/approver immutable-request slice;
-4. implement a read-only isolated Runner vertical slice;
-5. prove one-time consumption, cancellation, fencing, stable receipt identity, and independent
+1. implement the operator/approver immutable-request slice;
+2. prepare the separately reviewable child R3 decisions required before isolated Runner runtime;
+3. implement a read-only isolated Runner vertical slice only after explicit implementation
+   authorization;
+4. prove one-time consumption, cancellation, fencing, stable receipt identity, and independent
    verification;
-6. only then select one narrow non-production mutation capability;
-7. keep CyberCore mutation and unrestricted production out of scope.
+5. only then select one narrow non-production mutation capability;
+6. keep CyberCore mutation and unrestricted production out of scope.
 
 ## Metrics
 
