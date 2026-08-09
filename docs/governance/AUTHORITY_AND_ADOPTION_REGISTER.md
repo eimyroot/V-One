@@ -4,7 +4,7 @@
 |---|---|
 | Document class | Governance authority and adoption register |
 | Candidate preparation date | `2026-08-06` |
-| Latest recorded owner adoption date | `2026-08-09` |
+| Latest recorded owner adoption date | `2026-08-10` |
 | Scope | VOODOO One governance documents, accepted ADRs, and technical operating-standard succession |
 | Live repository authority | None; live Git, tests, CI, artifacts and runtime remain separate evidence sources |
 | Owner adoption effect | An explicit owner decision over an exact content SHA-256 and candidate commit creates adoption when recorded here without modifying the adopted content |
@@ -174,6 +174,33 @@ CONTENT_SHA256: cf23368fa96303bfd32bf825ddca2f30a9772408c0301a8390fadd758eb654d9
 SUPERSEDES: no previously adopted design; replaces unadopted bespoke-signature candidate SHA-256 87ad6144ebfab8687f07e6e86f35f5c9e6898a818476ed9edb66b447ce864320
 CONFLICTS_RESOLVED: custom signature framing rejected; standards-based JWS Compact Serialization profile with fully specified Ed25519 algorithm adopted; ADR-0007 value-contract authority preserved; ADR-0008 isolated Runner boundary preserved; authenticity does not imply authorization or replay resistance; Runner runtime remains unimplemented; production effects remain BLOCKED; implementation authorization is not implied
 NEXT_REVIEW: before any grant-issuance/authenticity implementation or any material change to this boundary
+RUNNER_IMPLEMENTATION: NOT_AUTHORIZED
+PRODUCTION_EFFECTS: BLOCKED
+RELEASE: NOT_AUTHORIZED
+DEPLOYMENT: NOT_AUTHORIZED
+```
+
+The owner-adopted bytes are exactly the content in the recorded candidate commit and remain unchanged
+despite their embedded `REVISED PROPOSED` / `PROPOSED / PREPARED` labels. This external record is the
+effective adoption evidence. The adoption-record commit does not embed its own Git hash and does not
+authorize implementation, Runner runtime, release, deployment, or production effects.
+
+## 10. Authorization Snapshot issuance facts v1 owner adoption record
+
+```text
+DOCUMENT: docs/adr/ADR-0010-authoritative-immutable-authorization-snapshot-issuance-facts-v1.md
+OWNER_ADOPTED_SOURCE_ARTIFACT: AUTHORITATIVE_IMMUTABLE_AUTHORIZATION_SNAPSHOT_ISSUANCE_FACTS_V1_REVISED_PROPOSED.md
+VERSION_OR_CANDIDATE_VERSION: Authoritative Immutable Authorization Snapshot & Issuance Facts Boundary v1 — REVISED PROPOSED
+DECLARED_STATUS: PROPOSED / PREPARED
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact SHA-256 3dee4f84ab9e94bf748c4d8ba20faebf3eb73670e92c64cdd10293ef8b9d736f, exact bytes preserved in candidate content commit A, and subsequent explicit owner binding of that commit identity
+ADOPTION_DATE: 2026-08-10
+ADOPTED_CONTENT_COMMIT: b8870f22c2fad45bfb14781b215e12dbd762351f
+CONTENT_SHA256: 3dee4f84ab9e94bf748c4d8ba20faebf3eb73670e92c64cdd10293ef8b9d736f
+SUPERSEDES: unadopted authorization-snapshot candidate SHA-256 e6e9cbe922bb6d5f61a38f70ae92427d88afd0fbc8be0d0bd1fb14c28e3b63cf
+CONFLICTS_RESOLVED: reconciled to canonical main@459d1c81923d0460da75473a99a167ef49705e02 and adopted ADR-0009; immutable authorization-snapshot facts remain separate from grant-issuance records; authoritative issuance timestamp-source identity is bound; grant issuance must independently re-check execution.run and environment/production-effect live deny gates; no legacy facts may be fabricated; Runner runtime remains unimplemented; production effects remain BLOCKED; implementation authorization is not implied
+NEXT_REVIEW: before any authorization-snapshot/grant-issuance implementation or any material change to this boundary
 RUNNER_IMPLEMENTATION: NOT_AUTHORIZED
 PRODUCTION_EFFECTS: BLOCKED
 RELEASE: NOT_AUTHORIZED
