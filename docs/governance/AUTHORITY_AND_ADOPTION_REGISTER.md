@@ -4,7 +4,7 @@
 |---|---|
 | Document class | Governance authority and adoption register |
 | Candidate preparation date | `2026-08-06` |
-| Latest recorded owner adoption date | `2026-08-08` |
+| Latest recorded owner adoption date | `2026-08-09` |
 | Scope | VOODOO One governance documents, accepted ADRs, and technical operating-standard succession |
 | Live repository authority | None; live Git, tests, CI, artifacts and runtime remain separate evidence sources |
 | Owner adoption effect | An explicit owner decision over an exact content SHA-256 and candidate commit creates adoption when recorded here without modifying the adopted content |
@@ -157,3 +157,30 @@ NEXT_REVIEW:
 ```
 
 The record must not contain the hash of the commit that stores the record itself.
+
+## 9. Execution Grant authoritative issuance/authenticity v1 owner adoption record
+
+```text
+DOCUMENT: docs/adr/ADR-0009-execution-grant-authoritative-issuance-authenticity-v1.md
+OWNER_ADOPTED_SOURCE_ARTIFACT: EXECUTION_GRANT_AUTHORITATIVE_ISSUANCE_AUTHENTICITY_V1_REVISED_PROPOSED.md
+VERSION_OR_CANDIDATE_VERSION: Execution Grant Authoritative Issuance & Authenticity Boundary v1 — REVISED PROPOSED
+DECLARED_STATUS: PROPOSED / PREPARED
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact SHA-256 cf23368fa96303bfd32bf825ddca2f30a9772408c0301a8390fadd758eb654d9 with exact bytes preserved in candidate content commit A
+ADOPTION_DATE: 2026-08-09
+ADOPTED_CONTENT_COMMIT: 42424df108973da042836dd22ccd0e4883939b18
+CONTENT_SHA256: cf23368fa96303bfd32bf825ddca2f30a9772408c0301a8390fadd758eb654d9
+SUPERSEDES: no previously adopted design; replaces unadopted bespoke-signature candidate SHA-256 87ad6144ebfab8687f07e6e86f35f5c9e6898a818476ed9edb66b447ce864320
+CONFLICTS_RESOLVED: custom signature framing rejected; standards-based JWS Compact Serialization profile with fully specified Ed25519 algorithm adopted; ADR-0007 value-contract authority preserved; ADR-0008 isolated Runner boundary preserved; authenticity does not imply authorization or replay resistance; Runner runtime remains unimplemented; production effects remain BLOCKED; implementation authorization is not implied
+NEXT_REVIEW: before any grant-issuance/authenticity implementation or any material change to this boundary
+RUNNER_IMPLEMENTATION: NOT_AUTHORIZED
+PRODUCTION_EFFECTS: BLOCKED
+RELEASE: NOT_AUTHORIZED
+DEPLOYMENT: NOT_AUTHORIZED
+```
+
+The owner-adopted bytes are exactly the content in the recorded candidate commit and remain unchanged
+despite their embedded `REVISED PROPOSED` / `PROPOSED / PREPARED` labels. This external record is the
+effective adoption evidence. The adoption-record commit does not embed its own Git hash and does not
+authorize implementation, Runner runtime, release, deployment, or production effects.
