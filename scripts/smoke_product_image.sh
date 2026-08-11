@@ -66,7 +66,7 @@ volume_created=1
 test "$(docker volume inspect \
   --format '{{index .Labels "voodoo.capture.namespace"}}' \
   "$data_volume")" = "$run_namespace"
-docker run --detach \
+docker create \
   --name "$container" \
   --read-only \
   --tmpfs /tmp:size=64m,mode=1777 \
@@ -86,6 +86,7 @@ docker run --detach \
   --env VOODOO_ALLOW_PRODUCTION_EFFECTS=false \
   "$image" >/dev/null
 container_created=1
+docker start "$container" >/dev/null
 
 for attempt in {1..30}; do
   if curl --fail --silent --show-error \
