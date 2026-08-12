@@ -5,6 +5,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -557,6 +558,39 @@ def test_capture_rejects_existing_destination(
     assert _error_code(report) == "destination_exists"
 
 
+
+def test_capture_atomic_promotion_does_not_replace_raced_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if sys.platform not in {"darwin", "linux"}:
+        pytest.skip("atomic no-replace promotion is implemented for macOS and Linux")
+
+    repository = _build_repository(tmp_path)
+    candidate = tmp_path / "candidate"
+    _install_fake_runtime(monkeypatch, FakeRuntimeRunner())
+    original_promote = checkpoint_capture._rename_directory_no_replace
+
+    def race_destination(source: Path, destination: Path) -> None:
+        destination.mkdir()
+        original_promote(source, destination)
+
+    monkeypatch.setattr(
+        checkpoint_capture,
+        "_rename_directory_no_replace",
+        race_destination,
+    )
+
+    report = capture_runtime_candidate(candidate, repository=repository)
+
+    assert report["captured"] is False
+    assert _error_code(report) == "destination_exists"
+    assert "destination_published" not in report
+    assert candidate.is_dir()
+    assert list(candidate.iterdir()) == []
+    assert list(tmp_path.glob(".candidate.capture-*")) == []
+
+
 def test_capture_rejects_tracked_symlink(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -800,6 +834,90 @@ def test_smoke_evidence_mode_rejects_relative_directory_before_docker(
 
     assert result.returncode == 2
     assert "existing absolute real directory" in result.stderr
+
+
+
+def test_smoke_cleans_owned_container_when_start_fails(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    fake_bin = tmp_path / "bin"
+    state = tmp_path / "docker-state"
+    fake_bin.mkdir()
+    state.mkdir()
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+state="${FAKE_DOCKER_STATE:?}"
+namespace="${FAKE_RUN_NAMESPACE:?}"
+printf '%s %s\\n' "${1:-}" "${2:-}" >>"$state/calls.log"
+
+case "${1:-}:${2:-}" in
+  container:inspect)
+    [[ -e "$state/container" ]]
+    ;;
+  volume:inspect)
+    if [[ ! -e "$state/volume" ]]; then
+      exit 1
+    fi
+    if [[ "$*" == *" --format "* ]]; then
+      printf '%s\\n' "$namespace"
+    fi
+    ;;
+  volume:create)
+    : >"$state/volume"
+    ;;
+  create:--name)
+    : >"$state/container"
+    printf 'fake-container-id\\n'
+    ;;
+  start:*)
+    exit 55
+    ;;
+  rm:--force)
+    rm -f "$state/container"
+    ;;
+  volume:rm)
+    rm -f "$state/volume"
+    ;;
+  *)
+    printf 'unexpected fake docker call: %s\\n' "$*" >&2
+    exit 99
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    run_namespace = "failed-start"
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+    env["FAKE_DOCKER_STATE"] = str(state)
+    env["FAKE_RUN_NAMESPACE"] = run_namespace
+
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/smoke_product_image.sh",
+            "voodoo-one:test",
+            run_namespace,
+        ],
+        cwd=root,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 55
+    assert not (state / "container").exists()
+    assert not (state / "volume").exists()
+    calls = (state / "calls.log").read_text(encoding="utf-8").splitlines()
+    assert "create --name" in calls
+    start_call = f"start voodoo-one-{run_namespace}"
+    assert start_call in calls
+    assert "rm --force" in calls
+    assert "volume rm" in calls
+    assert calls.index("create --name") < calls.index(start_call) < calls.index("rm --force")
 
 
 def test_capture_preserves_verifier_and_finalizer_ownership() -> None:

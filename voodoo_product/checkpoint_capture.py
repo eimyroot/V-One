@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -8,6 +10,7 @@ import secrets
 import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
@@ -23,6 +26,9 @@ _IMAGE_ID_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SAFE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 _MAX_CAPTURED_OUTPUT = 1024 * 1024
 _CAPTURE_ROOT_MODE = 0o500
+_AT_FDCWD = -100
+_LINUX_RENAME_NOREPLACE = 1
+_DARWIN_RENAME_EXCL = 0x00000004
 _CAPTURE_ROOT_ENTRIES = {
     "README.txt": "file",
     "ops": "directory",
@@ -167,15 +173,16 @@ def capture_runtime_candidate(
 
         _remove_task_image(docker, image, cwd=root)
         image = None
-        if os.path.lexists(target.destination):
+        staging.chmod(0o700)
+        try:
+            _rename_directory_no_replace(staging, target.destination)
+        except FileExistsError as exc:
+            _seal_capture_root(staging)
             raise CheckpointCaptureError(
                 "destination_exists",
                 "destination appeared during capture",
                 path=str(target.destination),
-            )
-        staging.chmod(0o700)
-        try:
-            os.rename(staging, target.destination)
+            ) from exc
         except OSError:
             _seal_capture_root(staging)
             raise
@@ -461,6 +468,64 @@ def _prepare_target(destination: Path, repository: Path) -> CaptureTarget:
             path=str(normalized),
         )
     return CaptureTarget(destination=normalized, parent=parent)
+
+
+def _rename_directory_no_replace(source: Path, destination: Path) -> None:
+    """Atomically rename one directory without replacing an existing destination."""
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes = os.fsencode(source)
+    destination_bytes = os.fsencode(destination)
+
+    if sys.platform.startswith("linux"):
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise OSError(
+                errno.ENOSYS,
+                "atomic no-replace rename is unavailable on this Linux runtime",
+                str(destination),
+            )
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        result = renameat2(
+            _AT_FDCWD,
+            source_bytes,
+            _AT_FDCWD,
+            destination_bytes,
+            _LINUX_RENAME_NOREPLACE,
+        )
+    elif sys.platform == "darwin":
+        renamex_np = getattr(libc, "renamex_np", None)
+        if renamex_np is None:
+            raise OSError(
+                errno.ENOSYS,
+                "atomic exclusive rename is unavailable on this macOS runtime",
+                str(destination),
+            )
+        renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        renamex_np.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        result = renamex_np(source_bytes, destination_bytes, _DARWIN_RENAME_EXCL)
+    else:
+        raise OSError(
+            errno.ENOTSUP,
+            f"atomic no-replace directory rename is unsupported on {sys.platform}",
+            str(destination),
+        )
+
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error == errno.EEXIST:
+        raise FileExistsError(error, os.strerror(error), str(destination))
+    raise OSError(error, os.strerror(error), str(destination))
 
 
 def _capture_source(git: str, state: RepositoryState, checkpoint: Path) -> None:
