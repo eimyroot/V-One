@@ -139,6 +139,24 @@ REQUIRED = [
     "docs/product/WORKSPACE_SERVICE_COMPOSITION_BOUNDARY.md",
 ]
 
+FORBIDDEN_REPOSITORY_ARTIFACTS = (
+    ".DS_Store",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+)
+
+FORBIDDEN_REPOSITORY_SUFFIXES = (
+    ".pyc",
+    ".pyo",
+)
+
+GENERATED_CACHE_DIRECTORIES = (
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+)
+
 
 def product_version() -> str:
     from voodoo_product.version import __version__
@@ -156,10 +174,55 @@ def run(command: list[str]) -> dict[str, object]:
     }
 
 
+def repository_paths() -> list[str]:
+    git_dir = ROOT / ".git"
+    if git_dir.exists():
+        completed = subprocess.run(
+            ["git", "ls-files"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return [line for line in completed.stdout.splitlines() if line]
+
+    paths: list[str] = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(ROOT)
+        if any(part in GENERATED_CACHE_DIRECTORIES for part in relative.parts):
+            continue
+        paths.append(str(relative))
+    return paths
+
+
+def is_forbidden_repository_artifact(path: str) -> bool:
+    relative = Path(path)
+    if relative.name.startswith("._"):
+        return True
+    if relative.name in FORBIDDEN_REPOSITORY_ARTIFACTS:
+        return True
+    if any(part in FORBIDDEN_REPOSITORY_ARTIFACTS for part in relative.parts):
+        return True
+    return relative.suffix in FORBIDDEN_REPOSITORY_SUFFIXES
+
+
 def main() -> int:
     checks: dict[str, object] = {}
     missing = [item for item in REQUIRED if not (ROOT / item).is_file()]
     checks["required_files"] = {"ok": not missing, "missing": missing}
+
+    hygiene_findings = [
+        path for path in repository_paths() if is_forbidden_repository_artifact(path)
+    ]
+    checks["repository_hygiene"] = {
+        "ok": not hygiene_findings,
+        "findings": sorted(hygiene_findings)[:200],
+        "finding_count": len(hygiene_findings),
+        "scope": "versioned repository paths when git metadata is present; source files otherwise",
+    }
 
     syntax_errors: list[str] = []
     for path in (ROOT / "voodoo_product").rglob("*.py"):
