@@ -55,6 +55,13 @@ only relevant specialist skills, assigns one primary coordinator, records exclus
 gates, and emits a deterministic plan digest. It is a workflow contract, not tool execution,
 approval, plugin trust, or runtime authorization.
 
+### Control-plane decision
+
+A canonical `v-one-control-plane-decision/v1` value that binds operation semantics, skill
+orchestration, optional verified operation proof, explicit boundary, evidence references,
+acceptance gates, status, and deterministic decision digest into one system decision record. It is
+the control-plane contract, not runtime dispatch or production authority by itself.
+
 ### Execution
 
 One governed attempt to apply an approved capability. It has an identity, idempotency binding, lease,
