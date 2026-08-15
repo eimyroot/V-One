@@ -108,14 +108,16 @@ or digest continuity is missing.
 `voodoo_product/skill_orchestration.py` adds the deterministic skill-orchestration contract for
 multi-specialist engineering work. It selects only task-relevant skills, requires
 `governed-workflow-orchestrator` as the single coordinator, records non-selected skills with
-reasons, and emits a digestable plan. It does not dynamically trust plugins, execute tools, approve
-work, or bypass the V-One authorization model.
+reasons, requires development purpose/system-benefit claims, requires the
+`change_has_purpose_and_system_benefit` acceptance gate, and emits a digestable plan. It does not
+dynamically trust plugins, execute tools, approve work, or bypass the V-One authorization model.
 
 `voodoo_product/control_plane.py` adds the deterministic system control-plane decision contract. It
 binds operation semantics, skill orchestration, optional verified operation proof, explicit boundary,
 evidence references, acceptance gates, final decision status, and mandatory purpose/system-benefit
 claims into one digestable `v-one-control-plane-decision/v1` record. It is a contract layer, not an
-API endpoint or runtime dispatcher.
+API endpoint or runtime dispatcher. The explicit usefulness gate is
+`decision_has_purpose_and_system_benefit`.
 
 ## Documentation
 
@@ -161,7 +163,7 @@ The current implementation includes:
 - deterministic operation-proof contracts for independent verification and exact
   snapshot/grant/receipt/proof binding;
 - deterministic skill-orchestration contracts for relevant specialist selection, single
-  coordination ownership, excluded operations, and acceptance gates;
+  coordination ownership, excluded operations, development usefulness, and acceptance gates;
 - deterministic system control-plane decision contract for status, boundary, evidence, gates,
   purpose, system benefit, semantics, orchestration, and proof binding;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
