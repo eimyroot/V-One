@@ -51,9 +51,9 @@ independent from the actor and runner.
 ### Skill orchestration plan
 
 A canonical `v-one-skill-orchestration-plan/v1` value that classifies one engineering task, selects
-only relevant specialist skills, assigns one primary coordinator, records exclusions and acceptance
-gates, and emits a deterministic plan digest. It is a workflow contract, not tool execution,
-approval, plugin trust, or runtime authorization.
+only relevant specialist skills, assigns one primary coordinator, records exclusions, development
+purpose, development system benefit, and acceptance gates, and emits a deterministic plan digest.
+It is a workflow contract, not tool execution, approval, plugin trust, or runtime authorization.
 
 ### Control-plane decision
 
@@ -62,6 +62,12 @@ orchestration, optional verified operation proof, explicit boundary, evidence re
 acceptance gates, purpose, system benefit, status, and deterministic decision digest into one system
 decision record. It is the control-plane contract, not runtime dispatch or production authority by
 itself.
+
+### Usefulness gate
+
+An explicit acceptance gate proving that a change or decision has stated purpose and system benefit.
+Current canonical gate names are `change_has_purpose_and_system_benefit` for development work and
+`decision_has_purpose_and_system_benefit` for control-plane decisions.
 
 ### Execution
 
