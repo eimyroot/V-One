@@ -19,14 +19,20 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 | Area | Status |
 |---|---|
 | Root agent governance | IMPLEMENTED in repository source |
-| Current source/runtime identity | See `CURRENT_PRODUCT_STATE.md` and live Git state |
-| Current verified Git baseline | VERIFIED at `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
+| Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
+| Current source/runtime evidence | See `CURRENT_PRODUCT_STATE.md`, `docs/product/CURRENT_CAPABILITIES.md`, and live Git/CI |
 | Local identity, approvals, execution lifecycle, audit, and receipts | VERIFIED |
 | ADR-0007 pure execution-contract value objects | VERIFIED source/test scope; deterministic representation only |
+| Authorization Snapshot contract | IMPLEMENTED |
+| Authorization Snapshot append-only persistence | VERIFIED for merged PR #71 scope; schema v9 |
+| Authoritative Snapshot Creator | PROPOSED / not implemented |
+| Authoritative ExecutionGrantIssuer | PROPOSED / not implemented |
 | Local checkpoint ProofGraph verifier | VERIFIED |
 | Repository-owned checkpoint finalizer | VERIFIED |
 | Latest runtime-attested committed baseline | VERIFIED for `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` post-merge development checkpoint |
 | ADR-0008 isolated Runner boundary design | ADOPTED by explicit owner decision on 2026-08-08 for the exact hash-bound design/safety scope; runtime implementation remains PROPOSED |
+| ADR-0009 grant issuance/authenticity boundary | ADOPTED design boundary; implementation authorization not implied |
+| ADR-0010 immutable authorization-snapshot facts boundary | ADOPTED design boundary; authoritative Snapshot Creator remains unimplemented |
 | Read-only Policy Decision Graph v1 | VERIFIED deterministic projection/test scope; no runtime authority or integration |
 | Isolated execution runner | PROPOSED |
 | Production effects | BLOCKED and disabled by default |
@@ -34,21 +40,22 @@ lifecycle, recovery, and verifiable evidence must remain explicit.
 | Public commercial distribution | BLOCKED pending licensing |
 
 The current product version is `0.9.0-rc2-dev`. Exact repository identity is obtained from live Git,
-not from this README. The latest verified Git baseline is
-`main@57c7bf2277616c4445039865ac7cf81c5fada858`; the latest runtime-attested baseline remains
+not from this README or any self-embedded commit SHA. The latest runtime-attested baseline remains
 `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`. That runtime checkpoint is classified
 `IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT`: 433 tests passed, product readiness passed,
 the dependency audit reported no known vulnerabilities, the product image built and passed its
 recorded smoke gate, and production effects remained disabled. The checkpoint archive SHA-256 is
 `80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2`; the recorded image ID is
 `sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc`.
-That checkpoint does not attest the later review commit `0fa69411...`, its PR #54 merge commit
-`57c7bf22...`, this documentation/MVP patch, a release, deployment, or production operation. The implementation is suitable for local
-integration, verification, and controlled pilot hardening. It is not an unrestricted production
-release.
+That historical runtime checkpoint does not attest later source changes, later GitHub CI runs, a
+release, a deployment, or a production operation. Later source/CI truth must be read from live GitHub
+evidence. The implementation is suitable for local integration, verification, and controlled pilot
+hardening. It is not an unrestricted production release.
 
-The latest exact evidence snapshot, including what works, current limitations, and the next safe step,
-is maintained in [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md).
+The latest evidence snapshot, including what works, current limitations, and the next safe step, is
+maintained in [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md). The authoritative
+human-readable capability inventory is
+[`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md).
 
 ## Product model
 
@@ -65,14 +72,24 @@ ADR-0007 pure execution contracts
   deterministic target / approval-evidence / grant / receipt values
                          |
                          v
+Authorization Snapshot persistence
+  immutable prevalidated authorization evidence
+                         |
+                         v
+Authoritative Snapshot Creator + Grant Issuer (target)
+                         |
+                         v
 Isolated Runner (target)
   bounded action -> postcondition verification -> bounded receipt and evidence
 ```
 
 VOODOO One is the authorization system. CyberCore may become a separate system of understanding.
-Execution is intended to move into an isolated runner. The pure deterministic execution-contract
-layer is already accepted as source/test-verified representation in ADR-0007; the isolated Runner
-runtime remains proposed. ProofGraph connects the resulting evidence.
+Execution is intended to move into an isolated runner only after the authority foundation is proven.
+The pure deterministic execution-contract layer is accepted as source/test-verified representation in
+ADR-0007. The Authorization Snapshot contract and persistence foundation exist, while authoritative
+snapshot creation, grant issuance, isolated Runner runtime, and independent provider verification
+remain separate later steps. ProofGraph connects resulting evidence but does not itself create
+authority.
 
 ## Common language
 
@@ -123,7 +140,7 @@ API endpoint or runtime dispatcher. The explicit usefulness gate is
 
 | Document | Purpose |
 |---|---|
-| [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) | Exact current evidence snapshot and next safe step |
+| [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) | Current evidence snapshot and next safe step |
 | [`CHANGELOG.md`](CHANGELOG.md) | Human-readable record of documentation and product-history changes |
 | [`VISION.md`](VISION.md) | Product purpose, long-term direction, and non-goals |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current architecture and target evolution |
@@ -158,6 +175,7 @@ The current implementation includes:
 - bounded local adapters with governed sandbox filesystem effects;
 - local checkpoint verification, deterministic ProofGraph v1 JSON, and repository-owned checkpoint finalization;
 - ADR-0007 pure execution-contract value objects with deterministic digests and cross-contract binding tests;
+- immutable Authorization Snapshot contract and append-only schema-v9 persistence foundation;
 - deterministic common-language and operation-semantics contracts for member purpose, shared
   vocabulary, operation stages, and verified technique boundaries;
 - deterministic operation-proof contracts for independent verification and exact
@@ -200,8 +218,8 @@ python -m voodoo_product evidence verify /absolute/path/to/checkpoint
 ```
 
 The verifier emits JSON and exits non-zero when required checkpoint evidence is inconsistent. It does
-not verify remote Drive bytes, contact Docker, publish artifacts, authorize a release, or enable
-production effects.
+not independently attest external remote bytes, contact Docker, publish artifacts, authorize a
+release, or enable production effects.
 
 See [`ADR-0002`](docs/adr/ADR-0002-local-checkpoint-proofgraph-verification.md).
 
