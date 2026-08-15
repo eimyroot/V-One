@@ -74,6 +74,37 @@ Execution is intended to move into an isolated runner. The pure deterministic ex
 layer is already accepted as source/test-verified representation in ADR-0007; the isolated Runner
 runtime remains proposed. ProofGraph connects the resulting evidence.
 
+## Common language
+
+V-One now carries an explicit deterministic common-language layer in
+`voodoo_product/operation_semantics.py`. It defines the required system members, their purpose,
+their authority boundary, the canonical operation stages, and the verified technique map used by the
+product language.
+
+The current member roles are:
+
+- owner;
+- operator;
+- AI agent;
+- CyberCore;
+- policy engine;
+- approval quorum;
+- runner;
+- verifier;
+- evidence fabric.
+
+The technique map treats MCP as tool/context access, A2A as agent interoperability, AgentCore-style
+runtime telemetry as observability input, SPIFFE-style identity as transport/workload identity, and
+Sigstore, in-toto, and SLSA as attestation/provenance primitives. These techniques can support V-One
+evidence, but none of them alone grants authorization. V-One authorization remains governed by
+identity, policy, approval, execution grant, receipt, independent verification, and proof.
+
+`voodoo_product/operation_proof.py` adds the deterministic proof contract for that last step. It
+binds operation semantics, authorization snapshot, execution grant, execution receipt, and
+independent verification into one digestable operation proof. Runner success is not enough by
+itself; the proof fails closed when independent verification, target binding, approval independence,
+or digest continuity is missing.
+
 ## Documentation
 
 | Document | Purpose |
@@ -112,6 +143,10 @@ The current implementation includes:
 - bounded local adapters with governed sandbox filesystem effects;
 - local checkpoint verification, deterministic ProofGraph v1 JSON, and repository-owned checkpoint finalization;
 - ADR-0007 pure execution-contract value objects with deterministic digests and cross-contract binding tests;
+- deterministic common-language and operation-semantics contracts for member purpose, shared
+  vocabulary, operation stages, and verified technique boundaries;
+- deterministic operation-proof contracts for independent verification and exact
+  snapshot/grant/receipt/proof binding;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
