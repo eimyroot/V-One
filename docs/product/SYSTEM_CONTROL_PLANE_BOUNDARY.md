@@ -21,6 +21,21 @@ The V-One system control plane decision contract is the single deterministic rec
 Every decision and every decision element must also state its purpose and system benefit. A record
 without a useful role is invalid even when its digest is otherwise deterministic.
 
+The named control-plane usefulness gate is:
+
+```text
+decision_has_purpose_and_system_benefit
+```
+
+The named development usefulness gate is:
+
+```text
+change_has_purpose_and_system_benefit
+```
+
+Both gates are mandatory. The first applies to system decisions. The second applies to development
+and implementation plans before a change is accepted as useful work.
+
 ## Current Boundary
 
 This is a source-level contract only. It does not execute tools, trust plugins dynamically, approve
@@ -52,6 +67,20 @@ Every control-plane decision must state:
 - boundary purpose and system benefit;
 - evidence references with purpose and system benefit;
 - acceptance gates with purpose and system benefit;
+- `decision_has_purpose_and_system_benefit` as an explicit acceptance gate;
 - deterministic digest.
 
 Missing boundary, evidence, gates, purpose, or system benefit is invalid and fails closed.
+
+## Development Rule
+
+Every skill-orchestration plan for implementation work must state:
+
+- change purpose;
+- change system benefit;
+- selected skills with purpose and authority;
+- excluded operations;
+- `change_has_purpose_and_system_benefit` as an explicit acceptance gate.
+
+Missing development purpose, development system benefit, or the development usefulness gate is
+invalid and fails closed.
