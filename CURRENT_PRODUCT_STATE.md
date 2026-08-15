@@ -8,12 +8,16 @@
 
 ```text
 AS_OF: 2026-08-16
-LIVE_BRANCH_AT_RECONCILIATION_PREFLIGHT: main
-LIVE_HEAD_AT_RECONCILIATION_PREFLIGHT: f1b5b8a5c0a31f75c10f1acc5153874b84248e1b
-LIVE_TREE_AT_RECONCILIATION_PREFLIGHT: 61f03f49577bab1ac03cdd40be74a077649bf38b
+EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
+RECONCILIATION_INPUT_BRANCH: main
+RECONCILIATION_INPUT_HEAD: f1b5b8a5c0a31f75c10f1acc5153874b84248e1b
+RECONCILIATION_INPUT_TREE: 61f03f49577bab1ac03cdd40be74a077649bf38b
 PR71_MERGE_COMMIT: d8d375c61264ddad39eb53240dce9ff0c8e59818
 PR71_PR_HEAD_CI: run #282 SUCCESS at 93605972bfb3f35f324183a00c7ad2f88c5f9ab2
 PR71_POST_MERGE_CI: run #283 SUCCESS at d8d375c61264ddad39eb53240dce9ff0c8e59818
+PR72_SOT_RECONCILIATION_MERGE: 2ce33ca7dfe4169affb59c001ed63fc7145c9743
+PR72_PR_HEAD_CI: run #286 SUCCESS at f9f0f7cb2fa769e46510bcd7387d7e4158d1eb64
+PR72_POST_MERGE_CI: run #287 SUCCESS at 2ce33ca7dfe4169affb59c001ed63fc7145c9743
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 RUNTIME_EVIDENCE_CLASS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
 ADR_0007_CONTRACT_LAYER: VERIFIED source/test scope; pure deterministic value contracts only
@@ -31,6 +35,10 @@ RELEASE_STATE: BLOCKED
 PRODUCTION_EFFECTS: DISABLED / NO PRODUCTION EFFECT EVIDENCE
 ```
 
+Exact live Git commit is deliberately **not embedded as a static current-value field**. A commit that
+contains such a value would immediately supersede it. `RECONCILIATION_INPUT_*` records the evidence
+baseline used to prepare this snapshot; current identity must always be queried from live Git/GitHub.
+
 ## Live Git reconciliation incident
 
 Během tohoto CASER-SOURCER reconciliation vznikl na nechráněném `main` omylem jeden marker commit
@@ -38,18 +46,21 @@ Během tohoto CASER-SOURCER reconciliation vznikl na nechráněném `main` omyle
 `f1b5b8a5c0a31f75c10f1acc5153874b84248e1b`. Revert obnovil přesně strom
 `61f03f49577bab1ac03cdd40be74a077649bf38b`, tedy stejný tree jako PR #71 merge commit
 `d8d375c61264ddad39eb53240dce9ff0c8e59818`. Nezůstala žádná netto změna source tree; Git historie
-incident zachovává. Tato událost je důkazem, že `main` bez branch protection / required checks je
-materiální governance gap.
+incident zachovává. Main CI #285 pro revert skončil `SUCCESS`. Tato událost je důkazem, že `main`
+bez branch protection / required checks je materiální governance gap.
 
 ## Co je aktuálně VERIFIED
 
 - PR #71 přidal append-only SQLite persistence pro existující immutable `AuthorizationSnapshot`
   contract, migration `0009_authorization_snapshots.sql`, statement catalog/schema validation,
   idempotency binding, immutable update/delete triggers a persistence/contract regression testy;
-- PR-head CI run #282 skončil `SUCCESS` pro exact head
+- PR-head CI #282 skončil `SUCCESS` pro exact head
   `93605972bfb3f35f324183a00c7ad2f88c5f9ab2`;
-- post-merge push CI run #283 skončil `SUCCESS` pro exact merge commit
+- post-merge CI #283 skončil `SUCCESS` pro exact PR #71 merge commit
   `d8d375c61264ddad39eb53240dce9ff0c8e59818`;
+- SOT reconciliation PR #72 měl CI #286 `SUCCESS` pro exact head
+  `f9f0f7cb2fa769e46510bcd7387d7e4158d1eb64`, byl squash-merged jako
+  `2ce33ca7dfe4169affb59c001ed63fc7145c9743` a post-merge CI #287 skončil `SUCCESS`;
 - authoritative adoption register eviduje ADR-0008, ADR-0009 a ADR-0010 jako efektivně `ADOPTED` v
   jejich přesném hash-bound scope; jejich embedded `PROPOSED` / `PROPOSED / PREPARED` labels jsou
   historické deklarované statusy immutable reviewed bytes, ne současný efektivní adoption status;
@@ -107,8 +118,9 @@ RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-Tento checkpoint neattestuje pozdější PR #71 merge commit ani současný live HEAD. Pro tyto pozdější
-commity je authoritative verification evidence GitHub Actions, nikoli tento starší runtime archive.
+Tento checkpoint neattestuje pozdější source změny ani GitHub CI. Pro pozdější commity je
+verification evidence GitHub Actions, nikoli tento starší runtime archive. Ani successful CI není
+release, deployment nebo production verification.
 
 ## Efektivní ADR stav
 
@@ -120,8 +132,8 @@ Autoritativní adoption evidence je
 - ADR-0009: effective `ADOPTED`; grant issuance/authenticity design scope only; Runner/release/deploy
   remain unauthorized by adoption alone.
 - ADR-0010: effective `ADOPTED`; immutable authorization-snapshot facts boundary only; adoption alone
-  did not authorize later implementation, but the separate user-authorized PR #71 persistence slice
-  is now merged and verified.
+  did not authorize implementation. The separately user-authorized PR #71 persistence slice is merged
+  and verified, while authoritative Snapshot Creator remains unimplemented.
 
 ## Co zůstává NOT IMPLEMENTED / BLOCKED
 
@@ -158,22 +170,12 @@ STEP 9  OperationProof
 
 Do not jump to Runner implementation before the authority foundation and Snapshot Creator are proven.
 
-## Historical compatibility evidence — SUPERSEDED, NOT CURRENT
+## Historical evidence boundary
 
-The following exact strings are retained only because repository documentation tests currently encode
-this former reconciliation baseline. They MUST NOT be read as the current live baseline or effective
-ADR status and should be removed when the documentation tests are refactored to compare dynamic
-cross-document identities rather than one frozen SHA:
-
-```text
-LATEST_VERIFIED_GIT_BASELINE: main@57c7bf2277616c4445039865ac7cf81c5fada858
-ADR_0008_REVIEW_PR: 54 MERGED
-ADR_0008_DESIGN: PROPOSED
-```
-
-Historical fact: PR #54 merged the immutable ADR-0008 reviewed bytes into main at
-`57c7bf2277616c4445039865ac7cf81c5fada858`; later owner-adoption evidence changed the effective
-status without modifying those immutable bytes.
+Historical Git identities such as PR #54 merge commit
+`57c7bf2277616c4445039865ac7cf81c5fada858` remain valid provenance in the immutable ADR evidence
+index. They are **not current Git identity fields**. Effective ADR adoption is read from
+`AUTHORITY_AND_ADOPTION_REGISTER.md`, not from historical embedded status labels.
 
 Capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 
