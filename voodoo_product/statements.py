@@ -235,6 +235,48 @@ LIST_PENDING_APPROVALS = _read(
     """,
 )
 
+SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT = _read(
+    "authorization_snapshots.select_request_context",
+    """
+    SELECT id, workspace_id, environment, status, review_content_sha256
+    FROM change_requests
+    WHERE id = ?
+    """,
+)
+SELECT_AUTHORIZATION_SNAPSHOT_BY_IDEMPOTENCY_KEY = _read(
+    "authorization_snapshots.select_by_idempotency_key",
+    """
+    SELECT id, execution_id, request_id, actor_id, workspace_id, environment,
+           review_content_sha256, idempotency_key, idempotency_binding_digest,
+           snapshot_digest, snapshot_json, execution_target_json,
+           approval_evidence_json, created_at
+    FROM authorization_snapshots
+    WHERE idempotency_key = ?
+    """,
+)
+SELECT_AUTHORIZATION_SNAPSHOT = _read(
+    "authorization_snapshots.select",
+    """
+    SELECT id, execution_id, request_id, actor_id, workspace_id, environment,
+           review_content_sha256, idempotency_key, idempotency_binding_digest,
+           snapshot_digest, snapshot_json, execution_target_json,
+           approval_evidence_json, created_at
+    FROM authorization_snapshots
+    WHERE id = ?
+    """,
+)
+INSERT_AUTHORIZATION_SNAPSHOT = _write(
+    "authorization_snapshots.insert",
+    """
+    INSERT INTO authorization_snapshots(
+        id, execution_id, request_id, actor_id, workspace_id, environment,
+        review_content_sha256, idempotency_key, idempotency_binding_digest,
+        snapshot_digest, snapshot_json, execution_target_json,
+        approval_evidence_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+)
+
 SELECT_EXECUTION_BY_IDEMPOTENCY_KEY = _read(
     "executions.select_by_idempotency_key",
     "SELECT id, request_id FROM executions WHERE idempotency_key = ?",
@@ -400,6 +442,10 @@ ALL_STATEMENTS = (
     COUNT_APPROVED,
     LIST_APPROVALS,
     LIST_PENDING_APPROVALS,
+    SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT,
+    SELECT_AUTHORIZATION_SNAPSHOT_BY_IDEMPOTENCY_KEY,
+    SELECT_AUTHORIZATION_SNAPSHOT,
+    INSERT_AUTHORIZATION_SNAPSHOT,
     SELECT_EXECUTION_BY_IDEMPOTENCY_KEY,
     INSERT_EXECUTION,
     COMPLETE_EXECUTION,
