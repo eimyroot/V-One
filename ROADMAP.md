@@ -206,7 +206,10 @@ For each item classify:
 EXISTS / PARTIAL / MISSING / UNKNOWN
 ```
 
-No implementation by assumption.
+No implementation by assumption. The broader organization/approval target remains bounded by
+[`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md); its proposed
+organization model must not weaken current requester/approval safety invariants before explicit adoption
+and implementation evidence exist.
 
 ## STEP 2 — Implement only missing authority prerequisites
 
