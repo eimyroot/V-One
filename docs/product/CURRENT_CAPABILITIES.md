@@ -55,6 +55,7 @@ limitations are therefore part of every claim.
 | ADR-0007 pure execution-contract value objects | VERIFIED | deterministic contract and binding tests; source/test evidence | no runtime authority, signing, issuer, or Runner consumption |
 | V-One common language and operation semantics | IMPLEMENTED | deterministic `voodoo_product/operation_semantics.py`, canonical digest smoke, and system test inventory in `tests/system/test_operation_semantics.py` | semantic contract only; not API-integrated and not a runtime authorization gate |
 | V-One operation proof contract | IMPLEMENTED | deterministic `voodoo_product/operation_proof.py`, isolated proof smoke, and invariant tests in `tests/system/test_operation_proof.py` | pure contract only; no persistent proof store, API endpoint, signer, or external verifier adapter |
+| V-One skill orchestration contract | IMPLEMENTED | deterministic `voodoo_product/skill_orchestration.py`, local contract harness, and system test inventory in `tests/system/test_skill_orchestration.py` | planning contract only; no dynamic plugin trust, tool execution, approval, or runtime agent dispatch |
 | Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
