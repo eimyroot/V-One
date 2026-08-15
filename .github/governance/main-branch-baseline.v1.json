@@ -1,0 +1,25 @@
+{
+  "schema": "vone.github-main-governance/v1",
+  "repository": "nulleimy/V-One",
+  "branch": "main",
+  "desired": {
+    "pull_request_required": true,
+    "required_status_checks": [
+      "ci / verify"
+    ],
+    "require_latest_head_checks": true,
+    "allow_force_pushes": false,
+    "allow_deletions": false,
+    "require_conversation_resolution": true,
+    "ordinary_admin_bypass": false
+  },
+  "review_policy": {
+    "required_approving_review_count": 0,
+    "reason": "single canonical CODEOWNER; PR-only plus required CI is mandatory until multi-maintainer decision rights exist"
+  },
+  "evidence_policy": {
+    "live_github_configuration_required": true,
+    "documentation_is_not_enforcement_evidence": true,
+    "unknown_fails_closed": true
+  }
+}
