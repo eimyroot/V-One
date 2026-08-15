@@ -69,13 +69,11 @@ def _git_blob(relative: str) -> str:
 
 def test_core_documentation_foundation_exists() -> None:
     missing = sorted(relative for relative in CORE_DOCUMENTS if not (ROOT / relative).is_file())
-
     assert missing == []
 
 
 def test_readme_links_every_core_document() -> None:
     readme = _read("README.md")
-
     for relative in sorted(
         {
             "ARCHITECTURE.md",
@@ -105,7 +103,6 @@ def test_readme_links_every_core_document() -> None:
 
 def test_documentation_index_links_core_navigation() -> None:
     index = _read("docs/README.md")
-
     required_links = {
         "../VISION.md",
         "../ARCHITECTURE.md",
@@ -121,7 +118,6 @@ def test_documentation_index_links_core_navigation() -> None:
         "adr/ADR-0008-isolated-runner-boundary-v1.md",
         "security/ISOLATED_RUNNER_THREAT_MODEL_V1.md",
     }
-
     for target in sorted(required_links):
         assert f"({target})" in index
 
@@ -143,7 +139,6 @@ def test_relative_links_resolve_in_critical_docs() -> None:
         "docs/product/MVP_DELIVERY_MAP.md",
         "docs/governance/ADR0008_R3_EVIDENCE_INDEX.md",
     }
-
     for relative in sorted(critical_documents):
         document = _read(relative)
         source_dir = (ROOT / relative).parent
@@ -163,7 +158,6 @@ def test_current_capability_table_uses_only_allowed_states() -> None:
         line for line in table.splitlines() if line.startswith("| ") and not line.startswith("|---")
     ]
     capability_rows = rows[1:]
-
     assert capability_rows
 
     for row in capability_rows:
@@ -201,7 +195,7 @@ def test_mvp_delivery_map_and_evidence_index_state_boundaries() -> None:
         assert label in mvp
 
     assert "operator requests one concrete capability" in mvp
-    assert "PROPOSED" in _read("docs/product/MVP_DELIVERY_MAP.md").split("## Proposed first customer profile", 1)[1]
+    assert "PROPOSED" in mvp.split("## Proposed first customer profile", 1)[1]
     assert "Primary pilot customer - PROPOSED" in mvp
     assert "generic shell or arbitrary script execution" in mvp
     assert "shared VOODOO/CyberCore database" in mvp
@@ -267,7 +261,6 @@ def test_runner_controls_are_not_described_as_runtime_implemented() -> None:
         "docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md",
     }
     text = "\n".join(_read(relative).lower() for relative in sorted(documents))
-
     forbidden_phrases = {
         "runner runtime is implemented",
         "isolated runner runtime is implemented",
@@ -276,29 +269,37 @@ def test_runner_controls_are_not_described_as_runtime_implemented() -> None:
         "authenticity envelope is implemented",
         "runner controls are implemented",
     }
-
     for phrase in forbidden_phrases:
         assert phrase not in text
 
 
-
-def test_current_git_and_runtime_evidence_baselines_remain_distinct() -> None:
-    current = "57c7bf2277616c4445039865ac7cf81c5fada858"
+def test_live_git_identity_is_not_self_referential_and_runtime_evidence_stays_distinct() -> None:
     runtime = "d57d37111b8bc9471a136b6c618aad8e920f1aff"
+    historical_review_merge = "57c7bf2277616c4445039865ac7cf81c5fada858"
 
     state = _read("CURRENT_PRODUCT_STATE.md")
     readme = _read("README.md")
     capabilities = _read("docs/product/CURRENT_CAPABILITIES.md")
     mvp = _read("docs/product/MVP_DELIVERY_MAP.md")
 
-    assert f"LATEST_VERIFIED_GIT_BASELINE: main@{current}" in state
+    assert "EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY" in state
+    assert "RECONCILIATION_INPUT_HEAD:" in state
+    assert "Exact live Git identity | Query live Git directly" in readme
+    assert "| Exact live Git identity | Query live Git directly" in capabilities
+    assert "| Exact live Git identity | Query live Git directly" in mvp
+
+    assert "Current verified Git baseline | VERIFIED at" not in readme
+    assert "| Current verified Git baseline |" not in mvp
+    assert "| Current live Git baseline |" not in capabilities
+    assert "LATEST_VERIFIED_GIT_BASELINE:" not in state
+
     assert f"LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@{runtime}" in state
-    assert f"main@{current}" in readme
-    assert f"| Latest verified Git baseline | `main@{current}` |" in capabilities
-    assert f"| Current verified Git baseline | `main@{current}` |" in mvp
+    assert f"| Latest runtime-attested committed baseline | `main@{runtime}` |" in capabilities
     assert f"| Latest runtime-attested baseline | `main@{runtime}` |" in mvp
-    assert "ADR_0008_REVIEW_PR: 54 MERGED" in state
-    assert "ADR_0008_DESIGN: PROPOSED" in state
+
+    evidence_index = _read("docs/governance/ADR0008_R3_EVIDENCE_INDEX.md")
+    assert f"MERGE_COMMIT={historical_review_merge}" in evidence_index
+    assert historical_review_merge in state
 
 
 def test_latest_runtime_checkpoint_identity_is_consistent() -> None:
@@ -332,7 +333,6 @@ def test_latest_runtime_checkpoint_identity_is_consistent() -> None:
 
 def test_foundation_preserves_governance_authority() -> None:
     foundations = _read("foundation/FOUNDATIONS.md")
-
     assert "Subordinate to `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`" in foundations
     assert "`PROJECT_CONSTITUTION.md`" in foundations
     assert "Documentation never upgrades a capability" in foundations
@@ -340,7 +340,6 @@ def test_foundation_preserves_governance_authority() -> None:
 
 def test_current_capabilities_preserve_release_and_production_boundaries() -> None:
     document = _read("docs/product/CURRENT_CAPABILITIES.md")
-
     assert "RELEASE_VERIFIED=NO" in document
     assert "VOODOO_ALLOW_PRODUCTION_EFFECTS=false" in document
     assert "| Unrestricted production release | BLOCKED |" in document
@@ -368,6 +367,7 @@ def test_proposed_organization_approval_adr_preserves_current_safety_boundary() 
     assert "default-off runtime compatibility path only" in capabilities
     assert "Solo, Team, Regulated enforcement is not implemented" in capabilities
     assert "| Policy Decision Graph | PROPOSED | ADR-0003" in capabilities
+
 
 # GOVERNANCE_V3_CANDIDATE_TESTS_BEGIN
 
