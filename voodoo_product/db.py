@@ -111,6 +111,22 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         "issued_at",
         "expires_at",
     },
+    "authorization_snapshots": {
+        "id",
+        "execution_id",
+        "request_id",
+        "actor_id",
+        "workspace_id",
+        "environment",
+        "review_content_sha256",
+        "idempotency_key",
+        "idempotency_binding_digest",
+        "snapshot_digest",
+        "snapshot_json",
+        "execution_target_json",
+        "approval_evidence_json",
+        "created_at",
+    },
     "schema_migrations": {"version", "name", "checksum", "applied_at"},
 }
 REQUIRED_INDEXES = {
@@ -120,6 +136,8 @@ REQUIRED_INDEXES = {
     "idx_audit_target",
     "idx_auth_rate_limits_updated",
     "idx_active_sessions_user_expiry",
+    "idx_authorization_snapshots_request",
+    "idx_authorization_snapshots_workspace_environment",
 }
 REQUIRED_TRIGGERS = {
     "trg_change_requests_environment_insert",
@@ -137,6 +155,9 @@ REQUIRED_TRIGGERS = {
     "trg_approvals_review_binding_insert",
     "trg_approvals_immutable_update",
     "trg_approvals_immutable_delete",
+    "trg_authorization_snapshots_request_binding_insert",
+    "trg_authorization_snapshots_immutable_update",
+    "trg_authorization_snapshots_immutable_delete",
 }
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000
