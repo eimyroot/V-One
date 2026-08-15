@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 REQUIRED = [
     "voodoo_product/api.py",
     "voodoo_product/audit.py",
+    "voodoo_product/authorization_snapshot.py",
     "voodoo_product/auth_rate_limit.py",
     "voodoo_product/change_request.py",
     "voodoo_product/checkpoint_evidence.py",
