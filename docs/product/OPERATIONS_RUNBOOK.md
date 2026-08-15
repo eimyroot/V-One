@@ -114,7 +114,7 @@ attestations are generated and independently verified.
 ## Database migrations
 
 SQLite migrations run automatically and atomically before the application starts accepting traffic.
-The health response must report `database_backend: sqlite` and `schema_version: 8`. Never edit an
+The health response must report `database_backend: sqlite` and `schema_version: 9`. Never edit an
 applied migration: its SHA-256 checksum is part of the database history and drift blocks startup.
 Database unavailability or migration-history drift returns HTTP `503`, which makes the container
 healthcheck fail instead of reporting a false-positive HTTP success.
@@ -128,7 +128,7 @@ For an upgrade:
 4. Copy the database, `-wal` and `-shm` files as one consistent backup set.
 5. Deploy the new immutable application artifact while keeping production effects disabled.
 6. Start exactly one instance and wait for migration completion.
-7. Verify `/api/v1/health` reports `HEALTHY`, `sqlite`, schema version `8`, and production effects
+7. Verify `/api/v1/health` reports `HEALTHY`, `sqlite`, schema version `9`, and production effects
    `DISABLED`.
 8. Run the authenticated `/api/v1/evidence/verify` operation again, then start the remaining
    instances.
