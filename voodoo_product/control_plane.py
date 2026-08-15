@@ -13,6 +13,7 @@ from .skill_orchestration import SkillOrchestrationPlan
 
 SCHEMA_VERSION = 1
 CONTROL_PLANE_DECISION_TYPE = "v-one-control-plane-decision/v1"
+CONTROL_PLANE_USEFULNESS_GATE = "decision_has_purpose_and_system_benefit"
 
 DECISION_STATUSES = (
     "VERIFIED",
@@ -171,6 +172,7 @@ class VOneControlPlaneDecision:
             raise ControlPlaneDecisionError("acceptance_gates are required")
         _require_unique([item.evidence_type for item in self.evidence], field="evidence")
         _require_unique([item.gate for item in self.acceptance_gates], field="acceptance_gates")
+        _require_usefulness_gate(self.acceptance_gates)
         _require_status_matches_gates(self.status, self.acceptance_gates)
         if self.status == "VERIFIED" and self.proof_digest is None:
             raise ControlPlaneDecisionError("VERIFIED decisions require an operation proof")
@@ -333,6 +335,14 @@ def _require_status_matches_gates(
         raise ControlPlaneDecisionError("BLOCKED decisions require at least one blocked gate")
     if status not in _FINAL_STATUSES and gate_statuses <= {"PASS"}:
         raise ControlPlaneDecisionError("non-final decisions require pending or blocked evidence")
+
+
+def _require_usefulness_gate(gates: tuple[AcceptanceGate, ...]) -> None:
+    usefulness = [
+        item for item in gates if item.gate == CONTROL_PLANE_USEFULNESS_GATE
+    ]
+    if len(usefulness) != 1:
+        raise ControlPlaneDecisionError("control-plane usefulness gate is required")
 
 
 def _boundary_from_dict(value: object) -> ControlPlaneBoundary:
