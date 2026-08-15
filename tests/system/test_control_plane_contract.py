@@ -76,6 +76,8 @@ def boundary() -> ControlPlaneBoundary:
     return ControlPlaneBoundary(
         boundary_type="contract_only",
         scope="Control-plane decision contract without runtime side effects.",
+        purpose="Fence control-plane decisions before any runtime integration exists.",
+        system_benefit="Prevents contract records from implying hidden execution authority.",
         allowed_effects=("canonical_decision_record",),
         prohibited_effects=("runtime_execution", "approval_bypass", "production_effect"),
     )
@@ -87,11 +89,15 @@ def evidence() -> tuple[EvidenceReference, ...]:
             evidence_type="operation_semantics",
             source="voodoo_product/operation_semantics.py",
             digest=semantics().semantics_digest,
+            purpose="Bind the decision to the shared V-One operation language.",
+            system_benefit="Prevents member roles and operation stages from drifting.",
         ),
         EvidenceReference(
             evidence_type="skill_orchestration",
             source="voodoo_product/skill_orchestration.py",
             digest=skill_plan().plan_digest,
+            purpose="Bind the decision to the selected specialist workflow.",
+            system_benefit="Prevents unowned or overlapping skill authority.",
         ),
     )
 
@@ -102,16 +108,22 @@ def gates(status: str = "PASS") -> tuple[AcceptanceGate, ...]:
             gate="decision_has_boundary",
             status=status,
             evidence_digest=DIGEST_A,
+            purpose="Confirm the decision has an explicit effect boundary.",
+            system_benefit="Stops ambiguous records from becoming implicit authority.",
         ),
         AcceptanceGate(
             gate="decision_has_evidence",
             status=status,
             evidence_digest=DIGEST_B,
+            purpose="Confirm the decision is linked to evidence.",
+            system_benefit="Keeps every control-plane claim auditable.",
         ),
         AcceptanceGate(
             gate="decision_has_acceptance_gates",
             status=status,
             evidence_digest=DIGEST_C,
+            purpose="Confirm acceptance is declared before status is trusted.",
+            system_benefit="Prevents status labels from outrunning acceptance criteria.",
         ),
     )
 
@@ -122,6 +134,8 @@ def decision(status: str = "IMPLEMENTED") -> VOneControlPlaneDecision:
         decision_id="cpd_system_control_plane_contract",
         status=status,
         rationale="Contract exists, but runtime API integration is deliberately out of scope.",
+        purpose="Unify operation semantics, skill orchestration, and proof status.",
+        system_benefit="Creates one auditable control-plane record for every system action.",
         semantics=semantics(),
         skill_plan=skill_plan(),
         boundary=boundary(),
@@ -147,6 +161,8 @@ def test_control_plane_decision_requires_boundary_evidence_and_gates() -> None:
             decision_id="cpd_missing_evidence",
             status="IMPLEMENTED",
             rationale="Missing evidence must fail closed.",
+            purpose="Ensure evidence is mandatory.",
+            system_benefit="Prevents unsupported control-plane claims.",
             semantics=semantics(),
             skill_plan=skill_plan(),
             boundary=boundary(),
@@ -159,6 +175,8 @@ def test_control_plane_decision_requires_boundary_evidence_and_gates() -> None:
             decision_id="cpd_missing_gates",
             status="IMPLEMENTED",
             rationale="Missing gates must fail closed.",
+            purpose="Ensure acceptance gates are mandatory.",
+            system_benefit="Prevents ungated control-plane status changes.",
             semantics=semantics(),
             skill_plan=skill_plan(),
             boundary=boundary(),
@@ -178,6 +196,8 @@ def test_non_final_decision_requires_pending_or_blocked_gate() -> None:
             decision_id="cpd_overclaimed",
             status="IMPLEMENTED",
             rationale="Implemented source must not be treated as fully verified.",
+            purpose="Ensure implemented status cannot pretend to be verified.",
+            system_benefit="Keeps merge/readiness evidence honest.",
             semantics=semantics(),
             skill_plan=skill_plan(),
             boundary=boundary(),
@@ -193,3 +213,14 @@ def test_control_plane_decision_rejects_tampering() -> None:
 
     with pytest.raises(ControlPlaneDecisionError, match="VERIFIED"):
         VOneControlPlaneDecision.from_dict(payload)
+
+
+def test_control_plane_rejects_elements_without_purpose_or_benefit() -> None:
+    with pytest.raises(ControlPlaneDecisionError, match="system_benefit"):
+        AcceptanceGate(
+            gate="decision_has_usefulness",
+            status="PENDING",
+            evidence_digest=DIGEST_A,
+            purpose="Confirm every element has a stated useful role.",
+            system_benefit="",
+        )
