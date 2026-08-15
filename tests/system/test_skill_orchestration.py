@@ -8,6 +8,7 @@ import pytest
 
 from voodoo_product.evidence_primitives import canonical_json
 from voodoo_product.skill_orchestration import (
+    DEVELOPMENT_USEFULNESS_GATE,
     PRIMARY_COORDINATOR,
     SkillOrchestrationPlan,
     select_relevant_skills,
@@ -29,6 +30,8 @@ def plan(**changes: Any) -> SkillOrchestrationPlan:
         "task_type": "ci_cd",
         "source_of_truth": "github:nulleimy/V-One/pull/69",
         "objective": "Get PR #69 from failed checks to review-ready without scope expansion.",
+        "purpose": "Recover the review branch using bounded, evidence-backed engineering work.",
+        "system_benefit": "Prevents CI recovery from becoming unscoped or unauditable change.",
         "selected_skills": selected,
         "excluded_operations": (
             "merge",
@@ -37,6 +40,7 @@ def plan(**changes: Any) -> SkillOrchestrationPlan:
             "runtime_authorization_change",
         ),
         "acceptance_gates": (
+            DEVELOPMENT_USEFULNESS_GATE,
             "github_actions_green",
             "full_pytest_passes",
             "ruff_passes",
@@ -73,11 +77,28 @@ def test_skill_orchestration_plan_covers_catalog_with_reasons() -> None:
     assert all(selection.reason for selection in value.selections)
     assert all(selection.purpose for selection in value.selections)
     assert all(selection.authority for selection in value.selections)
+    assert DEVELOPMENT_USEFULNESS_GATE in value.acceptance_gates
 
 
 def test_skill_orchestration_rejects_unknown_selected_skill() -> None:
     with pytest.raises(ValueError, match="unknown"):
         plan(selected_skills=("made-up-skill",))
+
+
+def test_skill_orchestration_rejects_development_without_usefulness_gate() -> None:
+    with pytest.raises(ValueError, match="usefulness gate"):
+        plan(
+            acceptance_gates=(
+                "github_actions_green",
+                "full_pytest_passes",
+                "ruff_passes",
+            )
+        )
+
+
+def test_skill_orchestration_rejects_development_without_system_benefit() -> None:
+    with pytest.raises(ValueError, match="system_benefit"):
+        plan(system_benefit="")
 
 
 def test_skill_orchestration_rejects_selected_irrelevant_skill() -> None:
