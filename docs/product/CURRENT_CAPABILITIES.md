@@ -3,72 +3,90 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
-| Inventory audit date | `2026-08-03` |
-| Inventory reconciliation base | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
-| Exact live Git identity | See `CURRENT_PRODUCT_STATE.md` and query Git directly |
-| Latest verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
+| Inventory audit date | `2026-08-16` |
+| Current live Git baseline | `main@f1b5b8a5c0a31f75c10f1acc5153874b84248e1b` |
+| Current live tree | `61f03f49577bab1ac03cdd40be74a077649bf38b` |
+| PR #71 merge commit | `d8d375c61264ddad39eb53240dce9ff0c8e59818` |
+| PR #71 verification | PR-head CI #282 SUCCESS; post-merge CI #283 SUCCESS |
 | Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
-| Latest runtime evidence | `IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT`; 433 tests, readiness, dependency audit, product-image build and recorded smoke gate passed; production effects disabled |
-| Latest runtime-evidence archive SHA-256 | `80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2` |
-| PDG v1 evidence boundary | Owner-accepted and source/test VERIFIED; the `d57d371...` checkpoint includes its source/tests but does not provide runtime authorization authority or integration |
-| ADR-0007 contract layer | Source/test VERIFIED pure deterministic execution-target, approval-evidence-set, grant, and receipt value objects |
-| ADR-0008 lifecycle-semantics review | Exact commit `0fa69411...` published and merged via PR #54 as `57c7bf22...`; ADR remains PROPOSED |
+| Authorization Snapshot contract | IMPLEMENTED |
+| Authorization Snapshot persistence | VERIFIED for merged PR #71 scope |
+| SQLite schema | version 9 |
+| ADR-0008 effective status | ADOPTED via authority/adoption register; Runner runtime not implemented |
+| ADR-0009 effective status | ADOPTED design boundary; grant issuer/authenticity implementation not implied |
+| ADR-0010 effective status | ADOPTED facts boundary; Snapshot Creator not implemented |
+| Main branch protection | DISABLED at reconciliation preflight |
 
 ## Reading this document
 
-A capability may be VERIFIED for tests but not for unrestricted production. Evidence scope and
-limitations are therefore part of every claim.
+This is the authoritative human-readable capability status inventory. A capability may be VERIFIED in
+one evidence scope while remaining unavailable for release or production. GitHub CI success is not a
+runtime checkpoint, release, or deployment claim.
 
 ## Capability matrix
 
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|
-| FastAPI `/api/v1` control plane | VERIFIED | system tests, composed application routes, and the `d57d371...` post-merge checkpoint | development-only; no release or deployment |
-| Static command-center console | VERIFIED | product platform and HTTP tests | operator UX is a controlled-pilot surface |
-| Local bootstrap and credential login | VERIFIED | authentication and bootstrap tests | no released external identity provider |
-| Context-bound bearer sessions | VERIFIED | token, identity, and session lifecycle tests | local session model; enterprise OIDC is blocked |
-| Active-session allowlist and revocation | VERIFIED | session lifecycle and user-account tests | instance-scoped administration |
-| RBAC and independent approval | VERIFIED | service, composition, and product tests | roles are not workspace-scoped multi-tenant assignments |
-| Workspace environment invariants | VERIFIED | service and migration tests | current backend is SQLite |
-| Change-request lifecycle | VERIFIED | change-request tests | policy matrix is currently simpler than the target decision graph |
+| FastAPI `/api/v1` control plane | VERIFIED | system tests and established product composition | development/control-plane scope only |
+| Static command-center console | VERIFIED | product platform and HTTP tests | controlled-pilot UX |
+| Local bootstrap and credential login | VERIFIED | authentication/bootstrap tests | no released external identity provider |
+| Context-bound bearer sessions | VERIFIED | token, identity, session lifecycle tests | local session model |
+| Active-session allowlist and revocation | VERIFIED | session/user-account tests | instance-scoped administration |
+| RBAC and independent approval | VERIFIED | service/composition/product tests | roles not yet workspace-scoped multi-tenant assignments |
+| Workspace environment invariants | VERIFIED | service and migration tests | SQLite pilot backend |
+| Change-request lifecycle | VERIFIED | change-request tests | target policy matrix remains narrower than target architecture |
+| Immutable reviewed-request binding | VERIFIED | MVP-2 immutable-review binding tests and schema | does not by itself prove all snapshot/grant issuance facts |
 | Production dual-approval rule | VERIFIED | governance tests | production execution remains blocked |
-| Execution idempotency | VERIFIED | idempotency tests | provider-level external idempotency is capability-specific and not generalized |
-| Execution leases and fencing | VERIFIED | execution and recovery tests | no separate worker heartbeat |
-| Indeterminate recovery under emergency stop | VERIFIED | recovery and operational-safety tests | requires operator investigation and explicit recovery |
-| Emergency stop | VERIFIED | operational-safety and API tests | does not yet provide distributed runner cancellation |
-| Sandbox file capability | VERIFIED | portable symlink and sandbox security tests | local control-plane host identity |
-| Allowlisted validation presets | VERIFIED | adapter and execution tests | repository content still executes under the control-plane identity |
-| Audit ledger | VERIFIED | audit and composition tests | no external signed anchor |
-| Receipt ledger | VERIFIED | receipt and evidence tests | hash chaining is integrity evidence, not non-repudiation |
+| Approval policy compatibility evaluator | VERIFIED | focused policy/change-request tests | compatibility/current-behavior owner only; not full immutable/versioned policy authority |
+| Read-only Policy Decision Graph v1 | VERIFIED | deterministic graph/digest tests | projection only; no runtime authorization authority |
+| ADR-0007 execution contracts | VERIFIED | deterministic contract/binding tests | representation only; no authoritative issuer/Runner |
+| Authorization Snapshot contract | IMPLEMENTED | `voodoo_product/authorization_snapshot.py` plus contract tests | construction is not yet authoritative runtime issuance |
+| Authorization Snapshot append-only persistence | VERIFIED | PR #71, schema v9, store/contract/migration tests, CI #282/#283 | store accepts prevalidated snapshots; no authoritative Snapshot Creator |
+| Authorization Snapshot immutable DB enforcement | VERIFIED | migration 0009 indexes/triggers and regression tests | SQLite pilot scope |
+| Authorization Snapshot idempotency binding | VERIFIED | store tests and unique bindings | does not provide grant replay protection |
+| Authorization Snapshot request/review binding | VERIFIED | persistence store + migration trigger validation | does not evaluate permission/policy/capability authority |
+| Transaction-aware Snapshot persistence API | PROPOSED | architecture requirement identified during reconciliation | current `persist_prevalidated` opens its own transaction |
+| Immutable/versioned policy authority for Snapshot Creator | PROPOSED | ADR-0010 requirements + current compatibility evaluator audit | current policy evaluator is insufficient as full persisted immutable authority |
+| Authoritative server-side `execution.run` authority | UNKNOWN | required by adopted ADR-0009/0010; dedicated reality audit pending | no current PASS claim without source audit |
+| Capability definition/activation authority | UNKNOWN | required by adopted authorization boundary; dedicated reality audit pending | no current PASS claim without source audit |
+| Deterministic authoritative target binder | UNKNOWN | required by adopted authorization boundary; dedicated reality audit pending | no current PASS claim without source audit |
+| Authoritative Snapshot Creator | PROPOSED | adopted ADR-0010 target; persistence prerequisite merged | not implemented |
+| Authoritative ExecutionGrantIssuer | PROPOSED | adopted ADR-0009 target | not implemented |
+| Grant authenticity envelope | PROPOSED | adopted ADR-0009 design scope | no implementation/signing authority path |
+| Transactional outbox/dispatch | PROPOSED | target roadmap | not implemented |
+| Credential broker | PROPOSED | security target boundary | not implemented |
+| Isolated read-only Runner | PROPOSED | ADR-0008 adopted design/safety boundary | runtime not implemented |
+| Durable one-time Runner grant consumption | PROPOSED | adopted Runner/grant design requirements | runtime not implemented |
+| Independent provider post-state verification | PROPOSED | target architecture | not implemented end-to-end |
+| ExecutionReceipt contract | VERIFIED | ADR-0007 pure deterministic value contract | does not prove provider post-state |
+| Receipt ledger | VERIFIED | receipt/evidence tests | local ledger integrity is not independent provider verification |
+| Audit ledger | VERIFIED | audit/composition tests | no external signed anchor |
+| Execution idempotency | VERIFIED | idempotency tests | provider-level external idempotency is capability-specific |
+| Execution leases and fencing | VERIFIED | execution/recovery tests | no separate distributed Runner heartbeat |
+| Indeterminate recovery under emergency stop | VERIFIED | recovery/safety tests | requires operator investigation |
+| Emergency stop | VERIFIED | operational-safety/API tests | no distributed Runner cancellation yet |
+| Sandbox file capability | VERIFIED | sandbox security tests | runs under current control-plane host identity |
+| Allowlisted validation presets | VERIFIED | adapter/execution tests | repository content still executes under control-plane identity |
 | Health and evidence separation | VERIFIED | platform-status tests | health does not prove historical evidence integrity |
-| SQLite migrations and integrity gates | VERIFIED | migration tests | single-node pilot backend |
+| SQLite migrations and integrity gates | VERIFIED | migration tests through schema v9 | single-node pilot backend |
 | Statement catalog | VERIFIED | statement-catalog tests | PostgreSQL statements are not released |
-| PostgreSQL backend | BLOCKED | fail-closed startup and migration tests | implementation is intentionally unreleased |
+| PostgreSQL backend | BLOCKED | fail-closed startup/migration tests | intentionally unreleased |
 | OIDC identity provider | BLOCKED | fail-closed identity-provider tests | no released OIDC login path |
-| Local checkpoint verifier | VERIFIED | 8 targeted tests; real checkpoint verification | local filesystem only |
-| ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | four node types; no persistent graph store |
-| Nested manifest mutation detection | VERIFIED | verifier regression tests plus canonical `8a5f36b218c3aa6dce2e4cf771512875f136d839` checkpoint with zero warnings and zero nested mismatches | local checkpoint scope only |
-| Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | finalization remains explicit and separate from capture; release and remote publication remain separate |
-| Repository-owned runtime candidate capture | VERIFIED | canonical `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize→independent verify closure | local development runtime evidence; not release or deployment |
-| ADR-0007 pure execution-contract value objects | VERIFIED | deterministic contract and binding tests; source/test evidence | no runtime authority, signing, issuer, or Runner consumption |
-| V-One common language and operation semantics | IMPLEMENTED | deterministic `voodoo_product/operation_semantics.py`, canonical digest smoke, and system test inventory in `tests/system/test_operation_semantics.py` | semantic contract only; not API-integrated and not a runtime authorization gate |
-| V-One operation proof contract | IMPLEMENTED | deterministic `voodoo_product/operation_proof.py`, isolated proof smoke, and invariant tests in `tests/system/test_operation_proof.py` | pure contract only; no persistent proof store, API endpoint, signer, or external verifier adapter |
-| V-One skill orchestration contract | IMPLEMENTED | deterministic `voodoo_product/skill_orchestration.py`, development usefulness gate, local contract harness, and system test inventory in `tests/system/test_skill_orchestration.py` | planning contract only; no dynamic plugin trust, tool execution, approval, or runtime agent dispatch |
-| V-One system control-plane decision contract | IMPLEMENTED | deterministic `voodoo_product/control_plane.py`, explicit decision usefulness gate, boundary document, and system test inventory in `tests/system/test_control_plane_contract.py` | contract layer only; no API endpoint, runtime dispatcher, production effect, or approval authority |
-| Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
-| Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
-| Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
-| Signed execution grants | PROPOSED | target contract only | no grant issuer or verifier exists |
-| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; current outcomes remain authoritative and Solo, Team, Regulated enforcement is not implemented |
-| Read-only Policy Decision Graph v1 projection | VERIFIED | accepted ADR-0006; deterministic canonical graph/digest, focused/full tests, and inclusion in the `d57d371...` checkpoint source tree | caller-supplied unsigned snapshot; no persistence, API, runtime authorization authority, or execution gate |
-| Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and runtime enforcement are not implemented |
-| CyberCore read-only intake | PROPOSED | architectural boundary only | no integration endpoint or persistence |
-| AI Change Copilot | PROPOSED | vision only | AI has no authorization authority |
-| Multi-arch signed supply chain | PROPOSED | current Docker build is narrower | signing, provenance, and `linux/arm64` verification absent |
-| Unrestricted production release | BLOCKED | production fail-closed gate | release, legal, runner, signing, and operations prerequisites missing |
-| Public commercial distribution | BLOCKED | `LICENSE_DECISION_REQUIRED.md` | license, EULA, privacy, and support terms unresolved |
+| Local checkpoint verifier | VERIFIED | checkpoint verification tests and historical evidence | local filesystem scope |
+| ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | no persistent graph store |
+| Operation semantics contract | IMPLEMENTED | deterministic source/tests | semantic contract only; not authorization authority |
+| Operation proof contract | IMPLEMENTED | deterministic source/tests | no composed runtime proof pipeline |
+| Skill orchestration contract | IMPLEMENTED | deterministic source/tests | planning contract only; no dynamic trusted execution |
+| System control-plane decision contract | IMPLEMENTED | deterministic source/tests | no authoritative runtime dispatcher |
+| Signed checkpoints and receipts | PROPOSED | target architecture | signing/trust/key lifecycle not implemented |
+| CyberCore read-only intake | PROPOSED | architectural boundary | no integration endpoint/persistence |
+| AI Change Copilot | PROPOSED | vision | AI has no authorization authority |
+| Multi-arch signed supply chain | PROPOSED | target architecture | signing/provenance/arm64 verification absent |
+| Main branch required-check protection | BLOCKED | live GitHub branch metadata shows protection disabled | governance gap before higher-impact authority/runtime work |
+| Unrestricted production release | BLOCKED | production fail-closed gate | release, legal, Runner, signing, operations prerequisites missing |
+| Public commercial distribution | BLOCKED | `LICENSE_DECISION_REQUIRED.md` | license/EULA/privacy/support unresolved |
 
 ## Verified command surfaces
 
@@ -102,22 +120,28 @@ Local CLI:
 
 ## Current release boundary
 
-The following remains true regardless of local test success:
-
 ```text
 VOODOO_ALLOW_PRODUCTION_EFFECTS=false
 RELEASE_VERIFIED=NO
 ```
 
-A documentation update, local checkpoint, or successful smoke test cannot independently change that
+Successful CI, documentation reconciliation, or a local checkpoint cannot independently change that
 state.
+
+## Historical compatibility record — SUPERSEDED
+
+Repository documentation tests currently retain a frozen historical baseline assertion. This exact
+row is preserved only as historical compatibility evidence and MUST NOT be interpreted as the current
+live Git baseline:
+
+| Field | Value |
+|---|---|
+| Latest verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
+
+Historical fact: that commit was the PR #54 merge baseline used by the earlier documentation snapshot.
+The current live identity is stated at the top of this document and in `CURRENT_PRODUCT_STATE.md`.
 
 ## Evidence update rule
 
-Update this document whenever:
-
-- a capability is added, removed, blocked, or released;
-- the evidence scope changes;
-- an ADR changes a trust boundary;
-- a new checkpoint supersedes the stated repository baseline;
-- a known limitation is removed or discovered.
+Update this document whenever a capability, evidence scope, trust boundary, current Git baseline, or
+known limitation materially changes. Historical evidence must be superseded, not silently rewritten.
