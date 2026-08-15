@@ -9,6 +9,7 @@ from .evidence_primitives import canonical_json
 SCHEMA_VERSION = 1
 SKILL_ORCHESTRATION_PLAN_TYPE = "v-one-skill-orchestration-plan/v1"
 PRIMARY_COORDINATOR = "governed-workflow-orchestrator"
+DEVELOPMENT_USEFULNESS_GATE = "change_has_purpose_and_system_benefit"
 
 TASK_TYPES = (
     "bugfix",
@@ -173,6 +174,8 @@ class SkillOrchestrationPlan:
     task_type: str
     source_of_truth: str
     objective: str
+    purpose: str
+    system_benefit: str
     primary_coordinator: str
     selections: tuple[SkillSelection, ...]
     excluded_operations: tuple[str, ...]
@@ -180,7 +183,7 @@ class SkillOrchestrationPlan:
     plan_digest: str
 
     def __post_init__(self) -> None:
-        for field in ("task_id", "source_of_truth", "objective"):
+        for field in ("task_id", "source_of_truth", "objective", "purpose", "system_benefit"):
             _require_text(getattr(self, field), field=field)
         if self.task_type not in TASK_TYPES:
             raise ValueError("task_type is unsupported")
@@ -196,6 +199,7 @@ class SkillOrchestrationPlan:
         _require_no_authority_overlap(self.selections)
         _require_text_tuple(self.excluded_operations, field="excluded_operations")
         _require_text_tuple(self.acceptance_gates, field="acceptance_gates")
+        _require_development_usefulness_gate(self.acceptance_gates)
         if self.plan_digest != _digest(self._claims_without_digest()):
             raise ValueError("plan_digest does not match skill orchestration plan")
 
@@ -207,6 +211,8 @@ class SkillOrchestrationPlan:
         task_type: str,
         source_of_truth: str,
         objective: str,
+        purpose: str,
+        system_benefit: str,
         selected_skills: tuple[str, ...],
         excluded_operations: tuple[str, ...],
         acceptance_gates: tuple[str, ...],
@@ -214,6 +220,8 @@ class SkillOrchestrationPlan:
         _require_text(task_id, field="task_id")
         _require_text(source_of_truth, field="source_of_truth")
         _require_text(objective, field="objective")
+        _require_text(purpose, field="purpose")
+        _require_text(system_benefit, field="system_benefit")
         if task_type not in TASK_TYPES:
             raise ValueError("task_type is unsupported")
         selected = frozenset(selected_skills) | {PRIMARY_COORDINATOR}
@@ -239,6 +247,8 @@ class SkillOrchestrationPlan:
             "task_type": task_type,
             "source_of_truth": source_of_truth,
             "objective": objective,
+            "purpose": purpose,
+            "system_benefit": system_benefit,
             "primary_coordinator": PRIMARY_COORDINATOR,
             "selections": [item.to_dict() for item in selections],
             "excluded_operations": list(excluded_operations),
@@ -249,6 +259,8 @@ class SkillOrchestrationPlan:
             task_type=task_type,
             source_of_truth=source_of_truth,
             objective=objective,
+            purpose=purpose,
+            system_benefit=system_benefit,
             primary_coordinator=PRIMARY_COORDINATOR,
             selections=selections,
             excluded_operations=excluded_operations,
@@ -265,6 +277,8 @@ class SkillOrchestrationPlan:
             "task_type",
             "source_of_truth",
             "objective",
+            "purpose",
+            "system_benefit",
             "primary_coordinator",
             "selections",
             "excluded_operations",
@@ -285,6 +299,8 @@ class SkillOrchestrationPlan:
             task_type=value["task_type"],
             source_of_truth=value["source_of_truth"],
             objective=value["objective"],
+            purpose=value["purpose"],
+            system_benefit=value["system_benefit"],
             primary_coordinator=value["primary_coordinator"],
             selections=tuple(_selection_from_dict(item) for item in selections),
             excluded_operations=tuple(value["excluded_operations"]),
@@ -304,6 +320,8 @@ class SkillOrchestrationPlan:
             "task_type": self.task_type,
             "source_of_truth": self.source_of_truth,
             "objective": self.objective,
+            "purpose": self.purpose,
+            "system_benefit": self.system_benefit,
             "primary_coordinator": self.primary_coordinator,
             "selections": [item.to_dict() for item in self.selections],
             "excluded_operations": list(self.excluded_operations),
@@ -395,6 +413,11 @@ def _require_no_authority_overlap(selections: tuple[SkillSelection, ...]) -> Non
     ]
     if len(owners) != len(set(owners)):
         raise ValueError("selected canonical authorities must not overlap")
+
+
+def _require_development_usefulness_gate(acceptance_gates: tuple[str, ...]) -> None:
+    if acceptance_gates.count(DEVELOPMENT_USEFULNESS_GATE) != 1:
+        raise ValueError("development usefulness gate is required")
 
 
 def _require_text_tuple(values: tuple[str, ...], *, field: str) -> None:
