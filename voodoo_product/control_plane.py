@@ -49,6 +49,8 @@ class ControlPlaneDecisionError(ValueError):
 class ControlPlaneBoundary:
     boundary_type: str
     scope: str
+    purpose: str
+    system_benefit: str
     allowed_effects: tuple[str, ...]
     prohibited_effects: tuple[str, ...]
 
@@ -56,6 +58,8 @@ class ControlPlaneBoundary:
         if self.boundary_type not in BOUNDARY_TYPES:
             raise ControlPlaneDecisionError("boundary_type is unsupported")
         _require_text(self.scope, field="scope")
+        _require_text(self.purpose, field="purpose")
+        _require_text(self.system_benefit, field="system_benefit")
         _require_text_tuple(self.allowed_effects, field="allowed_effects")
         _require_text_tuple(self.prohibited_effects, field="prohibited_effects")
         overlap = set(self.allowed_effects) & set(self.prohibited_effects)
@@ -66,6 +70,8 @@ class ControlPlaneBoundary:
         return {
             "boundary_type": self.boundary_type,
             "scope": self.scope,
+            "purpose": self.purpose,
+            "system_benefit": self.system_benefit,
             "allowed_effects": list(self.allowed_effects),
             "prohibited_effects": list(self.prohibited_effects),
         }
@@ -76,17 +82,23 @@ class EvidenceReference:
     evidence_type: str
     source: str
     digest: str
+    purpose: str
+    system_benefit: str
 
     def __post_init__(self) -> None:
         _require_text(self.evidence_type, field="evidence_type")
         _require_text(self.source, field="source")
         _require_digest(self.digest, field="digest")
+        _require_text(self.purpose, field="purpose")
+        _require_text(self.system_benefit, field="system_benefit")
 
     def to_dict(self) -> dict[str, str]:
         return {
             "evidence_type": self.evidence_type,
             "source": self.source,
             "digest": self.digest,
+            "purpose": self.purpose,
+            "system_benefit": self.system_benefit,
         }
 
 
@@ -95,18 +107,24 @@ class AcceptanceGate:
     gate: str
     status: str
     evidence_digest: str
+    purpose: str
+    system_benefit: str
 
     def __post_init__(self) -> None:
         _require_text(self.gate, field="gate")
         if self.status not in GATE_STATUSES:
             raise ControlPlaneDecisionError("gate status is unsupported")
         _require_digest(self.evidence_digest, field="evidence_digest")
+        _require_text(self.purpose, field="purpose")
+        _require_text(self.system_benefit, field="system_benefit")
 
     def to_dict(self) -> dict[str, str]:
         return {
             "gate": self.gate,
             "status": self.status,
             "evidence_digest": self.evidence_digest,
+            "purpose": self.purpose,
+            "system_benefit": self.system_benefit,
         }
 
 
@@ -117,6 +135,8 @@ class VOneControlPlaneDecision:
     capability: str
     status: str
     rationale: str
+    purpose: str
+    system_benefit: str
     semantics_digest: str
     skill_plan_digest: str
     proof_digest: str | None
@@ -126,7 +146,14 @@ class VOneControlPlaneDecision:
     decision_digest: str
 
     def __post_init__(self) -> None:
-        for field in ("decision_id", "operation_id", "capability", "rationale"):
+        for field in (
+            "decision_id",
+            "operation_id",
+            "capability",
+            "rationale",
+            "purpose",
+            "system_benefit",
+        ):
             _require_text(getattr(self, field), field=field)
         if self.status not in DECISION_STATUSES:
             raise ControlPlaneDecisionError("decision status is unsupported")
@@ -159,6 +186,8 @@ class VOneControlPlaneDecision:
         decision_id: str,
         status: str,
         rationale: str,
+        purpose: str,
+        system_benefit: str,
         semantics: OperationSemantics,
         skill_plan: SkillOrchestrationPlan,
         boundary: ControlPlaneBoundary,
@@ -182,6 +211,8 @@ class VOneControlPlaneDecision:
             "capability": semantics.capability,
             "status": status,
             "rationale": rationale,
+            "purpose": purpose,
+            "system_benefit": system_benefit,
             "semantics_digest": semantics.semantics_digest,
             "skill_plan_digest": skill_plan.plan_digest,
             "proof_digest": proof.proof_digest if proof is not None else None,
@@ -195,6 +226,8 @@ class VOneControlPlaneDecision:
             capability=semantics.capability,
             status=status,
             rationale=rationale,
+            purpose=purpose,
+            system_benefit=system_benefit,
             semantics_digest=semantics.semantics_digest,
             skill_plan_digest=skill_plan.plan_digest,
             proof_digest=proof.proof_digest if proof is not None else None,
@@ -215,6 +248,8 @@ class VOneControlPlaneDecision:
                 "capability",
                 "status",
                 "rationale",
+                "purpose",
+                "system_benefit",
                 "semantics_digest",
                 "skill_plan_digest",
                 "proof_digest",
@@ -238,6 +273,8 @@ class VOneControlPlaneDecision:
             capability=value["capability"],
             status=value["status"],
             rationale=value["rationale"],
+            purpose=value["purpose"],
+            system_benefit=value["system_benefit"],
             semantics_digest=value["semantics_digest"],
             skill_plan_digest=value["skill_plan_digest"],
             proof_digest=value["proof_digest"],
@@ -256,6 +293,8 @@ class VOneControlPlaneDecision:
             "capability": self.capability,
             "status": self.status,
             "rationale": self.rationale,
+            "purpose": self.purpose,
+            "system_benefit": self.system_benefit,
             "semantics_digest": self.semantics_digest,
             "skill_plan_digest": self.skill_plan_digest,
             "proof_digest": self.proof_digest,
@@ -300,6 +339,8 @@ def _boundary_from_dict(value: object) -> ControlPlaneBoundary:
     if not isinstance(value, Mapping) or set(value) != {
         "boundary_type",
         "scope",
+        "purpose",
+        "system_benefit",
         "allowed_effects",
         "prohibited_effects",
     }:
@@ -307,6 +348,8 @@ def _boundary_from_dict(value: object) -> ControlPlaneBoundary:
     return ControlPlaneBoundary(
         boundary_type=value["boundary_type"],
         scope=value["scope"],
+        purpose=value["purpose"],
+        system_benefit=value["system_benefit"],
         allowed_effects=tuple(value["allowed_effects"]),
         prohibited_effects=tuple(value["prohibited_effects"]),
     )
@@ -323,12 +366,16 @@ def _evidence_from_dict(value: object) -> EvidenceReference:
         "evidence_type",
         "source",
         "digest",
+        "purpose",
+        "system_benefit",
     }:
         raise ControlPlaneDecisionError("evidence fields are invalid")
     return EvidenceReference(
         evidence_type=value["evidence_type"],
         source=value["source"],
         digest=value["digest"],
+        purpose=value["purpose"],
+        system_benefit=value["system_benefit"],
     )
 
 
@@ -343,12 +390,16 @@ def _gate_from_dict(value: object) -> AcceptanceGate:
         "gate",
         "status",
         "evidence_digest",
+        "purpose",
+        "system_benefit",
     }:
         raise ControlPlaneDecisionError("acceptance gate fields are invalid")
     return AcceptanceGate(
         gate=value["gate"],
         status=value["status"],
         evidence_digest=value["evidence_digest"],
+        purpose=value["purpose"],
+        system_benefit=value["system_benefit"],
     )
 
 
