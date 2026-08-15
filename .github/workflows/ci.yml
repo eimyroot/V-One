@@ -27,8 +27,25 @@ jobs:
           cache-dependency-path: requirements-dev.lock
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: CI diagnostics
+        shell: bash
+        run: |
+          set -euxo pipefail
+          pwd
+          python --version
+          python -m pip --version
+          python -m ruff --version
+          python -m pip show ruff
+          git rev-parse HEAD
+          git status --short
+          test -f pyproject.toml
+          test -f requirements-dev.lock
       - name: Lint
-        run: python -m ruff check .
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m ruff check . --show-files
+          python -m ruff check .
       - name: Compile
         run: python -m compileall -q voodoo_product scripts tests
       - name: Migration regression gate

@@ -74,6 +74,51 @@ Execution is intended to move into an isolated runner. The pure deterministic ex
 layer is already accepted as source/test-verified representation in ADR-0007; the isolated Runner
 runtime remains proposed. ProofGraph connects the resulting evidence.
 
+## Common language
+
+V-One now carries an explicit deterministic common-language layer in
+`voodoo_product/operation_semantics.py`. It defines the required system members, their purpose,
+their authority boundary, the canonical operation stages, and the verified technique map used by the
+product language.
+
+The current member roles are:
+
+- owner;
+- operator;
+- AI agent;
+- CyberCore;
+- policy engine;
+- approval quorum;
+- runner;
+- verifier;
+- evidence fabric.
+
+The technique map treats MCP as tool/context access, A2A as agent interoperability, AgentCore-style
+runtime telemetry as observability input, SPIFFE-style identity as transport/workload identity, and
+Sigstore, in-toto, and SLSA as attestation/provenance primitives. These techniques can support V-One
+evidence, but none of them alone grants authorization. V-One authorization remains governed by
+identity, policy, approval, execution grant, receipt, independent verification, and proof.
+
+`voodoo_product/operation_proof.py` adds the deterministic proof contract for that last step. It
+binds operation semantics, authorization snapshot, execution grant, execution receipt, and
+independent verification into one digestable operation proof. Runner success is not enough by
+itself; the proof fails closed when independent verification, target binding, approval independence,
+or digest continuity is missing.
+
+`voodoo_product/skill_orchestration.py` adds the deterministic skill-orchestration contract for
+multi-specialist engineering work. It selects only task-relevant skills, requires
+`governed-workflow-orchestrator` as the single coordinator, records non-selected skills with
+reasons, requires development purpose/system-benefit claims, requires the
+`change_has_purpose_and_system_benefit` acceptance gate, and emits a digestable plan. It does not
+dynamically trust plugins, execute tools, approve work, or bypass the V-One authorization model.
+
+`voodoo_product/control_plane.py` adds the deterministic system control-plane decision contract. It
+binds operation semantics, skill orchestration, optional verified operation proof, explicit boundary,
+evidence references, acceptance gates, final decision status, and mandatory purpose/system-benefit
+claims into one digestable `v-one-control-plane-decision/v1` record. It is a contract layer, not an
+API endpoint or runtime dispatcher. The explicit usefulness gate is
+`decision_has_purpose_and_system_benefit`.
+
 ## Documentation
 
 | Document | Purpose |
@@ -87,6 +132,7 @@ runtime remains proposed. ProofGraph connects the resulting evidence.
 | [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md) | Stable product and engineering foundations |
 | [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md) | Shared vocabulary and status taxonomy |
 | [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) | Evidence-backed current capability inventory |
+| [`docs/product/SYSTEM_CONTROL_PLANE_BOUNDARY.md`](docs/product/SYSTEM_CONTROL_PLANE_BOUNDARY.md) | System control-plane decision contract boundary |
 | [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md) | Target capability contracts and acceptance criteria |
 | [`docs/product/SECURITY_OVERVIEW.md`](docs/product/SECURITY_OVERVIEW.md) | Product security control summary and proposed Runner boundary |
 | [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md) | Current and target trust boundaries |
@@ -112,6 +158,14 @@ The current implementation includes:
 - bounded local adapters with governed sandbox filesystem effects;
 - local checkpoint verification, deterministic ProofGraph v1 JSON, and repository-owned checkpoint finalization;
 - ADR-0007 pure execution-contract value objects with deterministic digests and cross-contract binding tests;
+- deterministic common-language and operation-semantics contracts for member purpose, shared
+  vocabulary, operation stages, and verified technique boundaries;
+- deterministic operation-proof contracts for independent verification and exact
+  snapshot/grant/receipt/proof binding;
+- deterministic skill-orchestration contracts for relevant specialist selection, single
+  coordination ownership, excluded operations, development usefulness, and acceptance gates;
+- deterministic system control-plane decision contract for status, boundary, evidence, gates,
+  purpose, system benefit, semantics, orchestration, and proof binding;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 

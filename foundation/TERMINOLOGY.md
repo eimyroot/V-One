@@ -8,6 +8,12 @@
 
 ## Product terms
 
+### Common language
+
+The deterministic shared vocabulary that binds V-One member roles, operation stages, and external
+technique boundaries. The source representation lives in `voodoo_product/operation_semantics.py`.
+It is a semantic contract and evidence input, not runtime authorization by itself.
+
 ### Change request
 
 A structured proposal describing intended change, target workspace, environment, risk, adapter
@@ -27,6 +33,41 @@ artifact integrity, or execution success.
 
 A deterministic result explaining whether a request is allowed, denied, or awaiting conditions under
 a specific policy version.
+
+### Operation semantics
+
+A canonical `v-one-operation-semantics/v1` value describing the operation ID, versioned capability,
+required system members, ordered operation stages, verified technique roles, and deterministic
+semantics digest. It prevents the product language from drifting into ambiguous agent, tool,
+runner, verifier, or proof meanings.
+
+### Operation proof
+
+A canonical `operation-proof/v1` value binding operation semantics, authorization snapshot,
+execution grant, execution receipt, and independent verification into one deterministic proof
+digest. It is accepted only when exact cross-contract bindings hold and when the verifier is
+independent from the actor and runner.
+
+### Skill orchestration plan
+
+A canonical `v-one-skill-orchestration-plan/v1` value that classifies one engineering task, selects
+only relevant specialist skills, assigns one primary coordinator, records exclusions, development
+purpose, development system benefit, and acceptance gates, and emits a deterministic plan digest.
+It is a workflow contract, not tool execution, approval, plugin trust, or runtime authorization.
+
+### Control-plane decision
+
+A canonical `v-one-control-plane-decision/v1` value that binds operation semantics, skill
+orchestration, optional verified operation proof, explicit boundary, evidence references,
+acceptance gates, purpose, system benefit, status, and deterministic decision digest into one system
+decision record. It is the control-plane contract, not runtime dispatch or production authority by
+itself.
+
+### Usefulness gate
+
+An explicit acceptance gate proving that a change or decision has stated purpose and system benefit.
+Current canonical gate names are `change_has_purpose_and_system_benefit` for development work and
+`decision_has_purpose_and_system_benefit` for control-plane decisions.
 
 ### Execution
 
@@ -52,6 +93,11 @@ An append-only record of a material decision or action in the control plane.
 ### Receipt
 
 A structured record of an execution result, chained for integrity.
+
+### Independent verification
+
+A separate verification claim for observed target state and postconditions. It is not produced by
+the runner and is required before a successful receipt can become a verified operation proof.
 
 ### Evidence verification
 
@@ -127,6 +173,12 @@ It must not be silently retried.
 A separate infrastructure context and intelligence platform. In the target model it may provide
 observations, knowledge, provenance, and proposals. It does not replace VOODOO One authorization.
 
+### V-One member
+
+A participant in the governed operation system with exactly one explicit purpose and authority
+boundary. Current common-language roles are owner, operator, AI agent, CyberCore, policy engine,
+approval quorum, runner, verifier, and evidence fabric.
+
 ### Read-only intake
 
 A versioned integration that imports metadata and evidence references without allowing mutation,
@@ -136,6 +188,13 @@ package code execution, or shared persistence.
 
 An adapter translating an external system into normalized observations or capabilities. Provider
 behavior must not leak into the governance core without an approved contract.
+
+### Verified technique map
+
+The bounded mapping from external techniques to V-One technique roles. MCP is treated as tool/context
+access, A2A as agent interoperability, AgentCore-style runtime telemetry as observability input,
+SPIFFE-style identity as transport/workload identity, and Sigstore/in-toto/SLSA as attestation and
+provenance primitives. None of these techniques alone grants V-One authorization.
 
 ## State taxonomy
 

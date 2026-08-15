@@ -1,25 +1,20 @@
-## Outcome
+## Purpose
 
-Describe the user-visible or operational result.
+## System Benefit
 
-## Risk
-
-- [ ] R0
-- [ ] R1
-- [ ] R2
-- [ ] R3
-- [ ] R4
+## Boundary
 
 ## Evidence
 
-- [ ] Tests added or updated
-- [ ] `ruff`, compile, test and readiness gates pass
-- [ ] No secret, generated dependency or runtime data is included
-- [ ] Backward compatibility assessed
-- [ ] Rollback is documented
-- [ ] Production effects remain disabled
+## Tests
 
-## Owner decision
+## Rollback / Safe-forward
 
-- [ ] I explicitly approve this patch for merge
-- [ ] I explicitly approve release impact, if any
+## Non-Scope
+
+## Acceptance Gates
+- [ ] change_has_purpose_and_system_benefit
+- [ ] evidence_current
+- [ ] tests_passed
+- [ ] docs_updated_or_not_applicable
+- [ ] no_production_effect_without_release_authorization
