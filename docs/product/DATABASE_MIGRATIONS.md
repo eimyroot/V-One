@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `8`, verify evidence integrity again, and only then
+one new instance, require health schema version `9`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -76,6 +76,13 @@ approval evidence to the same deterministic SHA-256 identity. It prevents review
 content from changing after submission, requires new approval rows to carry the submitted review
 digest, and makes approval evidence immutable. Existing historical submitted or terminal rows are
 preserved without inventing a retroactive review-content digest.
+
+Migration `0009_authorization_snapshots.sql` adds append-only persistence for prevalidated immutable
+authorization snapshots. Rows are bound to an `APPROVED` change request, its exact workspace,
+environment and review-content digest. Unique execution, idempotency and snapshot identities prevent
+ambiguous reuse; database triggers reject snapshot updates and deletes. This migration does not make
+the snapshot store an authorization authority and does not compose it into execution or production
+runtime paths.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
