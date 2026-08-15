@@ -13,8 +13,10 @@ from voodoo_product.vop_vocabulary import (
     CANONICAL_NOUNS,
     CANONICAL_RELATIONS,
     CANONICAL_VERBS,
+    FORBIDDEN_SHORTHANDS,
     GATE_STATUSES,
     IDENTITY_FIELDS,
+    NOUN_DEFINITIONS,
     OPERATION_STAGES,
     RUN_STATES,
     SCHEMA_REGISTRY_IDS,
@@ -59,6 +61,13 @@ def test_canonical_collections_have_no_duplicate_terms() -> None:
         SCHEMA_REGISTRY_IDS,
     ):
         assert len(terms) == len(set(terms))
+
+
+def test_canonical_definition_maps_are_runtime_immutable() -> None:
+    with pytest.raises(TypeError):
+        NOUN_DEFINITIONS["Actor"] = "mutable"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        FORBIDDEN_SHORTHANDS["deployed"] = "mutable"  # type: ignore[index]
 
 
 def test_require_canonical_term_fails_closed() -> None:
