@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any, Final, Self
 
@@ -34,8 +35,8 @@ class ProviderSemanticMapping:
     external_operation: str
     transport: str
     capability: str
-    requested_target: dict[str, Any]
-    expected_post_state: dict[str, Any]
+    requested_target_json: str
+    expected_post_state_json: str
     mapping_digest: str
 
     def __post_init__(self) -> None:
@@ -43,8 +44,11 @@ class ProviderSemanticMapping:
         _require_text(self.external_operation, field="external_operation")
         _require_text(self.transport, field="transport")
         _require_capability(self.capability)
-        _require_mapping(self.requested_target, field="requested_target")
-        _require_mapping(self.expected_post_state, field="expected_post_state")
+        _require_canonical_object_json(self.requested_target_json, field="requested_target_json")
+        _require_canonical_object_json(
+            self.expected_post_state_json,
+            field="expected_post_state_json",
+        )
         if self.mapping_digest != _digest(self._claims_without_digest()):
             raise ValueError("mapping_digest does not match semantic mapping")
 
@@ -59,24 +63,37 @@ class ProviderSemanticMapping:
         requested_target: dict[str, Any],
         expected_post_state: dict[str, Any],
     ) -> Self:
+        requested_target_json = _canonical_object_json(requested_target, field="requested_target")
+        expected_post_state_json = _canonical_object_json(
+            expected_post_state,
+            field="expected_post_state",
+        )
         claims = {
             "mapping_type": SEMANTIC_MAPPING_TYPE,
             "provider": provider,
             "external_operation": external_operation,
             "transport": transport,
             "capability": capability,
-            "requested_target": requested_target,
-            "expected_post_state": expected_post_state,
+            "requested_target": json.loads(requested_target_json),
+            "expected_post_state": json.loads(expected_post_state_json),
         }
         return cls(
             provider=provider,
             external_operation=external_operation,
             transport=transport,
             capability=capability,
-            requested_target=requested_target,
-            expected_post_state=expected_post_state,
+            requested_target_json=requested_target_json,
+            expected_post_state_json=expected_post_state_json,
             mapping_digest=_digest(claims),
         )
+
+    @property
+    def requested_target(self) -> dict[str, Any]:
+        return json.loads(self.requested_target_json)
+
+    @property
+    def expected_post_state(self) -> dict[str, Any]:
+        return json.loads(self.expected_post_state_json)
 
     def _claims_without_digest(self) -> dict[str, Any]:
         return {
@@ -261,11 +278,18 @@ def _require_capability(value: object) -> str:
     return text
 
 
-def _require_mapping(value: object, *, field: str) -> dict[str, Any]:
+def _canonical_object_json(value: object, *, field: str) -> str:
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be an object")
-    canonical_json(value)
-    return value
+    return canonical_json(value)
+
+
+def _require_canonical_object_json(value: object, *, field: str) -> str:
+    text = _require_text(value, field=field)
+    decoded = json.loads(text)
+    if not isinstance(decoded, dict) or canonical_json(decoded) != text:
+        raise ValueError(f"{field} must be canonical object JSON")
+    return text
 
 
 def _require_sha256(value: object, *, field: str) -> str:
