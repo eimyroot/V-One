@@ -12,6 +12,7 @@ EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
 RECONCILIATION_INPUT_BRANCH: main
 RECONCILIATION_INPUT_HEAD: b4d4aab7393251ffc113a3f5bf654523bdb27865
 RECONCILIATION_INPUT_TREE: 61021278068a7d64b66325190c94dde6f4593b16
+HISTORICAL_REVIEW_MERGE_PR54: 57c7bf2277616c4445039865ac7cf81c5fada858
 PR71_MERGE_COMMIT: d8d375c61264ddad39eb53240dce9ff0c8e59818
 PR71_PR_HEAD_CI: run #282 SUCCESS at 93605972bfb3f35f324183a00c7ad2f88c5f9ab2
 PR71_POST_MERGE_CI: run #283 SUCCESS at d8d375c61264ddad39eb53240dce9ff0c8e59818
@@ -212,7 +213,8 @@ Creator are proven.
 
 ## Historical evidence boundary
 
-Historical Git identities remain valid provenance in immutable evidence indexes. They are **not
+Historical review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains valid provenance in
+the immutable ADR evidence index. Historical Git identities remain valid provenance; they are **not
 current Git identity fields**. Effective owner adoption is read from
 `AUTHORITY_AND_ADOPTION_REGISTER.md`, not inferred from repository presence, merge, CI or historical
 embedded status labels.
