@@ -4,29 +4,40 @@
 |---|---|
 | Document status | Current-state inventory |
 | Inventory audit date | `2026-08-16` |
-| Reconciliation input Git baseline | `main@f1b5b8a5c0a31f75c10f1acc5153874b84248e1b` |
-| Reconciliation input tree | `61f03f49577bab1ac03cdd40be74a077649bf38b` |
+| Reconciliation input Git baseline | `main@b4d4aab7393251ffc113a3f5bf654523bdb27865` |
+| Reconciliation input tree | `61021278068a7d64b66325190c94dde6f4593b16` |
 | Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
+| Current-main verification | CI #298 SUCCESS at reconciliation input head |
 | PR #71 merge commit | `d8d375c61264ddad39eb53240dce9ff0c8e59818` |
 | PR #71 verification | PR-head CI #282 SUCCESS; post-merge CI #283 SUCCESS |
+| PR #74 VOP merge commit | `a9a57df270b85907ee5012895c1523ade461f06f` |
+| PR #74 verification | PR-head CI #292 SUCCESS; current-main CI #298 SUCCESS includes merged VOP tree |
+| PR #75 governance-contract merge | `b4d4aab7393251ffc113a3f5bf654523bdb27865` |
+| PR #75 verification | PR-head CI #291 SUCCESS; current-main CI #298 SUCCESS |
 | Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
 | Release classification | Development baseline, not unrestricted production |
 | Authorization Snapshot contract | IMPLEMENTED |
 | Authorization Snapshot persistence | VERIFIED for merged PR #71 scope |
 | SQLite schema | version 9 |
+| VOP canonical vocabulary | VERIFIED source/test scope |
+| VOP semantic translation/equivalence | VERIFIED source/test scope |
+| VOP owner-adoption status | UNKNOWN; no explicit record in authority/adoption register |
 | ADR-0008 effective status | ADOPTED via authority/adoption register; Runner runtime not implemented |
 | ADR-0009 effective status | ADOPTED design boundary; grant issuer/authenticity implementation not implied |
 | ADR-0010 effective status | ADOPTED facts boundary; Snapshot Creator not implemented |
-| Main branch protection | DISABLED at reconciliation preflight |
+| P0 repository governance contract | MERGED |
+| Main branch protection live | DISABLED |
+| Required checks live | OFF |
+| P0 GitHub governance | BLOCKED |
 
 ## Reading this document
 
 This is the authoritative human-readable capability status inventory. A capability may be VERIFIED in
-one evidence scope while remaining unavailable for release or production. GitHub CI success is not a
-runtime checkpoint, release, or deployment claim. Exact live Git identity is deliberately not embedded
-as a static "current" commit because the commit containing this document would immediately supersede
-that value.
+one evidence scope while remaining unavailable for release, production or normative adoption. GitHub
+CI success is not a runtime checkpoint, release, deployment or owner-adoption claim. Exact live Git
+identity is deliberately not embedded as a static "current" commit because the commit containing this
+document would immediately supersede that value.
 
 ## Capability matrix
 
@@ -42,27 +53,36 @@ that value.
 | Change-request lifecycle | VERIFIED | change-request tests | target policy matrix remains narrower than target architecture |
 | Immutable reviewed-request binding | VERIFIED | MVP-2 immutable-review binding tests and schema | does not by itself prove all snapshot/grant issuance facts |
 | Production dual-approval rule | VERIFIED | governance tests | production execution remains blocked |
-| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; current outcomes remain authoritative and Solo, Team, Regulated enforcement is not implemented |
+| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not complete |
 | Read-only Policy Decision Graph v1 | VERIFIED | deterministic graph/digest tests | projection only; no runtime authorization authority |
-| Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and authoritative runtime enforcement are not implemented |
 | ADR-0007 execution contracts | VERIFIED | deterministic contract/binding tests | representation only; no authoritative issuer/Runner |
+| VOP canonical vocabulary | VERIFIED | PR #74 source/tests; PR-head CI #292; current-main CI #298 | verified semantic contract is not by itself normative owner adoption |
+| VOP machine-readable vocabulary/digest | VERIFIED | `voodoo_product/vop_vocabulary.py` + conformance tests | registry does not create authority |
+| VOP schema registry identities | IMPLEMENTED | `schemas/vop/registry.v1.json` | IDs are `RESERVED_IDS`; concrete schemas require separate implementation/conformance |
+| Provider semantic mapping | VERIFIED | `ProviderSemanticMapping` source/tests; CI #292/#298 | semantic translation only; module does not authorize |
+| Semantic equivalence assessment | VERIFIED | deterministic profile/assessment source/tests; CI #292/#298 | candidate equivalence does not imply adoption or activation |
+| VOP normative owner adoption | UNKNOWN | no explicit VOP record in `AUTHORITY_AND_ADOPTION_REGISTER.md` | merge/CI cannot be promoted to ADOPTED by inference |
+| Operation semantics contract | VERIFIED | existing semantics now consume shared VOP operation stages; current-main CI #298 | semantic contract only; not authorization authority |
+| Operation proof contract | IMPLEMENTED | deterministic source/tests | no composed runtime proof pipeline |
+| Skill orchestration contract | IMPLEMENTED | deterministic source/tests | planning contract only; no dynamic trusted execution |
+| System control-plane decision contract | IMPLEMENTED | deterministic source/tests | no authoritative runtime dispatcher |
 | Authorization Snapshot contract | IMPLEMENTED | `voodoo_product/authorization_snapshot.py` plus contract tests | construction is not yet authoritative runtime issuance |
 | Authorization Snapshot append-only persistence | VERIFIED | PR #71, schema v9, store/contract/migration tests, CI #282/#283 | store accepts prevalidated snapshots; no authoritative Snapshot Creator |
 | Authorization Snapshot immutable DB enforcement | VERIFIED | migration 0009 indexes/triggers and regression tests | SQLite pilot scope |
 | Authorization Snapshot idempotency binding | VERIFIED | store tests and unique bindings | does not provide grant replay protection |
 | Authorization Snapshot request/review binding | VERIFIED | persistence store + migration trigger validation | does not evaluate permission/policy/capability authority |
 | Transaction-aware Snapshot persistence API | PROPOSED | architecture requirement identified during reconciliation | current `persist_prevalidated` opens its own transaction |
-| Immutable/versioned policy authority for Snapshot Creator | PROPOSED | ADR-0010 requirements + current compatibility evaluator audit | current policy evaluator is insufficient as full persisted immutable authority |
-| Authoritative server-side `execution.run` authority | UNKNOWN | required by adopted ADR-0009/0010; dedicated reality audit pending | no current PASS claim without source audit |
-| Capability definition/activation authority | UNKNOWN | required by adopted authorization boundary; dedicated reality audit pending | no current PASS claim without source audit |
-| Deterministic authoritative target binder | UNKNOWN | required by adopted authorization boundary; dedicated reality audit pending | no current PASS claim without source audit |
+| Immutable/versioned policy authority for Snapshot Creator | PROPOSED | ADR-0010 requirements + current evaluator audit | current evaluator is insufficient as full persisted immutable authority |
+| Authoritative server-side `execution.run` authority | UNKNOWN | required by ADR-0009/0010; dedicated reality audit pending | no PASS claim without source audit |
+| Capability definition/activation authority | UNKNOWN | required by authorization boundary; dedicated reality audit pending | no PASS claim without source audit |
+| Deterministic authoritative target binder | UNKNOWN | required by authorization boundary; dedicated reality audit pending | no PASS claim without source audit |
 | Authoritative Snapshot Creator | PROPOSED | adopted ADR-0010 target; persistence prerequisite merged | not implemented |
 | Authoritative ExecutionGrantIssuer | PROPOSED | adopted ADR-0009 target | not implemented |
 | Grant authenticity envelope | PROPOSED | adopted ADR-0009 design scope | no implementation/signing authority path |
 | Transactional outbox/dispatch | PROPOSED | target roadmap | not implemented |
 | Credential broker | PROPOSED | security target boundary | not implemented |
 | Isolated read-only Runner | PROPOSED | ADR-0008 adopted design/safety boundary | runtime not implemented |
-| Durable one-time Runner grant consumption | PROPOSED | adopted Runner/grant design requirements | runtime not implemented |
+| Durable one-time Runner grant consumption | PROPOSED | adopted Runner/grant requirements | runtime not implemented |
 | Independent provider post-state verification | PROPOSED | target architecture | not implemented end-to-end |
 | ExecutionReceipt contract | VERIFIED | ADR-0007 pure deterministic value contract | does not prove provider post-state |
 | Receipt ledger | VERIFIED | receipt/evidence tests | local ledger integrity is not independent provider verification |
@@ -80,15 +100,10 @@ that value.
 | OIDC identity provider | BLOCKED | fail-closed identity-provider tests | no released OIDC login path |
 | Local checkpoint verifier | VERIFIED | checkpoint verification tests and historical evidence | local filesystem scope |
 | ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | no persistent graph store |
-| Operation semantics contract | IMPLEMENTED | deterministic source/tests | semantic contract only; not authorization authority |
-| Operation proof contract | IMPLEMENTED | deterministic source/tests | no composed runtime proof pipeline |
-| Skill orchestration contract | IMPLEMENTED | deterministic source/tests | planning contract only; no dynamic trusted execution |
-| System control-plane decision contract | IMPLEMENTED | deterministic source/tests | no authoritative runtime dispatcher |
-| Signed checkpoints and receipts | PROPOSED | target architecture | signing/trust/key lifecycle not implemented |
-| CyberCore read-only intake | PROPOSED | architectural boundary | no integration endpoint/persistence |
-| AI Change Copilot | PROPOSED | vision | AI has no authorization authority |
-| Multi-arch signed supply chain | PROPOSED | target architecture | signing/provenance/arm64 verification absent |
-| Main branch required-check protection | BLOCKED | live GitHub branch metadata shows protection disabled | governance gap before higher-impact authority/runtime work |
+| P0 repository governance contract | VERIFIED | PR #75 content + PR-head CI #291 + current-main CI #298 | repository-side contract does not enforce GitHub Settings |
+| Main branch PR-only protection | BLOCKED | live GitHub metadata: `protected=false` | must be configured in GitHub Settings/ruleset |
+| Main required `ci / verify` enforcement | BLOCKED | live enforcement level `off`; no required contexts | must be configured and independently re-read |
+| Main force-push/delete protection | BLOCKED | P0 contract requires it; live branch protection is disabled | cannot claim enforcement while branch is unprotected |
 | Unrestricted production release | BLOCKED | production fail-closed gate | release, legal, Runner, signing, operations prerequisites missing |
 | Public commercial distribution | BLOCKED | `LICENSE_DECISION_REQUIRED.md` | license/EULA/privacy/support unresolved |
 
@@ -129,12 +144,12 @@ VOODOO_ALLOW_PRODUCTION_EFFECTS=false
 RELEASE_VERIFIED=NO
 ```
 
-Successful CI, documentation reconciliation, or a local checkpoint cannot independently change that
-state.
+Successful CI, documentation reconciliation, VOP vocabulary presence or a local checkpoint cannot
+independently change that state.
 
 ## Evidence update rule
 
-Update this document whenever a capability, evidence scope, trust boundary, reconciliation input, or
+Update this document whenever a capability, evidence scope, trust boundary, reconciliation input or
 known limitation materially changes. Historical evidence must be superseded, not silently rewritten.
 Exact live Git identity is always queried from Git rather than embedded as self-referential current
-state.
+state. Owner adoption is read from the external adoption register and is never inferred from merge.
