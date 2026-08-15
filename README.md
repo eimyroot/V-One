@@ -113,9 +113,9 @@ work, or bypass the V-One authorization model.
 
 `voodoo_product/control_plane.py` adds the deterministic system control-plane decision contract. It
 binds operation semantics, skill orchestration, optional verified operation proof, explicit boundary,
-evidence references, acceptance gates, and final decision status into one digestable
-`v-one-control-plane-decision/v1` record. It is a contract layer, not an API endpoint or runtime
-dispatcher.
+evidence references, acceptance gates, final decision status, and mandatory purpose/system-benefit
+claims into one digestable `v-one-control-plane-decision/v1` record. It is a contract layer, not an
+API endpoint or runtime dispatcher.
 
 ## Documentation
 
@@ -163,7 +163,7 @@ The current implementation includes:
 - deterministic skill-orchestration contracts for relevant specialist selection, single
   coordination ownership, excluded operations, and acceptance gates;
 - deterministic system control-plane decision contract for status, boundary, evidence, gates,
-  semantics, orchestration, and proof binding;
+  purpose, system benefit, semantics, orchestration, and proof binding;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
