@@ -111,6 +111,12 @@ multi-specialist engineering work. It selects only task-relevant skills, require
 reasons, and emits a digestable plan. It does not dynamically trust plugins, execute tools, approve
 work, or bypass the V-One authorization model.
 
+`voodoo_product/control_plane.py` adds the deterministic system control-plane decision contract. It
+binds operation semantics, skill orchestration, optional verified operation proof, explicit boundary,
+evidence references, acceptance gates, and final decision status into one digestable
+`v-one-control-plane-decision/v1` record. It is a contract layer, not an API endpoint or runtime
+dispatcher.
+
 ## Documentation
 
 | Document | Purpose |
@@ -124,6 +130,7 @@ work, or bypass the V-One authorization model.
 | [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md) | Stable product and engineering foundations |
 | [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md) | Shared vocabulary and status taxonomy |
 | [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) | Evidence-backed current capability inventory |
+| [`docs/product/SYSTEM_CONTROL_PLANE_BOUNDARY.md`](docs/product/SYSTEM_CONTROL_PLANE_BOUNDARY.md) | System control-plane decision contract boundary |
 | [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md) | Target capability contracts and acceptance criteria |
 | [`docs/product/SECURITY_OVERVIEW.md`](docs/product/SECURITY_OVERVIEW.md) | Product security control summary and proposed Runner boundary |
 | [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md) | Current and target trust boundaries |
@@ -155,6 +162,8 @@ The current implementation includes:
   snapshot/grant/receipt/proof binding;
 - deterministic skill-orchestration contracts for relevant specialist selection, single
   coordination ownership, excluded operations, and acceptance gates;
+- deterministic system control-plane decision contract for status, boundary, evidence, gates,
+  semantics, orchestration, and proof binding;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
