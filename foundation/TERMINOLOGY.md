@@ -280,3 +280,5 @@ DEPLOYED
 Historical documents may contain older descriptive labels such as `IMPLEMENTED`, `PROPOSED`, or
 `INFERRED`. Those labels remain historical/source evidence where they occur; they are not a second
 canonical VOP workflow taxonomy and must not be silently translated into a stronger CORE state.
+
+`COMPLETE` is not a VOODOO capability status.
