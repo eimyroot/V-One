@@ -1,4 +1,6 @@
 .env.product.local
+.DS_Store
+._*
 .pytest_cache/
 .ruff_cache/
 .venv/
