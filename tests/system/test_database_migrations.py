@@ -145,7 +145,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
             INSERT INTO users(id, username, password_hash, role, active, created_at)
             VALUES ('usr_legacy', 'legacy-admin', 'preserved-hash', 'administrator', 1,
                     '2026-01-01T00:00:00+00:00')
-            """,
+            """
         )
         connection.commit()
     finally:
