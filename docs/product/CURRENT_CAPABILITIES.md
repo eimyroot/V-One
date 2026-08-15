@@ -53,6 +53,8 @@ limitations are therefore part of every claim.
 | Repository-owned checkpoint finalizer | VERIFIED | targeted finalizer, verifier, filesystem-safety, and CLI tests | finalization remains explicit and separate from capture; release and remote publication remain separate |
 | Repository-owned runtime candidate capture | VERIFIED | canonical `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize→independent verify closure | local development runtime evidence; not release or deployment |
 | ADR-0007 pure execution-contract value objects | VERIFIED | deterministic contract and binding tests; source/test evidence | no runtime authority, signing, issuer, or Runner consumption |
+| V-One common language and operation semantics | IMPLEMENTED | deterministic `voodoo_product/operation_semantics.py`, canonical digest smoke, and system test inventory in `tests/system/test_operation_semantics.py` | semantic contract only; not API-integrated and not a runtime authorization gate |
+| V-One operation proof contract | IMPLEMENTED | deterministic `voodoo_product/operation_proof.py`, isolated proof smoke, and invariant tests in `tests/system/test_operation_proof.py` | pure contract only; no persistent proof store, API endpoint, signer, or external verifier adapter |
 | Remote Drive byte verification | PROPOSED | none in product runtime | connector visibility is not byte-for-byte attestation |
 | Signed checkpoints and receipts | PROPOSED | no production signing implementation | key identity, rotation, and trust policy required |
 | Isolated runner capsules | PROPOSED | target architecture only | execution currently shares control-plane host identity |
