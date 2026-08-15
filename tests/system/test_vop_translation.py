@@ -49,6 +49,29 @@ def test_provider_mapping_keeps_transport_separate_from_vop_semantics() -> None:
     assert mapping.to_dict()["mapping_digest"] == mapping.mapping_digest
 
 
+def test_provider_mapping_does_not_retain_caller_owned_mutable_payloads() -> None:
+    requested_target = {"repository": "nulleimy/V-One", "pull_request": 71}
+    expected_post_state = {"state": "merged"}
+    mapping = ProviderSemanticMapping.create(
+        provider="github",
+        external_operation="merge",
+        transport="REST",
+        capability="github.pull-request.merge/v1",
+        requested_target=requested_target,
+        expected_post_state=expected_post_state,
+    )
+    digest = mapping.mapping_digest
+
+    requested_target["pull_request"] = 999
+    expected_post_state["state"] = "closed"
+    returned_target = mapping.requested_target
+    returned_target["pull_request"] = 555
+
+    assert mapping.requested_target == {"repository": "nulleimy/V-One", "pull_request": 71}
+    assert mapping.expected_post_state == {"state": "merged"}
+    assert mapping.mapping_digest == digest
+
+
 def test_transport_implementation_change_can_be_semantically_equivalent() -> None:
     current = profile(implementation_identity="github-rest-handler@sha256:aaa")
     candidate = profile(implementation_identity="github-graphql-handler@sha256:bbb")
