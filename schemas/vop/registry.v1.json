@@ -1,6 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://v-one.dev/schemas/vop/registry.v1.json",
   "schema_version": 1,
   "kind": "vop-schema-registry/v1",
   "vocabulary_type": "vop-canonical-vocabulary/v1",
