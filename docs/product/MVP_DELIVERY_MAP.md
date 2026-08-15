@@ -3,11 +3,13 @@
 | Field | Value |
 |---|---|
 | Document status | PROPOSED product-delivery map |
-| Current verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
+| Exact live Git identity | Query live Git directly; do not self-embed a commit as current |
 | Latest runtime-attested baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
-| ADR-0008 review commit | `0fa69411b246c4bd80b8a2eaa989e60fd8bca663`, merged via PR #54 |
+| Latest verified delivery milestone | Authorization Snapshot persistence merged through PR #71; exact current merge/CI identity is read from live GitHub evidence |
 | ADR-0007 | VERIFIED acceptance of pure deterministic contracts only |
-| ADR-0008 | ADOPTED design/safety scope by explicit owner decision on 2026-08-08; implementation authorization not implied |
+| ADR-0008 | ADOPTED design/safety scope; implementation authorization not implied |
+| ADR-0009 | ADOPTED grant issuance/authenticity design boundary; implementation authorization not implied |
+| ADR-0010 | ADOPTED immutable authorization-snapshot facts boundary; authoritative Snapshot Creator remains unimplemented |
 | Production effects | BLOCKED |
 | Release status | DEVELOPMENT / CONTROLLED PILOT ONLY |
 
@@ -20,11 +22,11 @@ The MVP is one governed operational path:
 ```text
 operator requests one concrete capability
   -> VOODOO shows the exact target, payload, risk, policy, and required approval
-  -> an independent approver authorizes that exact request
-  -> VOODOO issues one short-lived, one-time execution grant
+  -> authoritative server-side checks bind one immutable AuthorizationSnapshot
+  -> one narrow ExecutionGrant is issued from exact authority evidence
   -> an isolated Runner executes one registered capability
   -> an independent verifier observes the post-state
-  -> VOODOO records the actual outcome, receipt, and evidence
+  -> VOODOO records the actual outcome, receipt, evidence, and proof
 ```
 
 The MVP succeeds only when the operator can clearly answer:
@@ -32,10 +34,11 @@ The MVP succeeds only when the operator can clearly answer:
 - what is being requested;
 - what will be touched;
 - who approved it;
+- what policy, permission, capability, target, and evidence authorized it;
 - what exact authority was granted;
 - what actually ran;
 - what changed;
-- whether the expected effect was verified;
+- whether the expected effect was independently verified;
 - whether the result is failed, cancelled, timed out, interrupted, or indeterminate;
 - where the independently verifiable evidence is stored.
 
@@ -56,21 +59,23 @@ broad multi-tenant enterprise deployment.
 
 ## MVP boundaries
 
-### Included
+### Included target scope
 
 - one operator-facing request flow;
 - one independent approval flow;
 - deterministic policy explanation;
-- exact execution-target, approval-evidence, grant, and receipt contracts;
-- capability registry;
-- isolated non-production Runner;
+- immutable reviewed-request binding;
+- exact execution-target, approval-evidence, authorization-snapshot, grant, and receipt contracts;
+- authoritative policy/permission/capability/target composition before grant issuance;
+- explicit capability and handler registry;
+- isolated read-only/non-production Runner pilot;
 - one-time durable grant consumption;
 - cancellation, lease, and fencing semantics;
-- governed target mutation gateway;
+- credential isolation for provider-backed capabilities;
 - independent precondition and postcondition verification;
 - bounded evidence and clear terminal outcomes;
 - one to three narrowly scoped pilot capabilities;
-- integration through versioned adapters rather than product-specific hard-coding.
+- integration through versioned modules/adapters rather than provider logic in the trusted kernel.
 
 ### Excluded
 
@@ -79,7 +84,7 @@ broad multi-tenant enterprise deployment.
 - AI self-approval;
 - shared VOODOO/CyberCore database;
 - broad provider administration;
-- dynamic plugin discovery;
+- dynamic trusted plugin discovery;
 - automatic rollback presented as guaranteed recovery;
 - unbounded marketplace or connector catalog;
 - full enterprise tenancy before the single-team pilot is proven.
@@ -97,13 +102,15 @@ Delivered:
 - idempotency, lease, fence, audit, receipt, and recovery foundations;
 - ProofGraph verification and repository-owned evidence workflow;
 - production effects disabled by default;
-- verified development checkpoint at `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`.
+- historical verified development checkpoint at
+  `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`.
 
 Remaining limitation:
 
-- execution still runs inside the control-plane operating-system identity.
+- existing bounded execution still shares the control-plane operating-system identity;
+- this historical runtime checkpoint does not attest later source changes.
 
-## MVP-1 PARTIALLY VERIFIED contract and decision foundation
+## MVP-1 PARTIALLY VERIFIED contract and authorization-evidence foundation
 
 **Status:** PARTIALLY VERIFIED.
 
@@ -113,56 +120,71 @@ Delivered:
 - ADR-0007 accepted deterministic execution-target, approval-evidence-set, execution-grant, and
   execution-receipt value contracts;
 - strict representation, canonical digest, and cross-contract binding tests;
-- ADR-0008 isolated Runner boundary and threat model reviewed as source evidence and subsequently
-  owner-adopted for the exact design/safety bytes on 2026-08-08;
-- R3-01 through R3-04 closed for exact patch
-  `a39a8febd258b27e3b756e1df6b6fa2b795614642b5874dff66a5990d6c2ac02`.
+- ADR-0008 isolated Runner boundary and threat model owner-adopted for exact design/safety bytes;
+- ADR-0009 grant issuance/authenticity boundary owner-adopted for its exact design scope;
+- ADR-0010 immutable Authorization Snapshot facts boundary owner-adopted for its exact design scope;
+- immutable `AuthorizationSnapshot` contract;
+- append-only Authorization Snapshot persistence foundation, schema v9, immutable database triggers,
+  idempotency/request/review binding, and fresh PR/post-merge CI evidence through PR #71.
 
 Still required:
 
-- authoritative grant issuance;
-- authenticity/signature envelope and trust policy;
+- complete Authority Reality Audit;
+- immutable/versioned policy authority sufficient for snapshot creation;
+- authoritative server-side `execution.run` permission authority;
+- authoritative capability definition/activation and deterministic target binding;
+- transaction-aware authority reads and snapshot persistence;
+- `AuthoritativeSnapshotCreator`;
+- authoritative grant issuance/authenticity implementation;
 - durable one-time claim store;
-- runtime integration.
+- isolated Runner runtime integration.
 
 Owner-decision gate:
 
-- VERIFIED: ADR-0008 was adopted by an explicit owner decision without weakening its safety
-  boundaries; production effects remain BLOCKED and implementation authorization is not implied.
+- VERIFIED for the exact adopted ADR-0008/0009/0010 design boundaries;
+- adoption does not itself authorize runtime implementation, release, deployment, or production
+  effects.
 
 Remaining exit criteria:
 
-- implementation slices preserve the adopted contract/runtime responsibility matrix;
+- authority inputs have explicit authoritative owners;
+- one coherent authorization transaction produces the snapshot from authoritative facts;
+- implementation slices preserve adopted control-plane/Runner responsibility boundaries;
 - no documentation claim treats design evidence as runtime implementation.
 
-## MVP-2 PROPOSED operator and approver workflow
+## MVP-2 PROPOSED authoritative authorization path
 
 **Status:** PROPOSED.
 
 Goal:
 
-Make the governed request understandable before any isolated execution exists.
+Complete the control-plane path from immutable reviewed request to authoritative snapshot and narrow
+execution grant before any isolated execution is attempted.
 
 Required product behavior:
 
 1. operator chooses one registered capability;
-2. UI/API shows exact target, environment, payload digest, expected effect, risk, policy version,
-   and verification plan;
-3. policy explains why approval is required;
-4. approver sees the exact immutable request and cannot approve a moving target;
-5. drift invalidates the approval;
-6. execution remains blocked until every required gate succeeds;
-7. operator sees a stable execution timeline and terminal state.
+2. UI/API shows exact target, environment, payload digest, expected effect, risk, policy identity,
+   required permission, approval requirements, and verification plan;
+3. immutable reviewed content is revalidated server-side;
+4. policy, `execution.run`, capability activation, target binding, approval evidence, and trusted
+   timestamp are resolved authoritatively;
+5. one atomic authorization transaction creates and persists the exact AuthorizationSnapshot;
+6. a later Grant Issuer binds exact snapshot digest, execution id, capability, target, payload,
+   handler, audience, TTL, and replay identity;
+7. drift, stale approval, missing authority, or live deny gate fails closed;
+8. no free-form executable command becomes authority.
 
 Acceptance criteria:
 
-- no free-form executable command field;
+- no client-supplied authority fact is trusted;
 - approval binds to immutable request data;
 - policy and missing gates are human-readable;
-- cancellation before execution is unambiguous;
-- negative-path tests cover stale approval, changed target, changed payload, expired approval, and
-  emergency stop;
-- accessibility and keyboard-first operation are verified for the critical path.
+- snapshot persistence is transaction-aware under one outer authorization transaction;
+- negative tests cover stale approval, changed target, changed payload, missing permission, inactive
+  capability, missing policy revision, expiry, and rollback;
+- grant scope cannot exceed snapshot scope;
+- production remains deny-by-default.
 
 ## MVP-3 PROPOSED isolated read-only Runner pilot
 
@@ -172,7 +194,7 @@ Goal:
 
 Prove the full control-plane-to-Runner boundary without external mutation.
 
-Initial capability candidates must be read-only and separately approved. Examples:
+Initial capability candidates must be read-only or compute-only and separately authorized. Examples:
 
 - verify a repository or evidence package;
 - inspect a target version or configuration digest;
@@ -181,13 +203,15 @@ Initial capability candidates must be read-only and separately approved. Example
 
 Required controls:
 
-- separate Runner OS identity;
-- rootless capsule;
-- read-only immutable base;
+- separate Runner identity and isolation boundary;
+- rootless/hardened capsule or equivalent reviewed isolation;
+- read-only immutable base where applicable;
 - bounded workspace and resources;
 - network denied by default;
-- exact capability registry entry;
+- exact capability + handler registry identity;
+- exact runner audience/class binding;
 - one-time durable grant consumption;
+- short-lived least-privilege credentials only when required;
 - stable Runner receipt identity;
 - cancellation and lease/fence behavior;
 - independent observation and receipt ingestion;
@@ -240,21 +264,17 @@ Exit gate:
 
 Goal:
 
-Turn the proven vertical slice into a usable product pilot without turning VOODOO into an
-integration monolith.
+Turn the proven Operation Cell into a usable product pilot without turning VOODOO into an integration
+monolith.
 
 Required product elements:
 
 - capability catalog with clear status and risk class;
-- native request, approval, execution, and evidence views;
-- adapter SDK/contract with versioning and conformance tests;
+- native request, approval, authorization, execution, verification, and evidence views;
+- module/adapter SDK with versioning and conformance tests;
 - connector health and permission visibility;
-- clear separation among:
-  - systems of understanding;
-  - systems of authorization;
-  - systems of action;
-  - systems of evidence;
-- exportable audit/evidence package;
+- clear separation among systems of understanding, authorization, action, verification, and evidence;
+- exportable audit/evidence/proof package;
 - operator runbooks and recovery procedures;
 - pilot onboarding and permission checklist;
 - product telemetry without secret or payload leakage.
@@ -262,8 +282,8 @@ Required product elements:
 Exit gate:
 
 - one external team completes an end-to-end pilot;
-- operators can diagnose blocked, failed, cancelled, timed-out, interrupted, and indeterminate
-  outcomes;
+- operators can diagnose blocked, failed, cancelled, timed-out, interrupted, verification-failed, and
+  indeterminate outcomes;
 - no manual database repair is required for normal recovery;
 - capability onboarding is repeatable and reviewable;
 - support and incident boundaries are documented.
@@ -291,23 +311,24 @@ This does not authorize unrestricted production use.
 ## Post-MVP sequence
 
 1. add a second independently reviewed capability;
-2. add signed/authenticated grant and receipt envelopes with key rotation;
+2. strengthen signed/authenticated proof, key rotation, and portable attestations;
 3. strengthen supply-chain provenance and external evidence anchoring;
-4. introduce read-only CyberCore intake;
+4. introduce read-only CyberCore observation/intake;
 5. evaluate workspace-scoped tenancy and released OIDC;
 6. evaluate PostgreSQL/HA only when measured product demand requires it;
 7. consider production mutation only through a separate governed release program.
 
 ## Immediate priority order
 
-1. implement the operator/approver immutable-request slice;
-2. prepare the separately reviewable child R3 decisions required before isolated Runner runtime;
-3. implement a read-only isolated Runner vertical slice only after explicit implementation
-   authorization;
-4. prove one-time consumption, cancellation, fencing, stable receipt identity, and independent
-   verification;
-5. only then select one narrow non-production mutation capability;
-6. keep CyberCore mutation and unrestricted production out of scope.
+1. finish Source-of-Truth reconciliation without self-referential current-SHA claims;
+2. run the Authority Reality Audit against exact live `main`;
+3. implement only proven-missing policy/permission/capability/target/transaction prerequisites;
+4. implement `AuthoritativeSnapshotCreator` as one coherent authorization transaction;
+5. implement the authoritative Grant Issuer and exact handler/Runner registry;
+6. add transactional outbox/dispatch and credential-broker boundary;
+7. implement a read-only isolated Runner vertical slice only after the authority path is proven;
+8. prove receipt + independent verification before any mutation pilot;
+9. keep CyberCore mutation and unrestricted production out of scope.
 
 ## Metrics
 
@@ -315,12 +336,13 @@ The MVP should track:
 
 - request-to-decision time;
 - approval invalidations caused by drift;
-- replay attempts rejected;
+- authorization snapshot creation failures by reason;
+- grant replay attempts rejected;
 - executions by terminal status;
 - indeterminate outcome rate;
 - cancellation acknowledgement and completion latency;
 - postcondition verification success/failure;
-- evidence-package verification success;
+- evidence/proof-package verification success;
 - operator recovery time;
 - capability-specific failure rate;
 - zero unauthorized production effects.

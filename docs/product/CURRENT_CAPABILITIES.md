@@ -4,8 +4,9 @@
 |---|---|
 | Document status | Current-state inventory |
 | Inventory audit date | `2026-08-16` |
-| Current live Git baseline | `main@f1b5b8a5c0a31f75c10f1acc5153874b84248e1b` |
-| Current live tree | `61f03f49577bab1ac03cdd40be74a077649bf38b` |
+| Reconciliation input Git baseline | `main@f1b5b8a5c0a31f75c10f1acc5153874b84248e1b` |
+| Reconciliation input tree | `61f03f49577bab1ac03cdd40be74a077649bf38b` |
+| Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
 | PR #71 merge commit | `d8d375c61264ddad39eb53240dce9ff0c8e59818` |
 | PR #71 verification | PR-head CI #282 SUCCESS; post-merge CI #283 SUCCESS |
 | Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
@@ -23,7 +24,9 @@
 
 This is the authoritative human-readable capability status inventory. A capability may be VERIFIED in
 one evidence scope while remaining unavailable for release or production. GitHub CI success is not a
-runtime checkpoint, release, or deployment claim.
+runtime checkpoint, release, or deployment claim. Exact live Git identity is deliberately not embedded
+as a static "current" commit because the commit containing this document would immediately supersede
+that value.
 
 ## Capability matrix
 
@@ -129,20 +132,9 @@ RELEASE_VERIFIED=NO
 Successful CI, documentation reconciliation, or a local checkpoint cannot independently change that
 state.
 
-## Historical compatibility record — SUPERSEDED
-
-Repository documentation tests currently retain a frozen historical baseline assertion. This exact
-row is preserved only as historical compatibility evidence and MUST NOT be interpreted as the current
-live Git baseline:
-
-| Field | Value |
-|---|---|
-| Latest verified Git baseline | `main@57c7bf2277616c4445039865ac7cf81c5fada858` |
-
-Historical fact: that commit was the PR #54 merge baseline used by the earlier documentation snapshot.
-The current live identity is stated at the top of this document and in `CURRENT_PRODUCT_STATE.md`.
-
 ## Evidence update rule
 
-Update this document whenever a capability, evidence scope, trust boundary, current Git baseline, or
+Update this document whenever a capability, evidence scope, trust boundary, reconciliation input, or
 known limitation materially changes. Historical evidence must be superseded, not silently rewritten.
+Exact live Git identity is always queried from Git rather than embedded as self-referential current
+state.
