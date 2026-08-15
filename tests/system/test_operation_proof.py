@@ -19,10 +19,10 @@ from voodoo_product.execution_contract import (
     ExecutionTarget,
 )
 from voodoo_product.operation_proof import (
-    VERIFIED,
     IndependentVerification,
     OperationProof,
     OperationProofError,
+    VERIFIED,
 )
 from voodoo_product.operation_semantics import (
     MEMBER_ROLES,
