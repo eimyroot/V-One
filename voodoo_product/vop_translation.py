@@ -22,6 +22,8 @@ SEMANTIC_DIMENSIONS: Final = (
     "evidence",
 )
 
+EQUIVALENCE_DIMENSIONS: Final = ("capability", *SEMANTIC_DIMENSIONS)
+
 SEMANTICALLY_EQUIVALENT: Final = "SEMANTICALLY_EQUIVALENT"
 NEW_CAPABILITY: Final = "NEW_CAPABILITY"
 
@@ -170,7 +172,10 @@ class SemanticEquivalenceProfile:
         }
 
     def semantic_vector(self) -> dict[str, str]:
-        return {field: getattr(self, field) for field in SEMANTIC_DIMENSIONS}
+        return {
+            "capability": self.capability,
+            **{field: getattr(self, field) for field in SEMANTIC_DIMENSIONS},
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +191,7 @@ class SemanticEquivalenceAssessment:
         _require_sha256(self.candidate_profile_digest, field="candidate_profile_digest")
         if self.result not in {SEMANTICALLY_EQUIVALENT, NEW_CAPABILITY}:
             raise ValueError("semantic equivalence result is unsupported")
-        if any(item not in SEMANTIC_DIMENSIONS for item in self.mismatched_dimensions):
+        if any(item not in EQUIVALENCE_DIMENSIONS for item in self.mismatched_dimensions):
             raise ValueError("mismatched semantic dimension is unsupported")
         if self.result == SEMANTICALLY_EQUIVALENT and self.mismatched_dimensions:
             raise ValueError("equivalent assessment cannot contain mismatches")
@@ -201,14 +206,13 @@ class SemanticEquivalenceAssessment:
         current: SemanticEquivalenceProfile,
         candidate: SemanticEquivalenceProfile,
     ) -> Self:
+        current_vector = current.semantic_vector()
+        candidate_vector = candidate.semantic_vector()
         mismatches = tuple(
             field
-            for field in SEMANTIC_DIMENSIONS
-            if current.semantic_vector()[field] != candidate.semantic_vector()[field]
+            for field in EQUIVALENCE_DIMENSIONS
+            if current_vector[field] != candidate_vector[field]
         )
-        if current.capability != candidate.capability:
-            # Capability identity itself is semantic. A different capability cannot be equivalent.
-            mismatches = ("side_effect",) if not mismatches else mismatches
         result = SEMANTICALLY_EQUIVALENT if not mismatches else NEW_CAPABILITY
         claims = {
             "assessment_type": SEMANTIC_ASSESSMENT_TYPE,
