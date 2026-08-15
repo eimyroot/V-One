@@ -48,6 +48,13 @@ execution grant, execution receipt, and independent verification into one determ
 digest. It is accepted only when exact cross-contract bindings hold and when the verifier is
 independent from the actor and runner.
 
+### Skill orchestration plan
+
+A canonical `v-one-skill-orchestration-plan/v1` value that classifies one engineering task, selects
+only relevant specialist skills, assigns one primary coordinator, records exclusions and acceptance
+gates, and emits a deterministic plan digest. It is a workflow contract, not tool execution,
+approval, plugin trust, or runtime authorization.
+
 ### Execution
 
 One governed attempt to apply an approved capability. It has an identity, idempotency binding, lease,
