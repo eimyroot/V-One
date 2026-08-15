@@ -15,6 +15,27 @@ audit, receipts, and checkpoint evidence verification.
 It deliberately does not own broad infrastructure discovery, vendor-specific intelligence, or an
 unrestricted execution runtime.
 
+## Proposed canonical VOP language invariant
+
+The proposed VOP canonical-vocabulary contract is maintained in
+[`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md).
+
+It introduces the proposed architectural invariant:
+
+```text
+ONE SYSTEM
+=
+ONE SEMANTIC LANGUAGE
+```
+
+Provider-specific terminology remains behind Module boundaries. Where V-One concepts mean the same
+thing across UI, API, persistence, audit, CLI, AI tooling and proof, they should converge on one
+canonical VOP term and one versioned contract rather than parallel synonyms.
+
+This section is **PROPOSED**, not an assertion that all listed VOP schemas, runtime composition or
+package boundaries are already implemented or adopted. The machine-readable vocabulary registry and
+its CI conformance gate are preparatory architecture controls only.
+
 ## Current system context
 
 ```text
@@ -161,6 +182,8 @@ bootstrap or login
 8. Liveness does not imply evidence integrity.
 9. Checkpoint verification never executes checkpoint-provided code.
 10. Documentation may describe target architecture only when marked PROPOSED.
+11. Proposed canonical-language semantics must not be treated as runtime authority merely because the
+    vocabulary registry exists.
 
 ## Trust boundaries
 
@@ -241,7 +264,8 @@ Initial integration must be:
 - add policy explanation before enabling more production capabilities;
 - introduce signed grants and receipts before external mutation;
 - extend ProofGraph through ADRs rather than parallel verifiers;
-- avoid provider-specific behavior in the governance core.
+- avoid provider-specific behavior in the governance core;
+- evolve VOP schemas incrementally from the canonical registry rather than performing a broad package rewrite.
 
 ## Related documents
 
@@ -251,6 +275,7 @@ Initial integration must be:
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 - [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
+- [`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md)
 - [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md)
 - [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md)
 - [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
