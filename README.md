@@ -105,6 +105,12 @@ independent verification into one digestable operation proof. Runner success is 
 itself; the proof fails closed when independent verification, target binding, approval independence,
 or digest continuity is missing.
 
+`voodoo_product/skill_orchestration.py` adds the deterministic skill-orchestration contract for
+multi-specialist engineering work. It selects only task-relevant skills, requires
+`governed-workflow-orchestrator` as the single coordinator, records non-selected skills with
+reasons, and emits a digestable plan. It does not dynamically trust plugins, execute tools, approve
+work, or bypass the V-One authorization model.
+
 ## Documentation
 
 | Document | Purpose |
@@ -147,6 +153,8 @@ The current implementation includes:
   vocabulary, operation stages, and verified technique boundaries;
 - deterministic operation-proof contracts for independent verification and exact
   snapshot/grant/receipt/proof binding;
+- deterministic skill-orchestration contracts for relevant specialist selection, single
+  coordination ownership, excluded operations, and acceptance gates;
 - read-only deterministic Policy Decision Graph v1 projection with no authorization or execution authority;
 - hash-locked dependencies, CI, Docker build, smoke, and readiness gates.
 
