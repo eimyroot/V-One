@@ -18,6 +18,9 @@ The V-One system control plane decision contract is the single deterministic rec
 - evidence references;
 - acceptance gates.
 
+Every decision and every decision element must also state its purpose and system benefit. A record
+without a useful role is invalid even when its digest is otherwise deterministic.
+
 ## Current Boundary
 
 This is a source-level contract only. It does not execute tools, trust plugins dynamically, approve
@@ -42,10 +45,13 @@ not overclaim completion.
 
 Every control-plane decision must state:
 
+- decision purpose;
+- decision system benefit;
 - allowed effects;
 - prohibited effects;
-- evidence references;
-- acceptance gates;
+- boundary purpose and system benefit;
+- evidence references with purpose and system benefit;
+- acceptance gates with purpose and system benefit;
 - deterministic digest.
 
-Missing boundary, evidence, or gates is invalid and fails closed.
+Missing boundary, evidence, gates, purpose, or system benefit is invalid and fails closed.
