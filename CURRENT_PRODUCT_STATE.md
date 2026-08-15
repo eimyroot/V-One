@@ -1,175 +1,180 @@
 # VOODOO — CURRENT PRODUCT STATE
 
 > Toto je proměnlivý důkazní snapshot. Není náhradou živého Git stavu, provedených testů ani
-> commit-bound runtime evidence.
+> commit-bound runtime evidence. Historické baseline a immutable ADR labels se zachovávají jako
+> provenance; efektivní současný stav se určuje z live Git/CI a authority/adoption registru.
 
 ## Identita a hranice tvrzení
 
 ```text
-AS_OF: 2026-08-03
+AS_OF: 2026-08-16
 LIVE_BRANCH_AT_RECONCILIATION_PREFLIGHT: main
-LIVE_HEAD_AT_RECONCILIATION_PREFLIGHT: 57c7bf2277616c4445039865ac7cf81c5fada858
-LATEST_VERIFIED_GIT_BASELINE: main@57c7bf2277616c4445039865ac7cf81c5fada858
+LIVE_HEAD_AT_RECONCILIATION_PREFLIGHT: f1b5b8a5c0a31f75c10f1acc5153874b84248e1b
+LIVE_TREE_AT_RECONCILIATION_PREFLIGHT: 61f03f49577bab1ac03cdd40be74a077649bf38b
+PR71_MERGE_COMMIT: d8d375c61264ddad39eb53240dce9ff0c8e59818
+PR71_PR_HEAD_CI: run #282 SUCCESS at 93605972bfb3f35f324183a00c7ad2f88c5f9ab2
+PR71_POST_MERGE_CI: run #283 SUCCESS at d8d375c61264ddad39eb53240dce9ff0c8e59818
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 RUNTIME_EVIDENCE_CLASS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
 ADR_0007_CONTRACT_LAYER: VERIFIED source/test scope; pure deterministic value contracts only
-ADR_0008_DESIGN: PROPOSED
-ADR_0008_OWNER_DECISION: REQUIRED
-ADR_0008_REVIEW_COMMIT: 0fa69411b246c4bd80b8a2eaa989e60fd8bca663
-ADR_0008_REVIEW_PUBLICATION: VERIFIED_REMOTE_BRANCH
-ADR_0008_REVIEW_PR: 54 MERGED
-ADR_0008_MERGE_COMMIT: 57c7bf2277616c4445039865ac7cf81c5fada858
-DOCS_MVP_PATCH: VERIFIED_EVIDENCE; NOT_COMMITTED_AT_RECONCILIATION_PREFLIGHT
-PORTABLE_BUNDLE: VERIFIED evidence, not runtime evidence
+ADR_0008_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
+ADR_0009_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
+ADR_0010_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
+AUTHORIZATION_SNAPSHOT_CONTRACT: IMPLEMENTED
+AUTHORIZATION_SNAPSHOT_PERSISTENCE: VERIFIED by PR #71 CI and post-merge CI
+AUTHORIZATION_SNAPSHOT_SCHEMA: sqlite schema version 9
+AUTHORITATIVE_SNAPSHOT_CREATOR: NOT IMPLEMENTED
+AUTHORITATIVE_GRANT_ISSUER: NOT IMPLEMENTED
+ISOLATED_RUNNER_RUNTIME: NOT IMPLEMENTED
+BRANCH_PROTECTION_MAIN: DISABLED at reconciliation preflight
 RELEASE_STATE: BLOCKED
-PRODUCTION_EFFECTS: DISABLED in the verified local-development runtime checkpoint
+PRODUCTION_EFFECTS: DISABLED / NO PRODUCTION EFFECT EVIDENCE
 ```
 
-Tyto identity nesmějí být slučovány:
+## Live Git reconciliation incident
 
-1. **Živá Git identita** je autoritativně zjištěna příkazy nad aktuálním repozitářem a pro tuto
-   synchronizaci je `main@57c7bf2277616c4445039865ac7cf81c5fada858`.
-2. **Latest runtime-attested baseline** je post-merge checkpoint
-   `d57d37111b8bc9471a136b6c618aad8e920f1aff`. Starší `8a5f36b...` capture/finalize evidence
-   zůstává historickým důkazem konkrétního checkpoint workflow, nikoliv nejnovější runtime baseline.
-3. **ADR-0007 contract layer** je pure deterministic representation only; authoritative issuance,
-   authenticity envelopes, and isolated Runner runtime remain separate and not implemented.
-4. **ADR-0008 review commit** `0fa69411b246c4bd80b8a2eaa989e60fd8bca663` byl publikován na
-   exact review branch a mergnut přes PR #54 jako `57c7bf2277616c4445039865ac7cf81c5fada858`.
-   Tím se ADR automaticky nestává ACCEPTED a nevzniká runtime implementace.
-5. **Documentation/MVP patch** je samostatný, evidence-verified docs/test-only change. V okamžiku
-   reconciliation preflight ještě nebyl commitnut ani publikován.
-6. **Release stav** zůstává `BLOCKED`; lokální evidence, review merge ani dokumentační synchronizace
-   samy o sobě nepředstavují release ani deployment.
+Během tohoto CASER-SOURCER reconciliation vznikl na nechráněném `main` omylem jeden marker commit
+`a4a46cc2b5ddf50f519148af60e4cb720e714d5e` a okamžitý revert
+`f1b5b8a5c0a31f75c10f1acc5153874b84248e1b`. Revert obnovil přesně strom
+`61f03f49577bab1ac03cdd40be74a077649bf38b`, tedy stejný tree jako PR #71 merge commit
+`d8d375c61264ddad39eb53240dce9ff0c8e59818`. Nezůstala žádná netto změna source tree; Git historie
+incident zachovává. Tato událost je důkazem, že `main` bez branch protection / required checks je
+materiální governance gap.
 
-## Co je VERIFIED na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
+## Co je aktuálně VERIFIED
 
-- canonical checkout byl fast-forwardnut na `main@57c7bf2277616c4445039865ac7cf81c5fada858`
-  a uživatelský terminálový výstup po operaci hlásil čisté `## main`;
-- remote `main` ukazuje na `57c7bf2277616c4445039865ac7cf81c5fada858`;
-- review commit `0fa69411b246c4bd80b8a2eaa989e60fd8bca663` byl publikován exact publisherem
-  a mergnut přes PR #54;
-- ADR-0007 pure deterministic execution-contract value objects jsou source/test VERIFIED;
-- read-only Policy Decision Graph v1 zůstává owner-accepted a source/test VERIFIED pro svůj
-  read-only slice;
-- portable bundle, V2/V2.1 documentation evidence a publication evidence jsou evidence,
-  nikoliv runtime evidence;
-- latest runtime-attested baseline zůstává `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`.
+- PR #71 přidal append-only SQLite persistence pro existující immutable `AuthorizationSnapshot`
+  contract, migration `0009_authorization_snapshots.sql`, statement catalog/schema validation,
+  idempotency binding, immutable update/delete triggers a persistence/contract regression testy;
+- PR-head CI run #282 skončil `SUCCESS` pro exact head
+  `93605972bfb3f35f324183a00c7ad2f88c5f9ab2`;
+- post-merge push CI run #283 skončil `SUCCESS` pro exact merge commit
+  `d8d375c61264ddad39eb53240dce9ff0c8e59818`;
+- authoritative adoption register eviduje ADR-0008, ADR-0009 a ADR-0010 jako efektivně `ADOPTED` v
+  jejich přesném hash-bound scope; jejich embedded `PROPOSED` / `PROPOSED / PREPARED` labels jsou
+  historické deklarované statusy immutable reviewed bytes, ne současný efektivní adoption status;
+- production effects, release a deployment tím nejsou autorizovány ani prokázány.
 
-## Aktuální source capability
+## Authorization Snapshot boundary
 
-VOODOO One je nyní **development / controlled-pilot authorization and evidence control plane**.
-Aktuální source tree obsahuje:
+Aktuální source tree obsahuje immutable `AuthorizationSnapshot` contract a persistence-only
+`AuthorizationSnapshotStore`.
 
-- FastAPI `/api/v1` control plane a statickou command-center konzoli;
-- lokální bootstrap, login, context-bound sessions, logout a administrativní revokaci sessions;
-- RBAC, workspaces, change requests, nezávislé approvals a execution lifecycle;
-- emergency stop, execution idempotency, leases, fencing a explicitní indeterminate recovery;
-- checksum-verified SQLite migrace a reviewovaný SQL statement catalog;
-- audit a receipt ledgers s nezávislou kontrolou integrity;
-- bounded local adapters a governed sandbox filesystem effects;
-- lokální checkpoint verifier, deterministic ProofGraph v1 JSON a repository-owned checkpoint
-  finalizer;
-- read-only deterministic Policy Decision Graph v1 jako čistou deterministickou projekci;
-- ADR-0007 pure execution-contract value objects jako source/test VERIFIED layer bez runtime
-  authority.
+Store je záměrně pouze persistence boundary pro prevalidated snapshoty. Nevyhodnocuje:
 
-Policy Decision Graph v1 vrací `ALLOW` nebo `DENY`, `execution_eligible`, reason codes,
-limitations, deterministically řazené nodes/edges a digest. Nemá autorizační pravomoc, není runtime
-gate, nic nevykonává ani nepersistuje a není napojen do API, service, execution lifecycle,
-databáze nebo CyberCore. Zachovává současné `ApprovalPolicyDecision.reason_codes` a nové projekční
-kódy používají namespace `PDG_*`.
+- approval policy authority;
+- capability eligibility/activation;
+- deterministic target binding;
+- `execution.run` permission;
+- authoritative Snapshot Creator transaction.
 
-ADR-0007 accepted pure deterministic contracts:
+Současný `persist_prevalidated(...)` si otevírá vlastní database transaction. Pro budoucí
+`AuthoritativeSnapshotCreator` je proto stále potřeba transaction-aware persistence/read API, aby
+všechny authority reads, snapshot construction, persistence a audit proběhly v jedné coherent outer
+authorization transaction.
 
-- `execution-target/v1`;
-- `approval-evidence-set/v1`;
-- `execution-grant/v1`;
-- `execution-receipt/v1`.
-
-Tyto kontrakty jsou hodnotová reprezentace, nikoliv signed envelope, issuer, runtime Runner nebo
-production effect.
-
-## Nejnovější runtime checkpoint
-
-Pro committed baseline
-`main@d57d37111b8bc9471a136b6c618aad8e920f1aff` existuje ověřená post-merge evidence:
+## Authority reality — preliminary
 
 ```text
-EVIDENCE_ARCHIVE:
-POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
-EVIDENCE_ARCHIVE_SHA256:
-80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
-EVIDENCE_MANIFEST_SHA256:
-f2851d70523122134bef007bd589872b810326a924f9fc187e2bec1da0aed0a2
-STATUS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
+P1 immutable/versioned policy authority: PARTIAL
+P2 authoritative server-side execution.run permission authority: UNKNOWN / audit required
+P3 capability definition + activation authority: UNKNOWN / audit required
+P3 deterministic target binder authority: UNKNOWN / audit required
+approval evidence authority: PARTIAL / audit required
+trusted clock identity: contract exists; authoritative runtime composition audit required
+transaction-aware AuthorizationSnapshotStore API: MISSING
+```
+
+Toto je preliminary audit classification, nikoli implementační claim.
+
+## Latest runtime-attested checkpoint
+
+Latest runtime-attested committed baseline zůstává historický development checkpoint
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
+
+```text
+EVIDENCE_ARCHIVE: POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
+EVIDENCE_ARCHIVE_SHA256: 80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
+EVIDENCE_MANIFEST_SHA256: f2851d70523122134bef007bd589872b810326a924f9fc187e2bec1da0aed0a2
 FULL_TEST_SUITE: 433 passed
 PRODUCT_READINESS: PASSED
 DEPENDENCY_AUDIT: no known vulnerabilities reported
 PRODUCT_IMAGE_BUILD: PASSED
 PRODUCT_IMAGE_SMOKE: PASSED according to checkpoint result
-PRODUCT_IMAGE_ID:
-sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
-WORKTREE: CLEAN
-STAGING: EMPTY
+PRODUCT_IMAGE_ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
 PRODUCTION_EFFECTS: DISABLED
 RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-Evidence je omezena na lokální development checkpoint. Neprokazuje registry push, vzdálené
-podepisování, release, deployment ani produkční efekt. Neattestuje pozdější review commit
-`0fa69411b246c4bd80b8a2eaa989e60fd8bca663`, merge commit `57c7bf2277616c4445039865ac7cf81c5fada858`
-ani tento documentation/MVP patch.
+Tento checkpoint neattestuje pozdější PR #71 merge commit ani současný live HEAD. Pro tyto pozdější
+commity je authoritative verification evidence GitHub Actions, nikoli tento starší runtime archive.
 
-Starší `main@8a5f36b218c3aa6dce2e4cf771512875f136d839` capture→finalize evidence zůstává
-historicky relevantní pro checkpoint workflow, ale není nejnovější runtime-attested baseline.
+## Efektivní ADR stav
 
-## Co zůstává PROPOSED, NOT IMPLEMENTED nebo BLOCKED
+Autoritativní adoption evidence je
+[`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`](docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md).
 
-- autoritativní runtime Policy Decision Graph a capability-policy engine;
-- isolated runner capsules a signed short-lived execution grants;
-- released OIDC a PostgreSQL backend;
-- signed checkpoints/receipts and external evidence anchoring;
-- remote byte attestation, širší SBOM/provenance a multi-arch release evidence;
-- mutační CyberCore integration;
-- unrestricted production release a production effects;
-- public commercial distribution před vyřešením licence, EULA, privacy a support modelu.
+- ADR-0008: effective `ADOPTED`; isolated Runner design/safety scope only; implementation authorization
+  is not implied.
+- ADR-0009: effective `ADOPTED`; grant issuance/authenticity design scope only; Runner/release/deploy
+  remain unauthorized by adoption alone.
+- ADR-0010: effective `ADOPTED`; immutable authorization-snapshot facts boundary only; adoption alone
+  did not authorize later implementation, but the separate user-authorized PR #71 persistence slice
+  is now merged and verified.
 
-## Důkazní stav
+## Co zůstává NOT IMPLEMENTED / BLOCKED
+
+- authoritative `AuthorizationSnapshotCreator`;
+- immutable/versioned runtime policy authority sufficient for snapshot creation;
+- fully audited server-side `execution.run` authority;
+- capability definition/activation authority and deterministic target binder required by snapshot
+  creation;
+- authoritative `ExecutionGrantIssuer` and authenticity envelope implementation;
+- transactional outbox/dispatch;
+- credential broker;
+- isolated READ-ONLY Runner runtime;
+- Runner-side durable one-time grant consumption;
+- independent provider post-state verification;
+- composed portable `OperationProof` runtime flow;
+- unrestricted production release and production effects;
+- public commercial distribution before licensing/EULA/privacy/support decisions.
+
+## Next safe development sequence
 
 ```text
-VERIFIED:
-- reconciliation preflight observed main@57c7bf2277616c4445039865ac7cf81c5fada858
-- review commit 0fa69411b246c4bd80b8a2eaa989e60fd8bca663 was published and merged through PR #54
-- publication evidence archive and final independent verification match their recorded SHA-256 values
-- post-merge runtime checkpoint archive and internal manifest match their recorded SHA-256 values
-- checkpoint result records Ruff, compile, focused gates, 433 full tests, readiness, dependency audit,
-  product-image build, and recorded smoke gate as passed
-- runtime evidence class is IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
-- production effects were disabled; release and deployment were not performed
-- ADR-0007 pure deterministic execution-contract value objects are source/test VERIFIED
-- read-only PDG v1 is locally source/test VERIFIED for its projection-only scope
-
-IMPLEMENTED:
-- read-only Policy Decision Graph v1 exists as a pure library with no runtime integration
-- ADR-0006 records owner acceptance without adding runtime authority
-- ADR-0008 lifecycle-semantics documentation correction is present on main but the ADR remains PROPOSED
-- documentation separates live Git, commit-bound runtime evidence, subsequent source changes, and
-  documentation-evidence state
-
-NOT VERIFIED:
-- runtime attestation for `0fa69411...`, merge commit `57c7bf22...`, or this documentation/MVP patch
-- release, deployment, registry publication, remote signing, or production operation
-
-BLOCKED:
-- unrestricted production release
-- production effects
-- public commercial distribution
+STEP 0  Source-of-Truth reconciliation and CI
+STEP 1  Authority Reality Audit
+STEP 2  Implement only missing authority prerequisites
+STEP 3  AuthoritativeSnapshotCreator in one atomic authorization transaction
+STEP 4  ExecutionGrant contract/issuer + exact handler/runner authority
+STEP 5  Transactional outbox/dispatch
+STEP 5.5 Credential broker boundary
+STEP 6  READ-ONLY isolated Runner
+STEP 7  ExecutionReceipt
+STEP 8  Independent Verification
+STEP 9  OperationProof
 ```
 
-Dokumentace capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+Do not jump to Runner implementation before the authority foundation and Snapshot Creator are proven.
 
-Dokumentace delivery order: [`ROADMAP.md`](ROADMAP.md)
+## Historical compatibility evidence — SUPERSEDED, NOT CURRENT
 
-Accepted decision: [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
+The following exact strings are retained only because repository documentation tests currently encode
+this former reconciliation baseline. They MUST NOT be read as the current live baseline or effective
+ADR status and should be removed when the documentation tests are refactored to compare dynamic
+cross-document identities rather than one frozen SHA:
+
+```text
+LATEST_VERIFIED_GIT_BASELINE: main@57c7bf2277616c4445039865ac7cf81c5fada858
+ADR_0008_REVIEW_PR: 54 MERGED
+ADR_0008_DESIGN: PROPOSED
+```
+
+Historical fact: PR #54 merged the immutable ADR-0008 reviewed bytes into main at
+`57c7bf2277616c4445039865ac7cf81c5fada858`; later owner-adoption evidence changed the effective
+status without modifying those immutable bytes.
+
+Capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+
+Delivery order: [`ROADMAP.md`](ROADMAP.md)
