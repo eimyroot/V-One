@@ -10,7 +10,6 @@ from voodoo_product.evidence_primitives import canonical_json
 from voodoo_product.skill_orchestration import (
     PRIMARY_COORDINATOR,
     SkillOrchestrationPlan,
-    SkillSelection,
     select_relevant_skills,
 )
 
