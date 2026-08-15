@@ -112,8 +112,8 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
     database.initialize()
 
     rows = migration_rows(database)
-    assert database.schema_version() == 8
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert database.schema_version() == 9
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert [row[1] for row in rows] == [
         "0001_core_schema.sql",
         "0002_auth_rate_limits.sql",
@@ -123,6 +123,7 @@ def test_fresh_database_records_ordered_checksum_history(tmp_path: Path) -> None
         "0006_external_identity_bindings.sql",
         "0007_active_sessions.sql",
         "0008_immutable_review_binding.sql",
+        "0009_authorization_snapshots.sql",
     ]
     assert all(len(str(row[2])) == 64 for row in rows)
     assert all(str(row[3]).endswith("+00:00") for row in rows)
@@ -158,7 +159,7 @@ def test_legacy_database_is_adopted_without_data_loss(tmp_path: Path) -> None:
             "SELECT id, username, password_hash FROM users WHERE id = 'usr_legacy'"
         ).fetchone()
     assert tuple(user) == ("usr_legacy", "legacy-admin", "preserved-hash")
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
 
 
 def test_initialization_is_idempotent(tmp_path: Path) -> None:
@@ -210,7 +211,7 @@ def test_receipt_sequence_migration_reconstructs_chain_links(tmp_path: Path) -> 
     with database.connect() as migrated:
         rows = migrated.execute("SELECT sequence, id FROM receipts ORDER BY sequence").fetchall()
     assert [tuple(row) for row in rows] == [(1, "rcpt_z"), (2, "rcpt_a")]
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
     service = ProductService(
         ProductConfig(
             environment="test",
@@ -351,7 +352,7 @@ def test_execution_lease_migration_marks_legacy_running_execution_expired(
             "SELECT fence, lease_expires_at FROM executions WHERE id = 'exec_running'"
         ).fetchone()
     assert tuple(execution) == (1, started_at)
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
 
 
 def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
@@ -393,7 +394,7 @@ def test_workspace_environment_migration_preserves_history_and_blocks_bypass(
     database = SQLiteProductDatabase(path)
     database.initialize()
 
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
     with database.connect() as migrated:
         legacy = migrated.execute(
             "SELECT environment, status FROM change_requests WHERE id = 'cr_legacy'"
@@ -515,7 +516,7 @@ def test_review_binding_migration_preserves_legacy_history_without_backfill(
     database = SQLiteProductDatabase(path)
     database.initialize()
 
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
     with database.connect() as migrated:
         pending = migrated.execute(
             """
@@ -567,7 +568,7 @@ def test_applied_migration_checksum_drift_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(DatabaseMigrationError, match="history drift detected"):
         database.initialize()
 
-    assert database.schema_version() == 8
+    assert database.schema_version() == 9
 
 
 def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: Path) -> None:
@@ -582,7 +583,7 @@ def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: 
 
 def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
-    (migrations / "0009_broken.sql").write_text(
+    (migrations / "0010_broken.sql").write_text(
         "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
         encoding="utf-8",
     )
@@ -638,8 +639,8 @@ def test_concurrent_initialization_serializes_without_duplicate_history(tmp_path
         list(executor.map(initialize, range(8)))
 
     database = SQLiteProductDatabase(path)
-    assert database.schema_version() == 8
-    assert len(migration_rows(database)) == 8
+    assert database.schema_version() == 9
+    assert len(migration_rows(database)) == 9
 
 
 def test_postgresql_backend_fails_before_creating_local_database(tmp_path: Path) -> None:
@@ -667,7 +668,7 @@ def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> N
 
     assert response.status_code == 200
     assert response.json()["database_backend"] == "sqlite"
-    assert response.json()["schema_version"] == 8
+    assert response.json()["schema_version"] == 9
     assert response.json()["production_effects"] == "DISABLED"
 
     service = app.state.voodoo_product_service
