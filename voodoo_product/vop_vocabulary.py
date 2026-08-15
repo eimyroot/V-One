@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from types import MappingProxyType
 from typing import Any, Final
 
 from .evidence_primitives import canonical_json
@@ -158,40 +159,44 @@ SCHEMA_REGISTRY_IDS: Final = (
 )
 
 # These phrases are semantically unsafe unless the stronger downstream fact is independently proven.
-FORBIDDEN_SHORTHANDS: Final = {
-    "approved and authorized": "Approval does not imply Authorization.",
-    "successful operation": "Execution success does not imply verified operation success.",
-    "deployed": "Deployment must not be inferred from merge, publication, or release evidence.",
-}
+FORBIDDEN_SHORTHANDS: Final = MappingProxyType(
+    {
+        "approved and authorized": "Approval does not imply Authorization.",
+        "successful operation": "Execution success does not imply verified operation success.",
+        "deployed": "Deployment must not be inferred from merge, publication, or release evidence.",
+    }
+)
 
-NOUN_DEFINITIONS: Final = {
-    "Actor": "A principal participating in or initiating a governed operation.",
-    "Intent": "The requested outcome before exact operational normalization.",
-    "Operation": "A governed unit of work.",
-    "ReviewedOperation": "The exact operation content presented to governance.",
-    "Capability": "The semantic action the system is able to perform.",
-    "Input": "Operation input data.",
-    "Target": "The authoritatively identified object of the intended effect.",
-    "ExpectedPostState": "The state expected to exist after successful execution.",
-    "Permission": "Whether an actor may request a capability in the given context.",
-    "PolicyRevision": "An immutable version of policy rules used for a decision.",
-    "Approval": "Human or system approval of exact reviewed content.",
-    "ApprovalCertificate": "Evidence that the required approvals were satisfied.",
-    "AuthorityWitnessSet": "The exact authority facts used to authorize an operation.",
-    "AuthorizationSnapshot": "Immutable evidence of an authorization decision.",
-    "ExecutionGrant": "Narrow execution permission bound to an authorized operation.",
-    "ExecutionCapsule": "The exact identity of executable implementation and runtime inputs.",
-    "Dispatch": "Durable handoff of an execution intent to an eligible Runner.",
-    "Runner": "The isolated component that performs an execution under a valid grant.",
-    "Handler": "The exact implementation of a Capability.",
-    "ExecutionReceipt": "The execution subsystem's claim about what it performed.",
-    "VerificationResult": "An independent determination of observed real post-state.",
-    "Evidence": "An auditable evidence artifact.",
-    "OperationProof": "Portable proof binding the governed operation chain.",
-    "Module": "A provider or domain translation and implementation package.",
-    "Candidate": "A proposed definition or implementation that is not active authority.",
-    "Activation": "Explicit adoption of a concrete definition or implementation for use.",
-}
+NOUN_DEFINITIONS: Final = MappingProxyType(
+    {
+        "Actor": "A principal participating in or initiating a governed operation.",
+        "Intent": "The requested outcome before exact operational normalization.",
+        "Operation": "A governed unit of work.",
+        "ReviewedOperation": "The exact operation content presented to governance.",
+        "Capability": "The semantic action the system is able to perform.",
+        "Input": "Operation input data.",
+        "Target": "The authoritatively identified object of the intended effect.",
+        "ExpectedPostState": "The state expected to exist after successful execution.",
+        "Permission": "Whether an actor may request a capability in the given context.",
+        "PolicyRevision": "An immutable version of policy rules used for a decision.",
+        "Approval": "Human or system approval of exact reviewed content.",
+        "ApprovalCertificate": "Evidence that the required approvals were satisfied.",
+        "AuthorityWitnessSet": "The exact authority facts used to authorize an operation.",
+        "AuthorizationSnapshot": "Immutable evidence of an authorization decision.",
+        "ExecutionGrant": "Narrow execution permission bound to an authorized operation.",
+        "ExecutionCapsule": "The exact identity of executable implementation and runtime inputs.",
+        "Dispatch": "Durable handoff of an execution intent to an eligible Runner.",
+        "Runner": "The isolated component that performs an execution under a valid grant.",
+        "Handler": "The exact implementation of a Capability.",
+        "ExecutionReceipt": "The execution subsystem's claim about what it performed.",
+        "VerificationResult": "An independent determination of observed real post-state.",
+        "Evidence": "An auditable evidence artifact.",
+        "OperationProof": "Portable proof binding the governed operation chain.",
+        "Module": "A provider or domain translation and implementation package.",
+        "Candidate": "A proposed definition or implementation that is not active authority.",
+        "Activation": "Explicit adoption of a concrete definition or implementation for use.",
+    }
+)
 
 
 def canonical_vocabulary() -> dict[str, Any]:
