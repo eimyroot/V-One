@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 
 from .evidence_primitives import canonical_json
+from .vop_vocabulary import OPERATION_STAGES
 
 SCHEMA_VERSION = 1
 COMMON_LANGUAGE_TYPE = "v-one-common-language/v1"
@@ -29,19 +30,6 @@ TECHNIQUE_ROLES = (
     "transport_identity",
     "attestation",
     "provenance",
-)
-
-OPERATION_STAGES = (
-    "intent",
-    "reviewed_operation",
-    "policy_decision",
-    "approval_quorum_certificate",
-    "authorization_snapshot",
-    "execution_grant",
-    "runner_execution",
-    "execution_receipt",
-    "independent_verification",
-    "operation_proof",
 )
 
 _MEMBER_PURPOSES = {
