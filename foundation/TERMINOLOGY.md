@@ -59,8 +59,9 @@ approval, plugin trust, or runtime authorization.
 
 A canonical `v-one-control-plane-decision/v1` value that binds operation semantics, skill
 orchestration, optional verified operation proof, explicit boundary, evidence references,
-acceptance gates, status, and deterministic decision digest into one system decision record. It is
-the control-plane contract, not runtime dispatch or production authority by itself.
+acceptance gates, purpose, system benefit, status, and deterministic decision digest into one system
+decision record. It is the control-plane contract, not runtime dispatch or production authority by
+itself.
 
 ### Execution
 
