@@ -5,6 +5,7 @@ import hashlib
 import pytest
 
 from voodoo_product.control_plane import (
+    CONTROL_PLANE_USEFULNESS_GATE,
     AcceptanceGate,
     ControlPlaneBoundary,
     ControlPlaneDecisionError,
@@ -19,6 +20,7 @@ from voodoo_product.operation_semantics import (
     TechniqueEvidence,
 )
 from voodoo_product.skill_orchestration import (
+    DEVELOPMENT_USEFULNESS_GATE,
     SkillOrchestrationPlan,
     select_relevant_skills,
 )
@@ -56,6 +58,8 @@ def skill_plan() -> SkillOrchestrationPlan:
         task_type="architecture",
         source_of_truth="github:nulleimy/V-One/pull/69",
         objective="Unify V-One operation semantics, proof, and skill orchestration.",
+        purpose="Make every system action produce one useful control-plane decision.",
+        system_benefit="Prevents implementation work from adding unauditable surface area.",
         selected_skills=select_relevant_skills(task_type="architecture"),
         excluded_operations=(
             "runtime_plugin_trust",
@@ -64,6 +68,7 @@ def skill_plan() -> SkillOrchestrationPlan:
             "production_effect",
         ),
         acceptance_gates=(
+            DEVELOPMENT_USEFULNESS_GATE,
             "decision_has_boundary",
             "decision_has_evidence",
             "decision_has_acceptance_gates",
@@ -104,6 +109,13 @@ def evidence() -> tuple[EvidenceReference, ...]:
 
 def gates(status: str = "PASS") -> tuple[AcceptanceGate, ...]:
     return (
+        AcceptanceGate(
+            gate=CONTROL_PLANE_USEFULNESS_GATE,
+            status=status,
+            evidence_digest=DIGEST_A,
+            purpose="Confirm the decision and all decision elements state usefulness.",
+            system_benefit="Blocks purposeless changes from entering the control plane.",
+        ),
         AcceptanceGate(
             gate="decision_has_boundary",
             status=status,
@@ -223,4 +235,23 @@ def test_control_plane_rejects_elements_without_purpose_or_benefit() -> None:
             evidence_digest=DIGEST_A,
             purpose="Confirm every element has a stated useful role.",
             system_benefit="",
+        )
+
+
+def test_control_plane_requires_explicit_usefulness_gate() -> None:
+    with pytest.raises(ControlPlaneDecisionError, match="usefulness gate"):
+        VOneControlPlaneDecision.create(
+            decision_id="cpd_missing_usefulness_gate",
+            status="IMPLEMENTED",
+            rationale="Purpose fields alone are not enough without an explicit gate.",
+            purpose="Ensure usefulness is accepted as a named gate.",
+            system_benefit="Prevents implicit usefulness claims.",
+            semantics=semantics(),
+            skill_plan=skill_plan(),
+            boundary=boundary(),
+            evidence=evidence(),
+            acceptance_gates=tuple(
+                gate for gate in gates("PENDING")
+                if gate.gate != CONTROL_PLANE_USEFULNESS_GATE
+            ),
         )
