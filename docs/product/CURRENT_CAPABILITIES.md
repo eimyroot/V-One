@@ -39,8 +39,9 @@ runtime checkpoint, release, or deployment claim.
 | Change-request lifecycle | VERIFIED | change-request tests | target policy matrix remains narrower than target architecture |
 | Immutable reviewed-request binding | VERIFIED | MVP-2 immutable-review binding tests and schema | does not by itself prove all snapshot/grant issuance facts |
 | Production dual-approval rule | VERIFIED | governance tests | production execution remains blocked |
-| Approval policy compatibility evaluator | VERIFIED | focused policy/change-request tests | compatibility/current-behavior owner only; not full immutable/versioned policy authority |
+| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; current outcomes remain authoritative and Solo, Team, Regulated enforcement is not implemented |
 | Read-only Policy Decision Graph v1 | VERIFIED | deterministic graph/digest tests | projection only; no runtime authorization authority |
+| Policy Decision Graph | PROPOSED | ADR-0003 plus verified compatibility decision model | Solo, Team, Regulated, scoped roles, and authoritative runtime enforcement are not implemented |
 | ADR-0007 execution contracts | VERIFIED | deterministic contract/binding tests | representation only; no authoritative issuer/Runner |
 | Authorization Snapshot contract | IMPLEMENTED | `voodoo_product/authorization_snapshot.py` plus contract tests | construction is not yet authoritative runtime issuance |
 | Authorization Snapshot append-only persistence | VERIFIED | PR #71, schema v9, store/contract/migration tests, CI #282/#283 | store accepts prevalidated snapshots; no authoritative Snapshot Creator |
