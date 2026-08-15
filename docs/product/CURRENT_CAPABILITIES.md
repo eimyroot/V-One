@@ -53,7 +53,7 @@ document would immediately supersede that value.
 | Change-request lifecycle | VERIFIED | change-request tests | target policy matrix remains narrower than target architecture |
 | Immutable reviewed-request binding | VERIFIED | MVP-2 immutable-review binding tests and schema | does not by itself prove all snapshot/grant issuance facts |
 | Production dual-approval rule | VERIFIED | governance tests | production execution remains blocked |
-| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not complete |
+| Approval policy decision model | VERIFIED | focused policy and change-request tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not implemented |
 | Read-only Policy Decision Graph v1 | VERIFIED | deterministic graph/digest tests | projection only; no runtime authorization authority |
 | ADR-0007 execution contracts | VERIFIED | deterministic contract/binding tests | representation only; no authoritative issuer/Runner |
 | VOP canonical vocabulary | VERIFIED | PR #74 source/tests; PR-head CI #292; current-main CI #298 | verified semantic contract is not by itself normative owner adoption |
