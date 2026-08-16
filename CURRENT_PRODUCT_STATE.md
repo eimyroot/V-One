@@ -10,61 +10,94 @@
 AS_OF: 2026-08-16
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
 RECONCILIATION_INPUT_BRANCH: main
-RECONCILIATION_INPUT_HEAD: f1b5b8a5c0a31f75c10f1acc5153874b84248e1b
-RECONCILIATION_INPUT_TREE: 61f03f49577bab1ac03cdd40be74a077649bf38b
+RECONCILIATION_INPUT_HEAD: b4d4aab7393251ffc113a3f5bf654523bdb27865
+RECONCILIATION_INPUT_TREE: 61021278068a7d64b66325190c94dde6f4593b16
+HISTORICAL_REVIEW_MERGE_PR54: 57c7bf2277616c4445039865ac7cf81c5fada858
 PR71_MERGE_COMMIT: d8d375c61264ddad39eb53240dce9ff0c8e59818
 PR71_PR_HEAD_CI: run #282 SUCCESS at 93605972bfb3f35f324183a00c7ad2f88c5f9ab2
 PR71_POST_MERGE_CI: run #283 SUCCESS at d8d375c61264ddad39eb53240dce9ff0c8e59818
-PR72_SOT_RECONCILIATION_MERGE: 2ce33ca7dfe4169affb59c001ed63fc7145c9743
-PR72_PR_HEAD_CI: run #286 SUCCESS at f9f0f7cb2fa769e46510bcd7387d7e4158d1eb64
-PR72_POST_MERGE_CI: run #287 SUCCESS at 2ce33ca7dfe4169affb59c001ed63fc7145c9743
+PR73_SOT_FIX_MERGE: b8e3b0f8d6f0ffb401138e44abe5a7d80e35a69a
+PR73_PR_HEAD_CI: run #288 SUCCESS at 64da1a91d77cbd93b54580b607cbcbbe18b6ad24
+PR73_POST_MERGE_CI: run #289 SUCCESS at b8e3b0f8d6f0ffb401138e44abe5a7d80e35a69a
+PR74_VOP_MERGE: a9a57df270b85907ee5012895c1523ade461f06f
+PR74_PR_HEAD_CI: run #292 SUCCESS at 1be3721db70433a4dc4a45c353a5d748dd4bf113
+PR74_IMMEDIATE_POST_MERGE_CI: run #297 CANCELLED by subsequent main activity; not failure evidence
+PR75_P0_REPO_CONTRACT_MERGE: b4d4aab7393251ffc113a3f5bf654523bdb27865
+PR75_PR_HEAD_CI: run #291 SUCCESS at 329cde854a34a713ccd10ad272fbd9554d88a602
+CURRENT_MAIN_CI: run #298 SUCCESS at b4d4aab7393251ffc113a3f5bf654523bdb27865
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 RUNTIME_EVIDENCE_CLASS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
-ADR_0007_CONTRACT_LAYER: VERIFIED source/test scope; pure deterministic value contracts only
 ADR_0008_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
 ADR_0009_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
 ADR_0010_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
+VOP_CANONICAL_VOCABULARY: VERIFIED source/test scope on current main
+VOP_SEMANTIC_TRANSLATION: VERIFIED source/test scope on current main
+VOP_SEMANTIC_EQUIVALENCE: VERIFIED source/test scope on current main
+VOP_ARCHITECTURE_OWNER_ADOPTION: UNKNOWN; no explicit VOP adoption record in authority/adoption register
 AUTHORIZATION_SNAPSHOT_CONTRACT: IMPLEMENTED
 AUTHORIZATION_SNAPSHOT_PERSISTENCE: VERIFIED by PR #71 CI and post-merge CI
 AUTHORIZATION_SNAPSHOT_SCHEMA: sqlite schema version 9
 AUTHORITATIVE_SNAPSHOT_CREATOR: NOT IMPLEMENTED
 AUTHORITATIVE_GRANT_ISSUER: NOT IMPLEMENTED
 ISOLATED_RUNNER_RUNTIME: NOT IMPLEMENTED
-BRANCH_PROTECTION_MAIN: DISABLED at reconciliation preflight
+P0_REPO_ENFORCEMENT_CONTRACT: MERGED
+BRANCH_PROTECTION_MAIN_LIVE: DISABLED
+REQUIRED_STATUS_CHECKS_MAIN_LIVE: OFF
+P0_GITHUB_GOVERNANCE: BLOCKED
 RELEASE_STATE: BLOCKED
 PRODUCTION_EFFECTS: DISABLED / NO PRODUCTION EFFECT EVIDENCE
 ```
 
-Exact live Git commit is deliberately **not embedded as a static current-value field**. A commit that
-contains such a value would immediately supersede it. `RECONCILIATION_INPUT_*` records the evidence
-baseline used to prepare this snapshot; current identity must always be queried from live Git/GitHub.
+Exact live Git commit je záměrně **neuložený jako statická current-value autorita**. `RECONCILIATION_INPUT_*`
+zachycuje přesnou baseline použitou pro tento snapshot; skutečná současná identita se vždy dotazuje z
+live Git/GitHub.
 
-## Live Git reconciliation incident
+## Post-VOP / P0 reconciliation
 
-Během tohoto CASER-SOURCER reconciliation vznikl na nechráněném `main` omylem jeden marker commit
-`a4a46cc2b5ddf50f519148af60e4cb720e714d5e` a okamžitý revert
-`f1b5b8a5c0a31f75c10f1acc5153874b84248e1b`. Revert obnovil přesně strom
-`61f03f49577bab1ac03cdd40be74a077649bf38b`, tedy stejný tree jako PR #71 merge commit
-`d8d375c61264ddad39eb53240dce9ff0c8e59818`. Nezůstala žádná netto změna source tree; Git historie
-incident zachovává. Main CI #285 pro revert skončil `SUCCESS`. Tato událost je důkazem, že `main`
-bez branch protection / required checks je materiální governance gap.
+PR #74 zavedl do současného source tree kanonický VOP slovník a jeho machine-readable/runtime
+kontrakty. Současný `main` obsahuje zejména:
 
-## Co je aktuálně VERIFIED
+- `docs/architecture/VOP_CANONICAL_VOCABULARY.md`;
+- `schemas/vop/registry.v1.json` se stavem `RESERVED_IDS` pro dosud neimplementovaná konkrétní schémata;
+- `voodoo_product/vop_vocabulary.py` s kanonickými nouns/verbs/relations/statusy, deterministic digestem
+  a fail-closed validací termínů;
+- `voodoo_product/vop_translation.py` s immutable provider semantic mapping a deterministic
+  semantic-equivalence assessment;
+- conformance testy pro vocabulary, translation a compatibility s operation semantics.
 
-- PR #71 přidal append-only SQLite persistence pro existující immutable `AuthorizationSnapshot`
-  contract, migration `0009_authorization_snapshots.sql`, statement catalog/schema validation,
-  idempotency binding, immutable update/delete triggers a persistence/contract regression testy;
-- PR-head CI #282 skončil `SUCCESS` pro exact head
-  `93605972bfb3f35f324183a00c7ad2f88c5f9ab2`;
-- post-merge CI #283 skončil `SUCCESS` pro exact PR #71 merge commit
-  `d8d375c61264ddad39eb53240dce9ff0c8e59818`;
-- SOT reconciliation PR #72 měl CI #286 `SUCCESS` pro exact head
-  `f9f0f7cb2fa769e46510bcd7387d7e4158d1eb64`, byl squash-merged jako
-  `2ce33ca7dfe4169affb59c001ed63fc7145c9743` a post-merge CI #287 skončil `SUCCESS`;
-- authoritative adoption register eviduje ADR-0008, ADR-0009 a ADR-0010 jako efektivně `ADOPTED` v
-  jejich přesném hash-bound scope; jejich embedded `PROPOSED` / `PROPOSED / PREPARED` labels jsou
-  historické deklarované statusy immutable reviewed bytes, ne současný efektivní adoption status;
-- production effects, release a deployment tím nejsou autorizovány ani prokázány.
+PR-head CI #292 skončil `SUCCESS`. Bezprostřední push CI #297 na merge commit #74 byl `CANCELLED`
+protože následoval další push na `main`; současný `main` po PR #75 prošel kompletním CI #298, takže
+aktuální strom včetně PR #74 změn má fresh commit-bound `SUCCESS` evidence.
+
+Toto je source/test implementační a verification evidence. **Není to samo o sobě owner adoption.**
+`AUTHORITY_AND_ADOPTION_REGISTER.md` nemá explicitní VOP owner-adoption record, proto efektivní
+architektonická adoption autorita zůstává `UNKNOWN` do samostatného, exact-content-bound rozhodnutí.
+
+## GitHub governance reality
+
+PR #75 mergnul repository-side kontrakt
+`docs/governance/GITHUB_MAIN_GOVERNANCE_BASELINE_V1.md` a odpovídající machine-readable baseline.
+Kontrakt požaduje PR-only `main`, required `ci / verify`, latest-head checks, zákaz force-push/delete a
+conversation resolution.
+
+Live GitHub branch metadata po merge PR #75 ale stále hlásí:
+
+```text
+main.protected = false
+protection.enabled = false
+required_status_checks.enforcement_level = off
+required_status_checks.contexts = []
+```
+
+Proto:
+
+```text
+REPO_ENFORCEMENT_CONTRACT = MERGED
+GITHUB_SETTINGS_ENFORCED = FAIL / NOT CONFIGURED
+P0_GITHUB_GOVERNANCE = BLOCKED
+```
+
+Dokument, merge ani úspěšné CI nesmí být zaměněny za GitHub-side enforcement.
 
 ## Authorization Snapshot boundary
 
@@ -96,7 +129,9 @@ trusted clock identity: contract exists; authoritative runtime composition audit
 transaction-aware AuthorizationSnapshotStore API: MISSING
 ```
 
-Toto je preliminary audit classification, nikoli implementační claim.
+Toto je preliminary audit classification, nikoli implementační claim. Dedicated Authority Reality
+Audit smí začít až jako samostatný bounded audit slice; vyšší-impact implementation nesmí spoléhat na
+GitHub governance, dokud P0 live enforcement neprojde.
 
 ## Latest runtime-attested checkpoint
 
@@ -131,12 +166,16 @@ Autoritativní adoption evidence je
   is not implied.
 - ADR-0009: effective `ADOPTED`; grant issuance/authenticity design scope only; Runner/release/deploy
   remain unauthorized by adoption alone.
-- ADR-0010: effective `ADOPTED`; immutable authorization-snapshot facts boundary only; adoption alone
-  did not authorize implementation. The separately user-authorized PR #71 persistence slice is merged
-  and verified, while authoritative Snapshot Creator remains unimplemented.
+- ADR-0010: effective `ADOPTED`; immutable authorization-snapshot facts boundary only; separately
+  authorized PR #71 persistence slice is merged and verified; authoritative Snapshot Creator remains
+  unimplemented.
+- VOP canonical vocabulary / semantic translation: source/test implementation is present and verified,
+  but no explicit owner-adoption record is currently present in this register; architectural adoption
+  therefore remains `UNKNOWN`, not inferred from merge.
 
 ## Co zůstává NOT IMPLEMENTED / BLOCKED
 
+- live GitHub `main` protection and required-check enforcement;
 - authoritative `AuthorizationSnapshotCreator`;
 - immutable/versioned runtime policy authority sufficient for snapshot creation;
 - fully audited server-side `execution.run` authority;
@@ -155,9 +194,10 @@ Autoritativní adoption evidence je
 ## Next safe development sequence
 
 ```text
-STEP 0  Source-of-Truth reconciliation and CI
+P0      Enforce and independently verify GitHub main protection
+STEP 0R Post-VOP/P0 Source-of-Truth reconciliation
 STEP 1  Authority Reality Audit
-STEP 2  Implement only missing authority prerequisites
+STEP 2  Implement only proven missing authority prerequisites
 STEP 3  AuthoritativeSnapshotCreator in one atomic authorization transaction
 STEP 4  ExecutionGrant contract/issuer + exact handler/runner authority
 STEP 5  Transactional outbox/dispatch
@@ -168,14 +208,16 @@ STEP 8  Independent Verification
 STEP 9  OperationProof
 ```
 
-Do not jump to Runner implementation before the authority foundation and Snapshot Creator are proven.
+Do not jump to Runner implementation before GitHub governance, authority foundation and Snapshot
+Creator are proven.
 
 ## Historical evidence boundary
 
-Historical Git identities such as PR #54 merge commit
-`57c7bf2277616c4445039865ac7cf81c5fada858` remain valid provenance in the immutable ADR evidence
-index. They are **not current Git identity fields**. Effective ADR adoption is read from
-`AUTHORITY_AND_ADOPTION_REGISTER.md`, not from historical embedded status labels.
+Historical review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains valid provenance in
+the immutable ADR evidence index. Historical Git identities remain valid provenance; they are **not
+current Git identity fields**. Effective owner adoption is read from
+`AUTHORITY_AND_ADOPTION_REGISTER.md`, not inferred from repository presence, merge, CI or historical
+embedded status labels.
 
 Capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
 
