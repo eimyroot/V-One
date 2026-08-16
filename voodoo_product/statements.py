@@ -234,6 +234,15 @@ LIST_PENDING_APPROVALS = _read(
     ORDER BY cr.updated_at DESC
     """,
 )
+SELECT_AUTHORIZATION_SNAPSHOT_CREATOR_APPROVALS = _read(
+    "approvals.select_for_authorization_snapshot",
+    """
+    SELECT id, approver_id, decision, review_content_sha256, created_at
+    FROM approvals
+    WHERE request_id = ? AND decision = 'APPROVED'
+    ORDER BY id, approver_id, created_at
+    """,
+)
 
 SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT = _read(
     "authorization_snapshots.select_request_context",
@@ -442,6 +451,7 @@ ALL_STATEMENTS = (
     COUNT_APPROVED,
     LIST_APPROVALS,
     LIST_PENDING_APPROVALS,
+    SELECT_AUTHORIZATION_SNAPSHOT_CREATOR_APPROVALS,
     SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT,
     SELECT_AUTHORIZATION_SNAPSHOT_BY_IDEMPOTENCY_KEY,
     SELECT_AUTHORIZATION_SNAPSHOT,

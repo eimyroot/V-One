@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from . import statements as sql
 from .audit import AuditLedger
 from .authorization_snapshot import AuthorizationSnapshot
 from .evidence_primitives import canonical_json, utc_now
 from .execution_contract import ApprovalEvidenceSet, ExecutionTarget
-from .persistence import DatabaseIntegrityError, DatabaseRow, ProductDatabaseAdapter
+from .persistence import (
+    DatabaseConnection,
+    DatabaseIntegrityError,
+    DatabaseRow,
+    ProductDatabaseAdapter,
+)
 
 Clock = Callable[[], str]
 
@@ -19,6 +25,12 @@ class AuthorizationSnapshotConflict(RuntimeError):
 
 class AuthorizationSnapshotSourceError(RuntimeError):
     """Raised when current authoritative request facts do not match the snapshot."""
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorizationSnapshotPersistenceResult:
+    snapshot: AuthorizationSnapshot
+    created: bool
 
 
 class AuthorizationSnapshotStore:
@@ -48,86 +60,109 @@ class AuthorizationSnapshotStore:
         idempotency_key: str,
         correlation_id: str,
     ) -> AuthorizationSnapshot:
+        with self.db.transaction() as connection:
+            result = self.persist_prevalidated_in_transaction(
+                connection,
+                snapshot=snapshot,
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
+            )
+        return result.snapshot
+
+    def persist_prevalidated_in_transaction(
+        self,
+        connection: DatabaseConnection,
+        *,
+        snapshot: AuthorizationSnapshot,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> AuthorizationSnapshotPersistenceResult:
+        """Persist into a caller-owned transaction without opening a nested transaction."""
+
         if not isinstance(snapshot, AuthorizationSnapshot):
             raise ValueError("snapshot is invalid")
+        if connection is None:
+            raise ValueError("connection is invalid")
         idempotency_key = self._require_token(idempotency_key, field="idempotency_key")
         correlation_id = self._require_token(correlation_id, field="correlation_id")
 
-        with self.db.transaction() as connection:
-            existing = connection.execute(
-                sql.SELECT_AUTHORIZATION_SNAPSHOT_BY_IDEMPOTENCY_KEY,
-                (idempotency_key,),
-            ).fetchone()
-            if existing is not None:
-                if str(existing["idempotency_binding_digest"]) != snapshot.idempotency_binding_digest:
-                    raise AuthorizationSnapshotConflict(
-                        "idempotency key is bound to different authorization inputs"
-                    )
-                return self._decode(existing)
-
-            request = connection.execute(
-                sql.SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT,
-                (snapshot.request_id,),
-            ).fetchone()
-            self._require_request_binding(snapshot=snapshot, request=request)
-
-            try:
-                connection.execute(
-                    sql.INSERT_AUTHORIZATION_SNAPSHOT,
-                    (
-                        snapshot.snapshot_id,
-                        snapshot.execution_id,
-                        snapshot.request_id,
-                        snapshot.actor_id,
-                        snapshot.workspace_id,
-                        snapshot.environment,
-                        snapshot.review_content_sha256,
-                        idempotency_key,
-                        snapshot.idempotency_binding_digest,
-                        snapshot.snapshot_digest,
-                        canonical_json(snapshot.to_dict()),
-                        snapshot.execution_target_json,
-                        snapshot.approval_evidence_json,
-                        self._clock(),
-                    ),
-                )
-            except DatabaseIntegrityError as exc:
+        existing = connection.execute(
+            sql.SELECT_AUTHORIZATION_SNAPSHOT_BY_IDEMPOTENCY_KEY,
+            (idempotency_key,),
+        ).fetchone()
+        if existing is not None:
+            if str(existing["idempotency_binding_digest"]) != snapshot.idempotency_binding_digest:
                 raise AuthorizationSnapshotConflict(
-                    "authorization snapshot immutable identity conflicts"
-                ) from exc
-
-            self.audit_ledger.append(
-                connection,
-                actor_id=snapshot.actor_id,
-                action="authorization_snapshot.create",
-                target_type="authorization_snapshot",
-                target_id=snapshot.snapshot_id,
-                payload={
-                    "correlation_id": correlation_id,
-                    "snapshot_digest": snapshot.snapshot_digest,
-                    "execution_id": snapshot.execution_id,
-                    "request_id": snapshot.request_id,
-                    "review_content_sha256": snapshot.review_content_sha256,
-                    "workspace_id": snapshot.workspace_id,
-                    "environment": snapshot.environment,
-                    "payload_digest": snapshot.payload_digest,
-                    "payload_digest_scheme": snapshot.payload_digest_scheme,
-                    "target_kind": snapshot.target_kind,
-                    "target_digest": snapshot.target_digest,
-                    "capability": snapshot.capability,
-                    "capability_definition_identity": snapshot.capability_definition_identity,
-                    "policy_version": snapshot.policy_version,
-                    "policy_identity": snapshot.policy_identity,
-                    "approval_set_digest": snapshot.approval_set_digest,
-                    "approval_valid_until": snapshot.approval_valid_until,
-                    "issuance_timestamp_source_identity": (
-                        snapshot.issuance_timestamp_source_identity
-                    ),
-                    "authorized_at": snapshot.authorized_at,
-                    "authorization_source_revision": snapshot.authorization_source_revision,
-                },
+                    "idempotency key is bound to different authorization inputs"
+                )
+            return AuthorizationSnapshotPersistenceResult(
+                snapshot=self._decode(existing),
+                created=False,
             )
-        return snapshot
+
+        request = connection.execute(
+            sql.SELECT_AUTHORIZATION_SNAPSHOT_REQUEST_CONTEXT,
+            (snapshot.request_id,),
+        ).fetchone()
+        self._require_request_binding(snapshot=snapshot, request=request)
+
+        try:
+            connection.execute(
+                sql.INSERT_AUTHORIZATION_SNAPSHOT,
+                (
+                    snapshot.snapshot_id,
+                    snapshot.execution_id,
+                    snapshot.request_id,
+                    snapshot.actor_id,
+                    snapshot.workspace_id,
+                    snapshot.environment,
+                    snapshot.review_content_sha256,
+                    idempotency_key,
+                    snapshot.idempotency_binding_digest,
+                    snapshot.snapshot_digest,
+                    canonical_json(snapshot.to_dict()),
+                    snapshot.execution_target_json,
+                    snapshot.approval_evidence_json,
+                    self._clock(),
+                ),
+            )
+        except DatabaseIntegrityError as exc:
+            raise AuthorizationSnapshotConflict(
+                "authorization snapshot immutable identity conflicts"
+            ) from exc
+
+        self.audit_ledger.append(
+            connection,
+            actor_id=snapshot.actor_id,
+            action="authorization_snapshot.create",
+            target_type="authorization_snapshot",
+            target_id=snapshot.snapshot_id,
+            payload={
+                "correlation_id": correlation_id,
+                "snapshot_digest": snapshot.snapshot_digest,
+                "execution_id": snapshot.execution_id,
+                "request_id": snapshot.request_id,
+                "review_content_sha256": snapshot.review_content_sha256,
+                "workspace_id": snapshot.workspace_id,
+                "environment": snapshot.environment,
+                "payload_digest": snapshot.payload_digest,
+                "payload_digest_scheme": snapshot.payload_digest_scheme,
+                "target_kind": snapshot.target_kind,
+                "target_digest": snapshot.target_digest,
+                "capability": snapshot.capability,
+                "capability_definition_identity": snapshot.capability_definition_identity,
+                "policy_version": snapshot.policy_version,
+                "policy_identity": snapshot.policy_identity,
+                "approval_set_digest": snapshot.approval_set_digest,
+                "approval_valid_until": snapshot.approval_valid_until,
+                "issuance_timestamp_source_identity": (
+                    snapshot.issuance_timestamp_source_identity
+                ),
+                "authorized_at": snapshot.authorized_at,
+                "authorization_source_revision": snapshot.authorization_source_revision,
+            },
+        )
+        return AuthorizationSnapshotPersistenceResult(snapshot=snapshot, created=True)
 
     def get(self, snapshot_id: str) -> AuthorizationSnapshot:
         snapshot_id = self._require_token(snapshot_id, field="snapshot_id")
