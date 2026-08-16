@@ -7,6 +7,7 @@ from typing import Final, Self
 from .approval_certificate import ApprovalCertificate
 from .capability_registry import CapabilityActivation, CapabilityDefinition
 from .evidence_primitives import canonical_json
+from .execution_contract import REQUIRED_EXECUTION_PERMISSION
 from .permission_authority import PermissionDecision
 from .policy_authority import PolicyRevision
 from .target_binding import TargetBinding
@@ -76,10 +77,14 @@ class AuthorityWitnessSet:
             raise ValueError("permission_decision is invalid")
         if not permission_decision.granted:
             raise PermissionError("permission decision is denied")
+        if permission_decision.permission != REQUIRED_EXECUTION_PERMISSION:
+            raise PermissionError("authority witness requires execution.run")
         if not isinstance(policy_revision, PolicyRevision):
             raise ValueError("policy_revision is invalid")
         if not isinstance(capability_definition, CapabilityDefinition):
             raise ValueError("capability_definition is invalid")
+        if REQUIRED_EXECUTION_PERMISSION not in capability_definition.required_permissions:
+            raise ValueError("capability definition does not require execution.run")
         if not isinstance(capability_activation, CapabilityActivation):
             raise ValueError("capability_activation is invalid")
         if capability_activation.revoked:
@@ -102,6 +107,16 @@ class AuthorityWitnessSet:
             raise ValueError("approval certificate policy identity mismatch")
         if approval_certificate.policy_version != policy_revision.policy_version:
             raise ValueError("approval certificate policy version mismatch")
+        if (
+            approval_certificate.approval_evidence.capability
+            != capability_definition.capability
+        ):
+            raise ValueError("approval certificate capability mismatch")
+        if (
+            approval_certificate.approval_evidence.target_digest
+            != target_binding.target.target_digest
+        ):
+            raise ValueError("approval certificate target binding mismatch")
         if not isinstance(clock_witness, ClockWitness):
             raise ValueError("clock_witness is invalid")
         if permission_decision.environment != clock_witness.environment:

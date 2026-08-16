@@ -9,6 +9,7 @@ from typing import Final, Self
 
 from .approval_policy import VALID_ENVIRONMENTS
 from .evidence_primitives import canonical_json
+from .execution_contract import REQUIRED_EXECUTION_PERMISSION
 
 CAPABILITY_DEFINITION_TYPE: Final = "capability-definition/v1"
 CAPABILITY_ACTIVATION_TYPE: Final = "capability-activation/v1"
@@ -79,6 +80,8 @@ class CapabilityDefinition:
             raise ValueError("required_permissions are invalid")
         for permission in self.required_permissions:
             _require_text(permission, field="required_permission")
+        if REQUIRED_EXECUTION_PERMISSION not in self.required_permissions:
+            raise ValueError("required_permissions must include execution.run")
         if type(self.production_eligible) is not bool:
             raise ValueError("production_eligible must be boolean")
         if self.production_eligible and "production" not in self.supported_environments:
