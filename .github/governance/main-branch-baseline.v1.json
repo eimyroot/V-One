@@ -5,8 +5,10 @@
   "desired": {
     "pull_request_required": true,
     "required_status_checks": [
-      "ci / verify"
+      "verify"
     ],
+    "required_check_provider": "github-actions",
+    "workflow": "ci",
     "require_latest_head_checks": true,
     "allow_force_pushes": false,
     "allow_deletions": false,
