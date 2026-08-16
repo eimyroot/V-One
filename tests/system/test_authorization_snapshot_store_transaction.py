@@ -211,20 +211,22 @@ def test_on_connection_does_not_commit_independently_and_outer_failure_rolls_bac
     )
     storage = store(service)
 
-    with pytest.raises(RuntimeError, match="forced outer transaction failure"):
-        with service.db.transaction() as connection:
-            storage.persist_prevalidated_on_connection(
-                connection,
-                snapshot=snapshot,
-                idempotency_key="outer-rollback",
-                correlation_id="corr_outer_rollback",
-            )
-            row = connection.execute(
-                "SELECT id FROM authorization_snapshots WHERE id = ?",
-                (snapshot.snapshot_id,),
-            ).fetchone()
-            assert row is not None
-            raise RuntimeError("forced outer transaction failure")
+    with (
+        pytest.raises(RuntimeError, match="forced outer transaction failure"),
+        service.db.transaction() as connection,
+    ):
+        storage.persist_prevalidated_on_connection(
+            connection,
+            snapshot=snapshot,
+            idempotency_key="outer-rollback",
+            correlation_id="corr_outer_rollback",
+        )
+        row = connection.execute(
+            "SELECT id FROM authorization_snapshots WHERE id = ?",
+            (snapshot.snapshot_id,),
+        ).fetchone()
+        assert row is not None
+        raise RuntimeError("forced outer transaction failure")
 
     assert storage.get_by_idempotency_key("outer-rollback") is None
     assert snapshot_create_events(service, snapshot.snapshot_id) == []
