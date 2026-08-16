@@ -159,7 +159,8 @@ Required live state on `main`:
 
 ```text
 pull_request_required = true
-required_status_check = ci / verify
+required_status_check = verify
+required_check_provider = GitHub Actions / workflow ci
 latest_head_required = true
 force_push = false
 branch_delete = false
