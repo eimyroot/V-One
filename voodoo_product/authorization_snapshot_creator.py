@@ -20,7 +20,7 @@ from .capability_registry import (
     ImmutableCapabilityRegistry,
 )
 from .evidence_primitives import canonical_json, new_id
-from .execution_contract import ApprovalEvidenceSet, REQUIRED_EXECUTION_PERMISSION
+from .execution_contract import REQUIRED_EXECUTION_PERMISSION, ApprovalEvidenceSet
 from .operational_safety import OperationalSafetyService
 from .permission_authority import PermissionAuthority, PermissionDecision, PermissionQuery
 from .persistence import DatabaseConnection, DatabaseRow, ProductDatabaseAdapter
