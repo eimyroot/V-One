@@ -103,7 +103,7 @@ document would immediately supersede that value.
 | ProofGraph v1 JSON | VERIFIED | deterministic module and launcher output | no persistent graph store |
 | P0 repository governance contract | VERIFIED | PR #75 content + PR-head CI #291 + current-main CI #298 | repository-side contract does not enforce GitHub Settings |
 | Main branch PR-only protection | BLOCKED | live GitHub metadata: `protected=false` | must be configured in GitHub Settings/ruleset |
-| Main required `ci / verify` enforcement | BLOCKED | live enforcement level `off`; no required contexts | must be configured and independently re-read |
+| Main required `verify` check enforcement | BLOCKED | workflow `ci`; live enforcement level `off`; no required contexts | must be configured and independently re-read |
 | Main force-push/delete protection | BLOCKED | P0 contract requires it; live branch protection is disabled | cannot claim enforcement while branch is unprotected |
 | Unrestricted production release | BLOCKED | production fail-closed gate | release, legal, Runner, signing, operations prerequisites missing |
 | Public commercial distribution | BLOCKED | `LICENSE_DECISION_REQUIRED.md` | license/EULA/privacy/support unresolved |
