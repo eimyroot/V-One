@@ -17,13 +17,14 @@ This document does not claim that GitHub Settings are already enforced. Remote e
 The live repository must enforce all of the following on `main`:
 
 1. changes reach `main` through a pull request;
-2. the required CI status check is `ci / verify` and must pass before merge;
-3. required checks apply to the latest PR head before merge;
-4. force pushes are disabled;
-5. branch deletion is disabled;
-6. conversation resolution is required before merge when review threads exist;
-7. administrators do not silently bypass the baseline for ordinary development;
-8. direct production/release authority is not implied by merge permission.
+2. the required GitHub check-run context is `verify` and must pass before merge;
+3. `verify` is produced by the GitHub Actions workflow named `ci`; GitHub UI may display workflow/job together, but protection must bind the actual check context reported by GitHub;
+4. required checks apply to the latest PR head before merge;
+5. force pushes are disabled;
+6. branch deletion is disabled;
+7. conversation resolution is required before merge when review threads exist;
+8. administrators do not silently bypass the baseline for ordinary development;
+9. direct production/release authority is not implied by merge permission.
 
 ## Review-count policy
 
@@ -34,7 +35,7 @@ Product/runtime rule `no requester self-approval` remains a separate V-One autho
 ## Repository-side controls already present
 
 - `.github/workflows/ci.yml` runs on every pull request and pushes to `main`;
-- CI job `verify` executes lint, compile, focused security/governance gates, full pytest, product readiness, dependency audit, image build and smoke test;
+- workflow `ci`, job/check context `verify`, executes lint, compile, focused security/governance gates, full pytest, product readiness, dependency audit, image build and smoke test;
 - `.github/CODEOWNERS` assigns canonical ownership;
 - `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates.
 
@@ -46,7 +47,8 @@ P0 is complete only when live GitHub configuration evidence proves the desired s
 repository = nulleimy/V-One
 branch = main
 pull_request_required = true
-required_status_check = ci / verify
+required_status_check = verify
+required_check_provider = GitHub Actions / workflow ci
 force_push = false
 delete_branch = false
 conversation_resolution = true
