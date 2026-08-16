@@ -12,14 +12,8 @@ from . import statements as sql
 from .approval_certificate import ApprovalCertificate
 from .audit import AuditLedger
 from .authority_witness import AuthorityWitnessSet
-from .authorization_snapshot import (
-    PAYLOAD_DIGEST_SCHEME,
-    AuthorizationSnapshot,
-)
-from .authorization_snapshot_store import (
-    AuthorizationSnapshotPersistenceResult,
-    AuthorizationSnapshotStore,
-)
+from .authorization_snapshot import PAYLOAD_DIGEST_SCHEME, AuthorizationSnapshot
+from .authorization_snapshot_store import AuthorizationSnapshotStore
 from .capability_registry import ImmutableCapabilityRegistry
 from .evidence_primitives import canonical_json, new_id
 from .execution_contract import (
@@ -34,9 +28,6 @@ from .target_binding import TargetBinderRegistry
 from .trusted_clock import TrustedClockAuthority
 
 CAPABILITY_SELECTION_TYPE: Final = "capability-selection/v1"
-CAPABILITY_SELECTION_AUTHORITY_TYPE: Final = "capability-selection-authority/v1"
-AUTHORIZATION_SOURCE_TYPE: Final = "authoritative-snapshot-creator/v1"
-
 IdFactory = Callable[[str], str]
 
 
@@ -108,11 +99,7 @@ class CapabilitySelectionAuthority(Protocol):
 
 
 class ImmutableCapabilitySelectionAuthority:
-    """Explicit server-owned adapter-to-capability bridge.
-
-    An adapter name is never itself treated as execution authority. This authority merely
-    selects the canonical capability that must still pass the immutable capability registry.
-    """
+    """Explicit server-owned adapter-to-capability bridge."""
 
     def __init__(
         self,
@@ -148,8 +135,6 @@ class ImmutableCapabilitySelectionAuthority:
 
 @runtime_checkable
 class RevocationEpochAuthority(Protocol):
-    """Server-side live revocation observer required by snapshot creation."""
-
     def current_epoch(
         self,
         connection: DatabaseConnection,
@@ -161,19 +146,13 @@ class RevocationEpochAuthority(Protocol):
 
 
 class SnapshotAuthorizationDenied(PermissionError):
-    """Fail-closed authorization rejection with a bounded stable reason code."""
-
     def __init__(self, reason_code: str) -> None:
         super().__init__(reason_code)
         self.reason_code = _require_text(reason_code, field="reason_code")
 
 
 class AuthoritativeSnapshotCreator:
-    """Construct and persist one authorization snapshot in one datastore transaction.
-
-    The creator performs only authorization evidence construction. It does not issue grants,
-    dispatch work, invoke a Runner, or mutate provider state.
-    """
+    """Build and persist one authorization snapshot in one datastore transaction."""
 
     def __init__(
         self,
@@ -212,7 +191,6 @@ class AuthoritativeSnapshotCreator:
             raise ValueError("trusted_clock is invalid")
         if not callable(id_factory):
             raise ValueError("id_factory is invalid")
-
         self.db = database
         self.audit_ledger = audit_ledger
         self.snapshot_store = snapshot_store
@@ -242,10 +220,8 @@ class AuthoritativeSnapshotCreator:
         request_id = _require_text(request_id, field="request_id")
         idempotency_key = _require_text(idempotency_key, field="idempotency_key")
         correlation_id = _require_text(correlation_id, field="correlation_id")
-
         denied: SnapshotAuthorizationDenied | None = None
         result: AuthorizationSnapshot | None = None
-
         with self.db.transaction() as connection:
             try:
                 result = self._create_in_transaction(
@@ -268,7 +244,6 @@ class AuthoritativeSnapshotCreator:
                     },
                 )
                 denied = exc
-
         if denied is not None:
             raise denied
         if result is None:
@@ -289,7 +264,6 @@ class AuthoritativeSnapshotCreator:
             (request_id,),
         ).fetchone()
         request, payload = self._validated_request(request)
-
         selection = self._select_capability(str(request["adapter"]))
         capability_definition, capability_activation = self._resolve_capability(
             capability=selection.capability,
@@ -300,7 +274,6 @@ class AuthoritativeSnapshotCreator:
             payload=payload,
         )
         policy_revision = self._resolve_policy()
-
         approvals = self._approval_records(
             connection,
             request=request,
@@ -331,7 +304,6 @@ class AuthoritativeSnapshotCreator:
             policy_revision=policy_revision,
             approval_evidence=approval_evidence,
         )
-
         permission_decision = self.permission_authority.decide(
             PermissionQuery(
                 actor_id=actor_id,
@@ -342,14 +314,12 @@ class AuthoritativeSnapshotCreator:
         )
         if not permission_decision.granted:
             self._deny("EXECUTION_PERMISSION_DENIED")
-
         try:
             clock_witness = self.trusted_clock.witness(
                 environment=str(request["environment"])
             )
         except (LookupError, PermissionError, RuntimeError, ValueError):
             self._deny("TRUSTED_CLOCK_DENIED")
-
         authorized_at = clock_witness.observed_at
         authorized_at_value = datetime.fromisoformat(authorized_at)
         valid_until_value = datetime.fromisoformat(approval_valid_until)
@@ -358,11 +328,9 @@ class AuthoritativeSnapshotCreator:
         for approval in approvals:
             if datetime.fromisoformat(approval.approved_at) > authorized_at_value:
                 self._deny("APPROVAL_AFTER_AUTHORIZATION")
-
         emergency_stop = connection.execute(sql.SELECT_EMERGENCY_STOP).fetchone()
         if emergency_stop is not None and str(emergency_stop["value"]) == "1":
             self._deny("EMERGENCY_STOP_ACTIVE")
-
         try:
             revocation_epoch = self.revocation_authority.current_epoch(
                 connection,
@@ -374,7 +342,6 @@ class AuthoritativeSnapshotCreator:
             self._deny("REVOCATION_DENIED")
         if type(revocation_epoch) is not int or revocation_epoch < 0:
             self._deny("REVOCATION_EPOCH_INVALID")
-
         try:
             witness_set = AuthorityWitnessSet.create(
                 permission_decision=permission_decision,
@@ -388,7 +355,6 @@ class AuthoritativeSnapshotCreator:
             )
         except (PermissionError, ValueError):
             self._deny("AUTHORITY_WITNESS_INVALID")
-
         snapshot = AuthorizationSnapshot.create(
             snapshot_id=self._id_factory("authz"),
             execution_id=self._id_factory("exec"),
@@ -434,16 +400,13 @@ class AuthoritativeSnapshotCreator:
         if request is None:
             self._deny("CHANGE_REQUEST_NOT_FOUND")
         assert request is not None
-
         if str(request["status"]) != "APPROVED":
             self._deny("CHANGE_REQUEST_NOT_APPROVED")
         if str(request["environment"]) != str(request["workspace_environment"]):
             self._deny("WORKSPACE_ENVIRONMENT_MISMATCH")
-
         review_digest = request["review_content_sha256"]
         if not isinstance(review_digest, str) or not review_digest:
             self._deny("REVIEW_CONTENT_BINDING_MISSING")
-
         try:
             payload = json.loads(str(request["payload_json"]))
         except (TypeError, json.JSONDecodeError):
@@ -452,7 +415,6 @@ class AuthoritativeSnapshotCreator:
             self._deny("REQUEST_PAYLOAD_INVALID")
         if canonical_json(payload) != str(request["payload_json"]):
             self._deny("REQUEST_PAYLOAD_NON_CANONICAL")
-
         expected_review = hashlib.sha256(
             canonical_json(
                 {
@@ -486,7 +448,6 @@ class AuthoritativeSnapshotCreator:
         required = policy_revision.required_approvals_for(str(request["environment"]))
         if len(rows) != required:
             self._deny("APPROVAL_COUNT_MISMATCH")
-
         records: list[ApprovalRecord] = []
         approvers: set[str] = set()
         for row in rows:
@@ -591,9 +552,7 @@ class AuthoritativeSnapshotCreator:
                 "capability_selection_digest": selection.selection_digest,
                 "capability_selection_authority_revision": selection.authority_revision,
                 "policy_identity": witness_set.policy_identity,
-                "capability_definition_identity": (
-                    witness_set.capability_definition_identity
-                ),
+                "capability_definition_identity": witness_set.capability_definition_identity,
                 "capability_activation_digest": witness_set.capability_activation_digest,
                 "target_binding_digest": witness_set.target_binding_digest,
                 "approval_certificate_digest": witness_set.approval_certificate_digest,
