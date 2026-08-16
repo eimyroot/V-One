@@ -4,7 +4,7 @@
 |---|---|
 | Document class | Governance authority and adoption register |
 | Candidate preparation date | `2026-08-06` |
-| Latest recorded owner adoption date | `2026-08-10` |
+| Latest recorded owner adoption date | `2026-08-17` |
 | Scope | VOODOO One governance documents, accepted ADRs, and technical operating-standard succession |
 | Live repository authority | None; live Git, tests, CI, artifacts and runtime remain separate evidence sources |
 | Owner adoption effect | An explicit owner decision over an exact content SHA-256 and candidate commit creates adoption when recorded here without modifying the adopted content |
@@ -211,3 +211,32 @@ The owner-adopted bytes are exactly the content in the recorded candidate commit
 despite their embedded `REVISED PROPOSED` / `PROPOSED / PREPARED` labels. This external record is the
 effective adoption evidence. The adoption-record commit does not embed its own Git hash and does not
 authorize implementation, Runner runtime, release, deployment, or production effects.
+
+## 11. V-One Product & Architecture Thesis R2 owner adoption record
+
+```text
+DOCUMENT: docs/architecture/VONE_PRODUCT_ARCHITECTURE_THESIS_R2.md
+VERSION_OR_CANDIDATE_VERSION: V-One Product & Architecture Thesis R2
+DECLARED_STATUS: PROPOSED / REVIEW REQUIRED
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact candidate commit 5f4b752c46914a88c90e01c8e4993584441233f9 and exact content SHA-256 599365f369450754d09b61ca30d5ef813bc0297f8715e02f7631e0ed2e5cd37d after confirming the merged main document retains the same immutable Git blob
+ADOPTION_DATE: 2026-08-17
+ADOPTED_CONTENT_COMMIT: 5f4b752c46914a88c90e01c8e4993584441233f9
+CONTENT_SHA256: 599365f369450754d09b61ca30d5ef813bc0297f8715e02f7631e0ed2e5cd37d
+SUPERSEDES: none; establishes the owner-adopted Product & Architecture Thesis R2 baseline
+CONFLICTS_RESOLVED: merge and CI are explicitly not treated as adoption; the exact candidate bytes are adopted without modifying their embedded PROPOSED / REVIEW REQUIRED label; V-One is positioned as a Verifiable Operations Trust Plane with OperationCell/v1, Monotonic Authority, ExecutionCapsule, PreconditionWitness, Runner/Verifier separation and portable proof as target invariants; CASER, CASER-SOURCER, CASTER-MINAL and SandCloud responsibility boundaries are adopted as target boundaries, not claims of deployed completeness; commercial PMF/pricing remains UNPROVEN and requires customer validation; implementation, release, deployment, provider mutation and production effects remain separate authority decisions
+NEXT_REVIEW: before any material change to the product position, OperationCell/v1 trust chain, ecosystem responsibility boundaries, Monotonic Authority invariant, or after material contradictory implementation/market evidence
+IMPLEMENTATION_AUTHORIZATION: NOT_CREATED_BY_THIS_RECORD; any implementation authority must exist separately
+RELEASE: NOT_AUTHORIZED
+DEPLOYMENT: NOT_AUTHORIZED
+PROVIDER_MUTATION: NOT_AUTHORIZED
+PRODUCTION_EFFECTS: NOT_AUTHORIZED
+```
+
+The owner-adopted bytes are exactly those in candidate commit
+`5f4b752c46914a88c90e01c8e4993584441233f9` with the recorded SHA-256. The adoption-record commit
+modifies only this external governance register and does not modify the adopted Thesis R2 content.
+The embedded `PROPOSED / REVIEW REQUIRED` label is therefore preserved as historical declared status;
+this record establishes the effective `ADOPTED` status. This record does not itself authorize A8 or
+any later implementation, release, deployment, provider mutation, or production effect.
