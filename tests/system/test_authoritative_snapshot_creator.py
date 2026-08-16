@@ -254,7 +254,7 @@ def test_creator_builds_and_persists_snapshot_with_exact_authority_witness(
     assert snapshot.capability == "voodoo.echo/v1"
     assert snapshot.execution_target.target_kind == "artifact_path"
     assert snapshot.execution_target.target_claims["path"] == "proof/result.json"
-    assert snapshot.required_permission == "execution.run"
+    assert snapshot.to_dict()["required_permission"] == "execution.run"
 
     stored = subject.snapshot_store.get(snapshot.snapshot_id)
     assert stored == snapshot
