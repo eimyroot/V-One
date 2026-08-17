@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -34,10 +35,7 @@ LEASE_REVISION = "execution-lease/c4b-r1"
 
 
 def _digest(value: Any) -> str:
-    if isinstance(value, str):
-        raw = value
-    else:
-        raw = canonical_json(value)
+    raw = value if isinstance(value, str) else canonical_json(value)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -416,8 +414,12 @@ def run_live_pilot() -> dict[str, Any]:
         network_policy_digest=network_digest,
     )
 
-    database_path = Path("/tmp/vone-d4b-live-read.sqlite3")
-    database_path.unlink(missing_ok=True)
+    database_fd, database_name = tempfile.mkstemp(
+        prefix="vone-d4b-live-read-",
+        suffix=".sqlite3",
+    )
+    os.close(database_fd)
+    database_path = Path(database_name)
     database = SQLiteProductDatabase(database_path)
     database.initialize()
 
