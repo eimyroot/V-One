@@ -587,7 +587,7 @@ def test_missing_required_environment_trigger_fails_schema_validation(tmp_path: 
 
 def test_failed_pending_migration_rolls_back_complete_initialization(tmp_path: Path) -> None:
     migrations = copy_migrations(tmp_path)
-    (migrations / "0013_broken.sql").write_text(
+    (migrations / "0014_broken.sql").write_text(
         "CREATE TABLE migration_should_rollback (id INTEGER);\nTHIS IS NOT SQL;\n",
         encoding="utf-8",
     )
@@ -644,7 +644,7 @@ def test_concurrent_initialization_serializes_without_duplicate_history(tmp_path
 
     database = SQLiteProductDatabase(path)
     assert database.schema_version() == 13
-    assert len(migration_rows(database)) == 12
+    assert len(migration_rows(database)) == 13
 
 
 def test_postgresql_backend_fails_before_creating_local_database(tmp_path: Path) -> None:
@@ -672,7 +672,7 @@ def test_health_reports_released_backend_and_schema_version(tmp_path: Path) -> N
 
     assert response.status_code == 200
     assert response.json()["database_backend"] == "sqlite"
-    assert response.json()["schema_version"] == 12
+    assert response.json()["schema_version"] == 13
     assert response.json()["production_effects"] == "DISABLED"
 
     service = app.state.voodoo_product_service
