@@ -4,6 +4,7 @@ import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Final, Protocol, Self, runtime_checkable
 
 from .evidence_primitives import canonical_json
@@ -64,6 +65,20 @@ def _require_text(value: object, *, field: str) -> str:
     ):
         raise ValueError(f"{field} is invalid")
     return value
+
+
+def _require_timestamp(value: object, *, field: str) -> str:
+    text = _require_text(value, field=field)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field} is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field} must be timezone-aware")
+    canonical = parsed.astimezone(UTC).isoformat(timespec="milliseconds")
+    if text != canonical:
+        raise ValueError(f"{field} must use canonical UTC millisecond form")
+    return text
 
 
 def _require_digest(value: object, *, field: str) -> str:
@@ -198,10 +213,10 @@ class GitHubRefObservation:
             "execution_id",
             "source_identity",
             "clock_source_identity",
-            "observed_at",
             "observation_revision",
         ):
             _require_text(getattr(self, field), field=field)
+        _require_timestamp(self.observed_at, field="observed_at")
         if isinstance(self.execution_epoch, bool) or not isinstance(self.execution_epoch, int):
             raise ValueError("execution_epoch must be an integer")
         if self.execution_epoch < 1:
