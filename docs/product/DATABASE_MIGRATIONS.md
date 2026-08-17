@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `12`, verify evidence integrity again, and only then
+one new instance, require health schema version `13`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -52,10 +52,11 @@ sequence. It reconstructs existing order from the recorded `previous_hash → re
 the same exclusive migration transaction. A missing root, disconnected history, or branch prevents
 the guard row from satisfying its constraint and rolls back the complete migration.
 
-Migration `0004_execution_leases.sql` adds the execution fence, lease expiry and recovery index.
-Existing `RUNNING` rows receive their original `started_at` as an already-expired lease so they can be
-reviewed and explicitly recovered after emergency stop. Existing terminal rows retain a null lease
-and fence value `1`. The migration does not retry or silently reinterpret any execution outcome.
+Migration `0004_execution_leases.sql` adds the legacy execution fence, lease expiry and recovery
+index used by the pre-Phase-C `ExecutionService`. Existing `RUNNING` rows receive their original
+`started_at` as an already-expired lease so they can be reviewed and explicitly recovered after
+emergency stop. Existing terminal rows retain a null lease and fence value `1`. These legacy fields
+are not the proof-carrying C4 ExecutionEpoch authority introduced later by migration `0013`.
 
 Migration `0005_workspace_environment_boundary.sql` makes the workspace environment authoritative.
 Database triggers reject new or retargeted change requests whose environment differs from their
@@ -112,8 +113,20 @@ The service resolves and reconstructs the canonical durable outbox before admiss
 valid caller envelope is not treated as authority proof. SQLite `BEGIN IMMEDIATE` serialization makes
 the first admission durable before a concurrent redelivery can classify itself. Exact redelivery
 returns `DUPLICATE` without a second row; conflicting content for the already-admitted logical dispatch
-fails closed. UPDATE and DELETE are forbidden. Migration `0012` does not add a lease, ExecutionEpoch,
-RunnerIdentity, credential, handler invocation or provider effect.
+fails closed. UPDATE and DELETE are forbidden.
+
+Migration `0013_execution_epoch_leases.sql` adds the Phase-C C4b durable execution-attempt authority.
+`execution_leases_v1` is immutable history keyed by deterministic `ExecutionLease/v1` identity and
+binds every epoch to the exact durable C3 admission, execution/workspace/environment, capsule, runner
+class and trusted-clock acquire/expiry evidence. `execution_epoch_state_v1` is the single mutable
+current-head row for that admission. Database triggers require the first epoch to be `1`, allow only
+`N → N+1` active reacquisition after the recorded prior expiry, and allow only the current epoch to
+transition from `ACTIVE` to `COMPLETED` before its recorded expiry. Lease rows cannot be updated or
+deleted and epoch-state rows cannot be deleted. The application additionally constructs fresh
+`ClockWitness/v1` evidence inside the SQLite `BEGIN IMMEDIATE` serialization boundary, so concurrent
+reacquisition cannot allocate two successors and a superseded lease cannot record durable completion.
+This migration still does not introduce a concrete RunnerIdentity, credentials, handler invocation or
+provider mutation; those remain later execution-fabric gates.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
