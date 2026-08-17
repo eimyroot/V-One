@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `9`, verify evidence integrity again, and only then
+one new instance, require health schema version `10`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -83,6 +83,16 @@ environment and review-content digest. Unique execution, idempotency and snapsho
 ambiguous reuse; database triggers reject snapshot updates and deletes. This migration does not make
 the snapshot store an authorization authority and does not compose it into execution or production
 runtime paths.
+
+Migration `0010_durable_execution_grants.sql` adds append-only persistence for authoritative
+`ExecutionGrant/v2` artifacts and their ONE_TIME consumption witnesses. Grant rows bind one unique
+JTI, Grant ID, execution ID, AuthorizationSnapshot digest and ExecutionCapsule digest plus canonical
+Grant/conformance/clock evidence. A database trigger requires the Grant's snapshot, execution,
+request, workspace and environment to match one persisted AuthorizationSnapshot. Consumption rows
+bind one unique JTI/grant/execution to fresh conformance, trusted-clock and live-revocation evidence.
+Both tables reject UPDATE and DELETE. The application consumes grants only inside the released
+SQLite `BEGIN IMMEDIATE` global-write serialization boundary; PostgreSQL locking semantics remain
+unreleased.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
