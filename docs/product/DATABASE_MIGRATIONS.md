@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `10`, verify evidence integrity again, and only then
+one new instance, require health schema version `11`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -93,6 +93,17 @@ bind one unique JTI/grant/execution to fresh conformance, trusted-clock and live
 Both tables reject UPDATE and DELETE. The application consumes grants only inside the released
 SQLite `BEGIN IMMEDIATE` global-write serialization boundary; PostgreSQL locking semantics remain
 unreleased.
+
+Migration `0011_dispatch_outbox.sql` adds immutable `dispatch_outbox_v1` intents for the Phase-C
+transactional outbox. Each row is uniquely bound to one existing Grant consumption, JTI, Grant and
+execution and retains the exact C1a dispatch projection and canonical entry artifact. A database
+binding trigger verifies the durable Grant/consumption relations available as scalar columns; UPDATE
+and DELETE fail closed. The Phase-C application path appends the Grant consumption and exact outbox
+intent in the same SQLite `BEGIN IMMEDIATE` transaction. If the outbox append fails, the consumption
+rolls back as part of the same transaction. The migration does not synthesize outbox records for
+historical B4-only consumptions: such history is valid authority-consumption evidence but is not
+retroactively dispatch eligible. Delivery state, attempts and acknowledgements remain separate future
+records; migration `0011` does not add a dispatcher or provider effect.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
