@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import http.client
 import json
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import Final
 
 from .execution_capsule import ExecutionCapsule
@@ -138,7 +137,6 @@ class GitHubApiRefReadTransport:
         base = _require_text(api_base_url, field="api_base_url").rstrip("/")
         if base != "https://api.github.com":
             raise ValueError("D4b GitHub API base URL must be https://api.github.com")
-        self._api_base_url = base
 
     def read_ref(self, *, repository: str, ref: str) -> str:
         repository = _require_text(repository, field="repository")
@@ -147,23 +145,27 @@ class GitHubApiRefReadTransport:
             raise ValueError("ref must be fully qualified")
         ref_path = urllib.parse.quote(ref.removeprefix("refs/"), safe="/")
         repository_path = urllib.parse.quote(repository, safe="/")
-        request = urllib.request.Request(
-            f"{self._api_base_url}/repos/{repository_path}/git/ref/{ref_path}",
-            method="GET",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self._token}",
-                "User-Agent": "v-one-d4b-live-read-pilot",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+        path = f"/repos/{repository_path}/git/ref/{ref_path}"
+        connection = http.client.HTTPSConnection("api.github.com", 443, timeout=15)
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
-                raw = json.load(response)
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"GitHub READ failed with HTTP {exc.code}") from exc
-        except urllib.error.URLError as exc:
+            connection.request(
+                "GET",
+                path,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self._token}",
+                    "User-Agent": "v-one-d4b-live-read-pilot",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            response = connection.getresponse()
+            if response.status != 200:
+                raise RuntimeError(f"GitHub READ failed with HTTP {response.status}")
+            raw = json.loads(response.read().decode("utf-8"))
+        except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
             raise RuntimeError("GitHub READ transport failed") from exc
+        finally:
+            connection.close()
         if not isinstance(raw, dict):
             raise RuntimeError("GitHub READ response is invalid")
         obj = raw.get("object")
