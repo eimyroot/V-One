@@ -117,7 +117,7 @@ def test_service_accepts_injected_database_adapter(tmp_path: Path) -> None:
     service = ProductService(config(tmp_path), database=database)
 
     assert service.db is database
-    assert service.health()["schema_version"] == 11
+    assert service.health()["schema_version"] == 12
 
 
 def test_service_source_has_no_sqlite_runtime_dependency() -> None:
