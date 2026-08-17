@@ -1,0 +1,52 @@
+name: c4b-migration-expectation-fix
+
+on:
+  push:
+    branches:
+      - feat/durable-execution-epoch-lease-r1
+    paths:
+      - .github/workflows/c4b-migration-expectation-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-migration-expectations:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: true
+          ref: feat/durable-execution-epoch-lease-r1
+      - name: Patch exact v13 regression expectations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/system/test_database_migrations.py")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              '(migrations / "0013_broken.sql")': '(migrations / "0014_broken.sql")',
+              'assert len(migration_rows(database)) == 12': 'assert len(migration_rows(database)) == 13',
+              'assert response.json()["schema_version"] == 12': 'assert response.json()["schema_version"] == 13',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one occurrence of {old!r}, found {count}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
+          git diff --check
+          git diff -- tests/system/test_database_migrations.py
+      - name: Commit exact migration expectation fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Eimy Herrer"
+          git config user.email "fck.police.228@gmail.com"
+          git add tests/system/test_database_migrations.py
+          git commit -m "test(migrations): fix remaining schema 13 expectations"
+          git push origin HEAD:feat/durable-execution-epoch-lease-r1
