@@ -116,7 +116,7 @@ if [[ -n "$evidence_directory" ]]; then
   printf '%s\n' "$health_payload" >"$evidence_directory/08_APPLICATION_HEALTH.json"
 fi
 printf '%s\n' "$health_payload" | \
-  docker exec --interactive "$container" python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "HEALTHY"; assert data["database_backend"] == "sqlite"; assert data["schema_version"] == 12; assert data["production_effects"] == "DISABLED"'
+  docker exec --interactive "$container" python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "HEALTHY"; assert data["database_backend"] == "sqlite"; assert data["schema_version"] == 13; assert data["production_effects"] == "DISABLED"'
 
 if [[ -n "$evidence_directory" ]]; then
   docker_health_status=""
