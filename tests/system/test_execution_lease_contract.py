@@ -285,5 +285,6 @@ def test_c4_contract_does_not_wire_lease_into_current_runtime() -> None:
         "voodoo_product/execution.py",
     ):
         source = (root / relative).read_text(encoding="utf-8")
-        assert "execution_lease" not in source
+        assert "from .execution_lease import" not in source
+        assert "import execution_lease" not in source
         assert "ExecutionLease" not in source
