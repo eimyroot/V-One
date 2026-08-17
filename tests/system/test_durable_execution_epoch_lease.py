@@ -111,16 +111,32 @@ def seed_durable_admission(database: SQLiteProductDatabase) -> DispatchInboxAdmi
             """
             INSERT INTO change_requests(
                 id, workspace_id, title, description, risk, environment, adapter,
-                payload_json, status, requested_by, created_at, updated_at,
-                review_content_sha256
+                payload_json, status, requested_by, created_at, updated_at
             ) VALUES (
                 'cr_c4b', 'wrk_main', 'C4b', '', 'R1', 'local', 'echo', '{}',
-                'APPROVED', 'usr_admin',
+                'DRAFT', 'usr_admin',
                 '2026-08-17T05:00:00.000+00:00',
-                '2026-08-17T05:02:00.000+00:00', ?
+                '2026-08-17T05:00:00.000+00:00'
             )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE change_requests
+            SET status = 'REVIEW_REQUIRED',
+                review_content_sha256 = ?,
+                updated_at = '2026-08-17T05:01:00.000+00:00'
+            WHERE id = 'cr_c4b'
             """,
             (REVIEW_DIGEST,),
+        )
+        connection.execute(
+            """
+            UPDATE change_requests
+            SET status = 'APPROVED',
+                updated_at = '2026-08-17T05:02:00.000+00:00'
+            WHERE id = 'cr_c4b'
+            """
         )
         connection.execute(
             """
