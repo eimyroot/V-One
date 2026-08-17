@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `11`, verify evidence integrity again, and only then
+one new instance, require health schema version `12`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -104,6 +104,16 @@ rolls back as part of the same transaction. The migration does not synthesize ou
 historical B4-only consumptions: such history is valid authority-consumption evidence but is not
 retroactively dispatch eligible. Delivery state, attempts and acknowledgements remain separate future
 records; migration `0011` does not add a dispatcher or provider effect.
+
+Migration `0012_dispatch_inbox.sql` adds append-only `dispatch_inbox_v1` admissions for Phase-C C3b.
+Each row binds one unique logical `dispatch_id` to one exact existing `dispatch_outbox_v1` row, its
+entry digest, execution identity, workspace/environment, ExecutionCapsule digest and runner class.
+The service resolves and reconstructs the canonical durable outbox before admission; a structurally
+valid caller envelope is not treated as authority proof. SQLite `BEGIN IMMEDIATE` serialization makes
+the first admission durable before a concurrent redelivery can classify itself. Exact redelivery
+returns `DUPLICATE` without a second row; conflicting content for the already-admitted logical dispatch
+fails closed. UPDATE and DELETE are forbidden. Migration `0012` does not add a lease, ExecutionEpoch,
+RunnerIdentity, credential, handler invocation or provider effect.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
