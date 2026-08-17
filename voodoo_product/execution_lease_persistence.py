@@ -7,7 +7,6 @@ from typing import Final, NoReturn
 from .dispatch_inbox import DispatchInboxAdmission
 from .evidence_primitives import canonical_json
 from .execution_lease import (
-    ExecutionFenceDenied,
     ExecutionLease,
     assert_next_execution_epoch,
 )
