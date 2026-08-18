@@ -21,7 +21,7 @@ from .evidence_primitives import canonical_json
 from .execution_lease import ExecutionLease
 from .github_create_ref_provider import GitHubCreateRefRequest
 from .grant_consumption import GrantConsumptionWitness
-from .isolated_runner import CurrentExecutionFence, IsolatedRuntimeBootstrap, READ_ONLY_MOUNT_MODE
+from .isolated_runner import READ_ONLY_MOUNT_MODE, CurrentExecutionFence, IsolatedRuntimeBootstrap
 from .precondition_witness import ATOMIC_PROVIDER_CONDITION
 from .runner_identity import DENY_ALL_NETWORK_DEFAULT, RunnerIdentity
 from .trusted_clock import ClockWitness, TrustedClockAuthority
@@ -39,7 +39,7 @@ from .write_boundary import (
 EPHEMERAL_WRITE_CREDENTIAL_DELIVERY_TYPE: Final = "ephemeral-write-credential-delivery/v1"
 WRITE_RUNTIME_ACTIVATION_TYPE: Final = "write-runtime-activation/v1"
 WRITE_EFFECT_PREFLIGHT_TYPE: Final = "write-effect-preflight/v1"
-OUT_OF_BAND_SECRET_CHANNEL: Final = "out-of-band-secret-channel/v1"
+OUT_OF_BAND_CREDENTIAL_CHANNEL: Final = "out-of-band-secret-channel/v1"
 
 _DELIVERY_FIELDS = frozenset(
     {
@@ -297,7 +297,7 @@ class EphemeralWriteCredentialDelivery:
             raise ValueError("F4a credential delivery must be WRITE_BOUNDED")
         if self.provider_operation != CREATE_REF_OPERATION:
             raise ValueError("F4a credential delivery operation must be CREATE_REF")
-        if self.delivery_channel_identity != OUT_OF_BAND_SECRET_CHANNEL:
+        if self.delivery_channel_identity != OUT_OF_BAND_CREDENTIAL_CHANNEL:
             raise ValueError("F4a credential delivery channel is unsupported")
         if self.secret_material_exposed is not False:
             raise ValueError("F4a evidence must never expose secret material")
@@ -351,7 +351,7 @@ class EphemeralWriteCredentialDelivery:
             "provider_operation": decision.provider_operation,
             "valid_from": decision.valid_from,
             "expires_at": decision.expires_at,
-            "delivery_channel_identity": OUT_OF_BAND_SECRET_CHANNEL,
+            "delivery_channel_identity": OUT_OF_BAND_CREDENTIAL_CHANNEL,
             "clock_witness_digest": clock_witness.witness_digest,
             "delivered_at": clock_witness.observed_at,
             "secret_material_exposed": False,
@@ -1005,7 +1005,7 @@ def _assert_delivery(
         "provider_operation": decision.provider_operation,
         "valid_from": decision.valid_from,
         "expires_at": decision.expires_at,
-        "delivery_channel_identity": OUT_OF_BAND_SECRET_CHANNEL,
+        "delivery_channel_identity": OUT_OF_BAND_CREDENTIAL_CHANNEL,
         "secret_material_exposed": False,
     }
     actual = {
