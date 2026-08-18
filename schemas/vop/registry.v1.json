@@ -2,6 +2,7 @@
   "schema_version": 1,
   "kind": "vop-schema-registry/v1",
   "vocabulary_type": "vop-canonical-vocabulary/v1",
+  "vocabulary_revision": "vop-terminology-freeze-r1",
   "status": "RESERVED_IDS",
   "canonical_schema_ids": [
     "operation-request/v1",
@@ -13,12 +14,30 @@
     "authority-witness-set/v1",
     "authorization-snapshot/v1",
     "execution-grant/v1",
+    "execution-grant/v2",
     "execution-capsule/v1",
+    "grant-consumption-witness/v1",
+    "dispatch-outbox-entry/v1",
     "dispatch-envelope/v1",
+    "dispatch-inbox-admission/v1",
+    "execution-lease/v1",
+    "runner-identity/v1",
+    "runner-boundary/v1",
+    "credential-access-decision/v1",
+    "isolated-runtime-bootstrap/v1",
+    "read-only-runtime-activation/v1",
+    "github-ref-observation/v1",
     "execution-receipt/v1",
+    "verifier-identity/v1",
+    "independent-verification-boundary/v1",
+    "verifier-credential-policy/v1",
+    "verifier-credential-decision/v1",
     "verification-result/v1",
     "operation-proof/v1"
   ],
+  "schema_supersessions": {
+    "execution-grant/v1": "execution-grant/v2"
+  },
   "identity_grammar": [
     "logical_identity",
     "content_identity",
@@ -29,6 +48,8 @@
     "causation_id",
     "correlation_id"
   ],
+  "surface_consistency_rule": "Stejný VOP termín musí mít napříč kódem, docs, receipts, API a UI jeden význam.",
+  "semantic_change_rule": "Změna významu vyžaduje nový termín nebo novou verzi.",
   "activation_rule": "A reserved schema ID becomes an implemented schema only when its concrete contract, semantic invariants, canonical serialization, and conformance tests exist in the repository.",
-  "authority_rule": "Registry presence reserves semantic identity; it does not create runtime authorization, implementation, release, deployment, or production authority."
+  "authority_rule": "Registry presence reserves semantic identity; it does not create runtime authorization, implementation, verification, release, deployment, or production authority."
 }
