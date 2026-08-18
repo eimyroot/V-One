@@ -6,6 +6,7 @@
 | Scope | Product, architecture, evidence, and roadmap language |
 | Rule | New public terms require documentation and compatibility review |
 | VOP authority | `docs/architecture/VOP_CANONICAL_VOCABULARY.md` + `voodoo_product/vop_vocabulary.py` |
+| VOP freeze | ADR-0014 / `vop-terminology-freeze-r1` |
 
 ## Canonical-language boundary
 
@@ -14,9 +15,16 @@ must have one canonical term, one contract identity, and one authoritative defin
 explain broader product/foundation terms, but it must not redefine VOP nouns, verbs, relations,
 identity grammar, or shared CORE status language in parallel.
 
+The normative cross-surface invariant is:
+
+> **Stejný VOP termín musí mít napříč kódem, docs, receipts, API a UI jeden význam. Změna významu vyžaduje nový termín nebo novou verzi.**
+
 Machine-readable VOP vocabulary lives in `voodoo_product/vop_vocabulary.py`. Reserved canonical
-schema identities live in `schemas/vop/registry.v1.json`. Existing operation semantics consume the
-shared VOP operation-stage sequence instead of defining another copy.
+schema identities and supersession lineage live in `schemas/vop/registry.v1.json`. Existing operation
+semantics consume the shared VOP operation-stage sequence instead of defining another copy.
+
+Historical VOP identities remain reserved for auditability. Their existence must not be used to
+silently reinterpret a current contract under an older semantic version.
 
 ## Product terms
 
@@ -62,7 +70,8 @@ verifier, or proof meanings.
 A canonical `operation-proof/v1` value binding operation semantics, authorization snapshot,
 execution grant, execution receipt, and independent verification into one deterministic proof
 digest. It is accepted only when exact cross-contract bindings hold and when the verifier is
-independent from the actor and runner.
+independent from the actor and runner. Existing proof-composition code is not evidence that the
+future Phase-G portable OperationProof gate is complete.
 
 ### Skill orchestration plan
 
@@ -88,7 +97,8 @@ Current canonical gate names are `change_has_purpose_and_system_benefit` for dev
 ### Execution
 
 One governed attempt to apply an authorized capability. It has an identity, idempotency binding,
-lease, fence, state, result, receipt, and audit trail. Execution success is not Verification success.
+durable dispatch lineage, ExecutionEpoch, ExecutionLease, fence, state, result, receipt, and audit
+trail. Execution success is not Verification success.
 
 ### Production effects
 
@@ -111,10 +121,20 @@ An append-only record of a material decision or action in the control plane.
 A structured record of an execution result, chained for integrity. A receipt is an executor-side
 claim and must not be treated as independent verification.
 
+### Observation
+
+A bounded provider or target-state observation. An Observation is evidence input; it is not by itself
+a VerificationResult.
+
 ### Independent verification
 
 A separate verification claim for observed target state and postconditions. It is not produced by
 the runner and is required before a successful receipt can become a verified operation proof.
+
+### Verification result
+
+An independent determination of observed real post-state bound to the verifier path. It is distinct
+from Runner execution evidence, Observation and OperationProof.
 
 ### Evidence verification
 
@@ -158,29 +178,81 @@ Capability, not replacements for its VOP semantic identity.
 
 ### Execution grant
 
-The pure deterministic `execution-grant/v1` value object accepted by ADR-0007. It binds one
-execution to an exact artifact, target, policy, capability, expiry, nonce, and fence as a canonical
-representation. Authoritative issuance and one-time runtime consumption are separate concerns and
-must not be inferred merely from the existence of this contract.
+`ExecutionGrant` is the canonical semantic noun. Its contract version must always be stated when
+version-specific behavior matters.
+
+`execution-grant/v1` is retained as a **historical deterministic value-contract identity** accepted
+by ADR-0007. It must not be described as the current authoritative runtime execution authority.
+
+The current authoritative runtime authority contract is:
+
+```text
+execution-grant/v2
+```
+
+It is issued from exact immutable authorization evidence and is ONE_TIME. Durable grant consumption
+is owned by the control plane before Dispatch; possession of the contract alone does not prove
+issuance, consumption or current execution eligibility.
+
+### Grant consumption witness
+
+`grant-consumption-witness/v1` is durable evidence that one ONE_TIME `ExecutionGrant/v2` was consumed
+through the released control-plane lineage before dispatch. It is not produced by the Runner.
+
+### Dispatch
+
+The durable handoff of already-authorized execution intent after Grant consumption. Current Phase-C
+contracts include `dispatch-outbox-entry/v1`, `dispatch-envelope/v1` and
+`dispatch-inbox-admission/v1`.
+
+### Execution epoch
+
+The monotonic coordination generation used to fence obsolete execution attempts. ExecutionEpoch is
+coordination state, not authority.
+
+### Execution lease
+
+`execution-lease/v1` is the time-bounded coordination lease for one current ExecutionEpoch. A lease
+cannot widen authorization or resurrect an expired/revoked Grant.
 
 ### Authoritative grant issuance
 
-The governed operation that emits a short-lived ExecutionGrant from an immutable authorized state and
-exact execution constraints. It is separate from Approval, AuthorizationSnapshot representation, and
-Runner execution.
+The governed operation that emits a short-lived `ExecutionGrant/v2` from an immutable authorized
+state and exact execution constraints. It is separate from Approval, AuthorizationSnapshot
+representation, Grant consumption, Dispatch and Runner execution.
 
 ### Runner
 
-An isolated process or service that validates and consumes a scoped grant, executes only the exact
-allowed capability/handler under its execution boundary, and emits an ExecutionReceipt. The Runner
-does not independently verify real provider post-state; that belongs to a separate verifier identity
-and verification path. The isolated Runner runtime remains a separately governed implementation
-boundary described by ADR-0008 and its threat model.
+An isolated execution principal that performs only the exact already-authorized capability/handler
+under current durable dispatch and lease state and emits execution evidence. The Runner **does not
+issue or consume the Grant**, does not allocate its own authority epoch, and does not independently
+verify real provider post-state. Those responsibilities belong to the V-One control plane and
+independent verifier respectively.
+
+### Runner identity
+
+`runner-identity/v1` is content-addressed descriptive identity evidence for one concrete Runner
+instance. It is not authorization, a credential or independent verification.
+
+### Runner boundary
+
+`runner-boundary/v1` is the fail-closed safety ceiling binding one Runner to exact lease, capsule and
+capability semantics. It cannot manufacture authority.
 
 ### Handler
 
 The exact implementation selected to perform a Capability under an eligible Runner boundary. A
 Handler translates VOP semantics into provider/runtime behavior; it does not create authority.
+
+### Credential access decision
+
+`credential-access-decision/v1` is serializable narrowing metadata for out-of-band READ credential
+delivery. It contains no usable secret material and is not execution authority.
+
+### Runtime activation
+
+A versioned runtime activation is evidence that an eligible isolated execution boundary was activated
+for use. Activation evidence is not provider-effect verification.
 
 ### Fence
 
@@ -192,7 +264,36 @@ replacement.
 An execution result where effects may have occurred but trustworthy final state is unavailable. It
 must not be silently treated as verification success or blindly retried.
 
+## Verification-plane terms
+
+### Verifier identity
+
+`verifier-identity/v1` is content-addressed verifier identity evidence. VerifierIdentity must remain
+separate from RunnerIdentity.
+
+### Independent verification boundary
+
+`independent-verification-boundary/v1` binds exact Runner evidence to a separate Verifier identity,
+provider instance and credential class while preserving READ_ONLY / DENY_ALL / no-provider-mutation
+ceilings. The boundary is not itself a VerificationResult.
+
+### Verifier credential decision
+
+`verifier-credential-decision/v1` is reserved for verifier-specific READ-only credential decision
+metadata. It must not contain secret material or reuse the Runner credential class.
+
 ## Integration terms
+
+### SandCloud
+
+A governed **non-canonical staging, review, validation and evidence layer**. SandCloud is not project
+truth, authorization authority or the execution boundary. Historical ADR-0013 wording that used
+SandCloud as the provider-neutral name for isolated execution is superseded by ADR-0014.
+
+### CASTER-MINAL
+
+The governed execution control surface that hands an already-authorized operation plan to an eligible
+isolated Runner. CASTER-MINAL does not manufacture Authorization or widen authority.
 
 ### CyberCore
 
