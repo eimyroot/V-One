@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import json
-import urllib.error
+import socket
 import urllib.parse
-import urllib.request
 from collections.abc import Mapping
 from typing import Any, Final
 
@@ -14,7 +14,7 @@ from .github_create_ref_provider import (
     GitHubCreateRefRequest,
 )
 
-GITHUB_API_BASE: Final = "https://api.github.com"
+GITHUB_API_HOST: Final = "api.github.com"
 GITHUB_API_VERSION: Final = "2022-11-28"
 GITHUB_ACCEPT: Final = "application/vnd.github+json"
 USER_AGENT: Final = "v-one-f4b-create-ref/1"
@@ -28,9 +28,9 @@ class GitHubCreateRefTransportAmbiguous(RuntimeError):
 class GitHubApiCreateRefTransport:
     """One-shot concrete F4b transport for GitHub's create-reference endpoint.
 
-    The token is process-local secret material and is never serialized. This adapter intentionally
-    exposes only ``create_ref`` and refuses a second invocation even after a provider rejection.
-    Network/transport ambiguity is fail-closed and never retried automatically.
+    The host and HTTPS transport are fixed in code. The token stays process-local and is never
+    serialized. The adapter exposes one create operation and refuses a second invocation even after
+    a rejection. Network ambiguity is fail-closed and never retried automatically.
     """
 
     source_identity = GITHUB_CREATE_REF_SOURCE_IDENTITY
@@ -58,8 +58,8 @@ class GitHubApiCreateRefTransport:
         self._used = True
 
         owner, repository = request.repository.split("/", 1)
-        endpoint = (
-            f"{GITHUB_API_BASE}/repos/{urllib.parse.quote(owner, safe='')}"
+        path = (
+            f"/repos/{urllib.parse.quote(owner, safe='')}"
             f"/{urllib.parse.quote(repository, safe='')}/git/refs"
         )
         payload = json.dumps(
@@ -67,39 +67,30 @@ class GitHubApiCreateRefTransport:
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        provider_request = urllib.request.Request(
-            endpoint,
-            data=payload,
-            method="POST",
-            headers={
-                "Accept": GITHUB_ACCEPT,
-                "Authorization": f"Bearer {self._token}",
-                "X-GitHub-Api-Version": GITHUB_API_VERSION,
-                "User-Agent": USER_AGENT,
-                "Content-Type": "application/json",
-            },
+        headers = {
+            "Accept": GITHUB_ACCEPT,
+            "Authorization": f"Bearer {self._token}",
+            "X-GitHub-Api-Version": GITHUB_API_VERSION,
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/json",
+        }
+        connection = http.client.HTTPSConnection(
+            GITHUB_API_HOST,
+            timeout=self._timeout_seconds,
         )
-
         try:
-            with urllib.request.urlopen(
-                provider_request,
-                timeout=self._timeout_seconds,
-            ) as response:
-                status_code = int(response.status)
-                body = response.read()
-        except urllib.error.HTTPError as exc:
-            # HTTPError proves that GitHub returned a classified HTTP response. Never retry here.
-            return GitHubCreateRefProviderResponse.rejected(
-                status_code=int(exc.code),
-                source_identity=self.source_identity,
-                response_revision=RESPONSE_REVISION,
-            )
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            # The request may have crossed the network boundary before failure. Retrying could
-            # create a second ambiguous effect, so expose UNKNOWN/ambiguous outcome instead.
+            connection.request("POST", path, body=payload, headers=headers)
+            response = connection.getresponse()
+            status_code = int(response.status)
+            body = response.read()
+        except (http.client.HTTPException, TimeoutError, OSError, socket.error) as exc:
+            # The request might already have reached GitHub. Automatic retry could duplicate an
+            # ambiguous effect, so stop and require independent readback/reconciliation.
             raise GitHubCreateRefTransportAmbiguous(
                 "F4B_CREATE_REF_PROVIDER_OUTCOME_AMBIGUOUS_NO_RETRY"
             ) from exc
+        finally:
+            connection.close()
 
         if status_code != 201:
             return GitHubCreateRefProviderResponse.rejected(
