@@ -1,0 +1,354 @@
+name: e4b-live-verification-result
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/e4b-live-verification-result.yml"
+      - ".github/workflows/e3-live-verifier-read.yml"
+      - ".github/workflows/d4b-live-read.yml"
+      - "Dockerfile.product"
+      - "requirements-product.lock"
+      - "voodoo_product/**"
+      - "tests/system/test_e4b_live_verification_pilot.py"
+      - "docs/product/E4B_LIVE_VERIFICATION_RESULT_R1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e4b-live-verification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runner-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      runner_result_b64: ${{ steps.capture-runner-evidence.outputs.runner_result_b64 }}
+
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Build content-addressed runner image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-e4b-runner:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_E4B_RUNNER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_RUNTIME_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded runner runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_E4B_RUNNER_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated read-only runner runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-e4b-runner-${GITHUB_RUN_ID}"
+          CONTAINER="vone-e4b-runner-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_E4B_RUNNER_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_E4B_RUNNER_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_E4B_RUNNER_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_E4B_RUNNER_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_E4B_RUNNER_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_E4B_RUNNER_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce runner default-deny egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -I DOCKER-USER 1 -s "$VONE_E4B_RUNNER_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_E4B_RUNNER_CONTAINER_IP" \
+            -d "$VONE_E4B_RUNNER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_E4B_RUNNER_CONTAINER_IP" \
+            -d "$VONE_E4B_RUNNER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER -s "$VONE_E4B_RUNNER_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary runner egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_E4B_RUNNER_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "E4B_RUNNER_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "E4B_RUNNER_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute governed Runner observation
+        shell: bash
+        env:
+          E4B_RUNNER_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PROVIDER_INSTANCE_ID="gha-runner:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_E4B_RUNNER_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$E4B_RUNNER_GITHUB_TOKEN" \
+            -e "VONE_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_RUNTIME_ROOTFS_DIGEST=$VONE_RUNTIME_ROOTFS_DIGEST" \
+            -e "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_NETWORK_POLICY_DIGEST=$VONE_NETWORK_POLICY_DIGEST" \
+            -e "VONE_TARGET_REPOSITORY=$GITHUB_REPOSITORY" \
+            -e "VONE_TARGET_REF=refs/heads/main" \
+            "$VONE_E4B_RUNNER_CONTAINER" \
+            python -m voodoo_product.d4b_live_pilot \
+            | tee "$RUNNER_TEMP/e4b-runner-observation.log"
+          grep -Fx "D4B_LIVE_GOVERNED_READ=PASS" "$RUNNER_TEMP/e4b-runner-observation.log"
+
+      - name: Capture sanitized Runner evidence
+        id: capture-runner-evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNER_JSON="$(tail -n1 "$RUNNER_TEMP/e4b-runner-observation.log")"
+          python - "$RUNNER_JSON" <<'PY'
+          import json
+          import sys
+          value = json.loads(sys.argv[1])
+          assert value["pilot"] == "d4b-live-governed-read/v1"
+          assert value["status"] == "PASS"
+          assert value["phase_d_effect_ceiling"] == "READ_ONLY"
+          assert value["provider_mutation_allowed"] is False
+          PY
+          RUNNER_B64="$(printf '%s' "$RUNNER_JSON" | base64 -w0)"
+          echo "runner_result_b64=$RUNNER_B64" >> "$GITHUB_OUTPUT"
+
+      - name: Cleanup runner runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_E4B_RUNNER_CONTAINER_IP:-}" ] && [ -n "${VONE_E4B_RUNNER_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_E4B_RUNNER_CONTAINER_IP" \
+              -d "$VONE_E4B_RUNNER_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER -s "$VONE_E4B_RUNNER_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_E4B_RUNNER_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_E4B_RUNNER_CONTAINER"
+          fi
+          if [ -n "${VONE_E4B_RUNNER_NETWORK:-}" ]; then
+            docker network rm "$VONE_E4B_RUNNER_NETWORK"
+          fi
+
+  verifier-and-result:
+    needs: runner-observation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Build content-addressed verifier image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-e4b-verifier:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_E4B_VERIFIER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded verifier runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_E4B_VERIFIER_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated read-only verifier runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-e4b-verifier-${GITHUB_RUN_ID}"
+          CONTAINER="vone-e4b-verifier-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_E4B_VERIFIER_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_E4B_VERIFIER_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_E4B_VERIFIER_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_E4B_VERIFIER_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_E4B_VERIFIER_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_E4B_VERIFIER_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce verifier default-deny egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -I DOCKER-USER 1 -s "$VONE_E4B_VERIFIER_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_E4B_VERIFIER_CONTAINER_IP" \
+            -d "$VONE_E4B_VERIFIER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_E4B_VERIFIER_CONTAINER_IP" \
+            -d "$VONE_E4B_VERIFIER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER -s "$VONE_E4B_VERIFIER_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary verifier egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_E4B_VERIFIER_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "E4B_VERIFIER_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "E4B_VERIFIER_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute independent Verifier observation
+        shell: bash
+        env:
+          E4B_VERIFIER_GITHUB_TOKEN: ${{ github.token }}
+          E4B_RUNNER_RESULT_B64: ${{ needs.runner-observation.outputs.runner_result_b64 }}
+        run: |
+          set -euo pipefail
+          PROVIDER_INSTANCE_ID="gha-verifier:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_E4B_VERIFIER_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$E4B_VERIFIER_GITHUB_TOKEN" \
+            -e "VONE_VERIFIER_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_VERIFIER_ROOTFS_DIGEST=$VONE_VERIFIER_ROOTFS_DIGEST" \
+            -e "VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_VERIFIER_NETWORK_POLICY_DIGEST=$VONE_VERIFIER_NETWORK_POLICY_DIGEST" \
+            -e "VONE_RUNNER_RESULT_B64=$E4B_RUNNER_RESULT_B64" \
+            "$VONE_E4B_VERIFIER_CONTAINER" \
+            python -m voodoo_product.e3_live_verifier_pilot \
+            | tee "$RUNNER_TEMP/e4b-e3-verifier-observation.log"
+          grep -Fx "E3_LIVE_INDEPENDENT_VERIFIER_OBSERVATION=PASS" \
+            "$RUNNER_TEMP/e4b-e3-verifier-observation.log"
+
+      - name: Evaluate live E4 VerificationResult without provider credential
+        shell: bash
+        env:
+          E4B_RUNNER_RESULT_B64: ${{ needs.runner-observation.outputs.runner_result_b64 }}
+        run: |
+          set -euo pipefail
+          E3_JSON="$(tail -n1 "$RUNNER_TEMP/e4b-e3-verifier-observation.log")"
+          E3_B64="$(printf '%s' "$E3_JSON" | base64 -w0)"
+          docker exec \
+            -e "VONE_RUNNER_RESULT_B64=$E4B_RUNNER_RESULT_B64" \
+            -e "VONE_E3_RESULT_B64=$E3_B64" \
+            "$VONE_E4B_VERIFIER_CONTAINER" \
+            python -m voodoo_product.e4b_live_verification_pilot \
+            | tee "$RUNNER_TEMP/e4b-verification-result.log"
+          grep -Fx "E4B_LIVE_VERIFICATION_RESULT=VERIFIED" \
+            "$RUNNER_TEMP/e4b-verification-result.log"
+
+      - name: Assert and summarize live VerificationResult evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          E4B_JSON="$(tail -n1 "$RUNNER_TEMP/e4b-verification-result.log")"
+          python - "$E4B_JSON" <<'PY'
+          import json
+          import sys
+          value = json.loads(sys.argv[1])
+          assert value["pilot"] == "e4b-live-verification-result/v1"
+          assert value["phase_e_effect_ceiling"] == "READ_ONLY"
+          assert value["provider_mutation_allowed"] is False
+          result = value["verification_result"]
+          strength = value["verification_strength"]
+          assert result["result_type"] == "verification-result/v1"
+          assert result["verdict"] == "VERIFIED"
+          assert result["reason"] == "OBSERVED_STATE_MATCH"
+          assert strength["strength_type"] == "verification-strength/v1"
+          assert strength["strength_class"] == "INDEPENDENT_PROVIDER_READBACK"
+          assert strength["temporal_model"] == "SEQUENTIAL_READBACK_NON_ATOMIC"
+          assert strength["provider_mutation_allowed"] is False
+          assert value["runner_observation"]["commit_sha"] == value["verifier_observation"]["commit_sha"]
+          PY
+          {
+            echo "### E4b live VerificationResult"
+            echo
+            echo '```json'
+            printf '%s\n' "$E4B_JSON"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup verifier runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_E4B_VERIFIER_CONTAINER_IP:-}" ] && [ -n "${VONE_E4B_VERIFIER_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_E4B_VERIFIER_CONTAINER_IP" \
+              -d "$VONE_E4B_VERIFIER_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER -s "$VONE_E4B_VERIFIER_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_E4B_VERIFIER_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_E4B_VERIFIER_CONTAINER"
+          fi
+          if [ -n "${VONE_E4B_VERIFIER_NETWORK:-}" ]; then
+            docker network rm "$VONE_E4B_VERIFIER_NETWORK"
+          fi
