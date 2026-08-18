@@ -190,6 +190,7 @@ SCHEMA_REGISTRY_IDS: Final = (
     "isolated-runtime-bootstrap/v1",
     "read-only-runtime-activation/v1",
     "github-ref-observation/v1",
+    "verifier-github-ref-observation/v1",
     "execution-receipt/v1",
     "verifier-identity/v1",
     "independent-verification-boundary/v1",
