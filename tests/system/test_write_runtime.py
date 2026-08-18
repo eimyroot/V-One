@@ -30,7 +30,7 @@ from voodoo_product.github_create_ref_provider import (
     GitHubCreateRefTargetBinder,
 )
 from voodoo_product.grant_consumption import GrantConsumptionWitness
-from voodoo_product.isolated_runner import IsolatedRuntimeBootstrap, READ_ONLY_MOUNT_MODE
+from voodoo_product.isolated_runner import READ_ONLY_MOUNT_MODE, IsolatedRuntimeBootstrap
 from voodoo_product.precondition_witness import ATOMIC_PROVIDER_CONDITION
 from voodoo_product.runner_identity import DENY_ALL_NETWORK_DEFAULT, RunnerIdentity
 from voodoo_product.target_binding import TargetBinding
