@@ -196,6 +196,8 @@ SCHEMA_REGISTRY_IDS: Final = (
     "independent-verification-boundary/v1",
     "verifier-credential-policy/v1",
     "verifier-credential-decision/v1",
+    "observed-post-state/v1",
+    "verification-strength/v1",
     "verification-result/v1",
     "operation-proof/v1",
 )
