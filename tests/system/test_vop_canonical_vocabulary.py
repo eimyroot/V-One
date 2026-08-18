@@ -18,10 +18,15 @@ from voodoo_product.grant_consumption import GRANT_CONSUMPTION_WITNESS_TYPE
 from voodoo_product.isolated_runner import RUNTIME_ACTIVATION_TYPE, RUNTIME_BOOTSTRAP_TYPE
 from voodoo_product.operation_semantics import OPERATION_STAGES as SEMANTICS_OPERATION_STAGES
 from voodoo_product.runner_identity import RUNNER_BOUNDARY_TYPE, RUNNER_IDENTITY_TYPE
+from voodoo_product.verifier_credential import (
+    VERIFIER_CREDENTIAL_DECISION_TYPE,
+    VERIFIER_CREDENTIAL_POLICY_TYPE,
+)
 from voodoo_product.verifier_identity import (
     INDEPENDENT_VERIFICATION_BOUNDARY_TYPE,
     VERIFIER_IDENTITY_TYPE,
 )
+from voodoo_product.verifier_observation import VERIFIER_GITHUB_REF_OBSERVATION_TYPE
 from voodoo_product.vop_vocabulary import (
     ARTIFACT_STATES,
     BOUNDARY_DEFINITIONS,
@@ -135,7 +140,7 @@ def test_schema_registry_manifest_matches_runtime_registry_and_version_lineage()
     assert SCHEMA_SUPERSESSIONS["execution-grant/v1"] == EXECUTION_GRANT_V2_TYPE
 
 
-def test_released_phase_c_d_e1_contract_ids_are_reserved_in_one_registry() -> None:
+def test_released_phase_c_d_e1_e2_e3_contract_ids_are_reserved_in_one_registry() -> None:
     released_ids = {
         EXECUTION_GRANT_V2_TYPE,
         GRANT_CONSUMPTION_WITNESS_TYPE,
@@ -151,6 +156,9 @@ def test_released_phase_c_d_e1_contract_ids_are_reserved_in_one_registry() -> No
         GITHUB_REF_OBSERVATION_TYPE,
         VERIFIER_IDENTITY_TYPE,
         INDEPENDENT_VERIFICATION_BOUNDARY_TYPE,
+        VERIFIER_CREDENTIAL_POLICY_TYPE,
+        VERIFIER_CREDENTIAL_DECISION_TYPE,
+        VERIFIER_GITHUB_REF_OBSERVATION_TYPE,
     }
 
     assert released_ids <= set(SCHEMA_REGISTRY_IDS)
