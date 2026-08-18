@@ -276,9 +276,9 @@ VerifierIdentity/v1 + IndependentVerificationBoundary/v1
   ↓
 VerifierCredentialDecision
   ↓
-ObservedPostState
+ObservedPostState/v1
   ↓
-VerificationResult + VerificationStrength
+VerificationResult/v1 + VerificationStrength/v1
   ↓
 OperationProof
 ```
@@ -495,11 +495,14 @@ credential-access-decision/v1
 isolated-runtime-bootstrap/v1
 read-only-runtime-activation/v1
 github-ref-observation/v1
+verifier-github-ref-observation/v1
 execution-receipt/v1
 verifier-identity/v1
 independent-verification-boundary/v1
 verifier-credential-policy/v1
 verifier-credential-decision/v1
+observed-post-state/v1
+verification-strength/v1
 verification-result/v1
 operation-proof/v1
 ```
