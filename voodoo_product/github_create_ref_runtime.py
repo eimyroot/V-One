@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import socket
 import urllib.parse
 from collections.abc import Mapping
 from typing import Any, Final
@@ -83,7 +82,7 @@ class GitHubApiCreateRefTransport:
             response = connection.getresponse()
             status_code = int(response.status)
             body = response.read()
-        except (http.client.HTTPException, TimeoutError, OSError, socket.error) as exc:
+        except (http.client.HTTPException, TimeoutError, OSError) as exc:
             # The request might already have reached GitHub. Automatic retry could duplicate an
             # ambiguous effect, so stop and require independent readback/reconciliation.
             raise GitHubCreateRefTransportAmbiguous(
