@@ -13,23 +13,13 @@ from voodoo_product.github_create_ref_runtime import (
 
 
 def request() -> GitHubCreateRefRequest:
-    return GitHubCreateRefRequest(
-        repository="nulleimy/V-One",
-        ref="refs/heads/vone-canary/f4b-test",
-        sha="a" * 40,
-        target_digest="1" * 64,
-        target_binding_digest="2" * 64,
-        capability_definition_identity="3" * 64,
-        runner_boundary_digest="4" * 64,
-        credential_decision_digest="5" * 64,
-        controlled_write_requirement_digest="6" * 64,
-        atomic_provider_condition_contract_identity="7" * 64,
-        operation="CREATE_REF",
-        create_semantics="CREATE_ONLY",
-        max_provider_mutations=1,
-        request_revision="github-create-ref-request/f4b-test-r1",
-        request_digest="8" * 64,
-    )
+    # The transport consumes an already-validated F3 request. Build a minimal instance without
+    # re-testing F3 digest construction here; F3 owns that contract and its system tests.
+    value = object.__new__(GitHubCreateRefRequest)
+    object.__setattr__(value, "repository", "nulleimy/V-One")
+    object.__setattr__(value, "ref", "refs/heads/vone-canary/f4b-test")
+    object.__setattr__(value, "sha", "a" * 40)
+    return value
 
 
 class Response:
