@@ -154,7 +154,6 @@ class CreateRefConditionExpectationBinder:
             "condition_contract_digest": self.condition.contract_digest,
             "operation": self.condition.operation,
             "create_semantics": self.condition.create_semantics,
-            "max_provider_mutations": self.condition.max_provider_mutations,
         }
 
 
@@ -175,7 +174,6 @@ class CreateRefConditionObserver:
             "condition_contract_digest": self.condition.contract_digest,
             "operation": self.condition.operation,
             "create_semantics": self.condition.create_semantics,
-            "max_provider_mutations": self.condition.max_provider_mutations,
         }
 
 
