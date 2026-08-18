@@ -1,0 +1,155 @@
+name: d4b-live-governed-read
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/d4b-live-read.yml"
+      - "Dockerfile.product"
+      - "requirements-product.lock"
+      - "voodoo_product/**"
+      - "tests/system/test_d4b_live_governed_read.py"
+      - "docs/product/D4B_LIVE_GOVERNED_READ_PILOT_R1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d4b-live-read-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-governed-read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Build content-addressed pilot runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-d4b:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_D4B_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_RUNTIME_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_D4B_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated read-only runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-d4b-${GITHUB_RUN_ID}"
+          CONTAINER="vone-d4b-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_D4B_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_D4B_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_D4B_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_D4B_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_D4B_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_D4B_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce default-deny egress with GitHub API allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -S DOCKER-USER
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_D4B_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_D4B_CONTAINER_IP" \
+            -d "$VONE_D4B_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_D4B_CONTAINER_IP" \
+            -d "$VONE_D4B_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_D4B_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_D4B_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "D4B_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "D4B_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute D3 to D4 governed GitHub ref read
+        shell: bash
+        env:
+          D4B_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PROVIDER_INSTANCE_ID="gha:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_D4B_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$D4B_GITHUB_TOKEN" \
+            -e "VONE_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_RUNTIME_ROOTFS_DIGEST=$VONE_RUNTIME_ROOTFS_DIGEST" \
+            -e "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_NETWORK_POLICY_DIGEST=$VONE_NETWORK_POLICY_DIGEST" \
+            -e "VONE_TARGET_REPOSITORY=$GITHUB_REPOSITORY" \
+            -e "VONE_TARGET_REF=refs/heads/main" \
+            "$VONE_D4B_CONTAINER" \
+            python -m voodoo_product.d4b_live_pilot \
+            | tee "$RUNNER_TEMP/d4b-live-read.log"
+          grep -Fx "D4B_LIVE_GOVERNED_READ=PASS" "$RUNNER_TEMP/d4b-live-read.log"
+
+      - name: Cleanup isolated runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_D4B_CONTAINER_IP:-}" ] && [ -n "${VONE_D4B_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_D4B_CONTAINER_IP" \
+              -d "$VONE_D4B_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_D4B_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_D4B_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_D4B_CONTAINER"
+          fi
+          if [ -n "${VONE_D4B_NETWORK:-}" ]; then
+            docker network rm "$VONE_D4B_NETWORK"
+          fi
