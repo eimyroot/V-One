@@ -183,7 +183,6 @@ def test_independent_boundary_binds_exact_runner_evidence() -> None:
         boundary_revision="independent-verification-boundary/e1-r1",
     )
 
-    assert boundary.boundary_type if False else True
     assert boundary.verifier_id != boundary.runner_id
     assert boundary.verifier_provider_instance_id != boundary.runner_provider_instance_id
     assert boundary.verifier_credential_class != boundary.runner_credential_class
@@ -231,7 +230,7 @@ def test_independent_boundary_rejects_same_credential_class() -> None:
 
 
 def test_independent_boundary_rejects_runner_observation_substitution() -> None:
-    identity, runner_boundary, observation, verifier = _bundle()
+    identity, _, observation, verifier = _bundle()
     substituted_boundary = _runner_boundary(identity, execution_epoch=2)
 
     with pytest.raises(
