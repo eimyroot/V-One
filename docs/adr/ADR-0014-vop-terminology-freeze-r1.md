@@ -5,7 +5,8 @@
 | Status | ACCEPTED |
 | Date | 2026-08-18 |
 | Scope | Canonical V-One operation language across code, docs, receipts, API and UI |
-| Base | `main@354928ddb5b2b15eacf204c9d2a2f233b5bf7a88` |
+| Initial branch base | `main@354928ddb5b2b15eacf204c9d2a2f233b5bf7a88` |
+| Acceptance base | `main@b9468d91f39ff04090e6d19d314b5e820e029913` after PR #109 / E2 merge |
 | Owner decision | Explicitly authorized before Phase E3 |
 | Supersedes | ADR-0013 only where it names SandCloud as the isolated execution boundary |
 | Runtime authority change | NONE |
@@ -20,7 +21,7 @@ V-One already has a canonical VOP language owner in:
 3. `schemas/vop/registry.v1.json` — reserved contract identities and version lineage;
 4. `foundation/TERMINOLOGY.md` — broader product-language projection that MUST NOT redefine VOP in parallel.
 
-This ADR freezes the ownership model and reconciles Phase B-E additions into it. It does **not** create a second glossary.
+This ADR freezes the ownership model and reconciles Phase B-E2 additions into it. It does **not** create a second glossary.
 
 The canonical invariant is:
 
@@ -127,9 +128,9 @@ CASTER-MINAL != Authorization authority
 Runner != Verifier
 ```
 
-## Phase C-E reconciliation
+## Phase C-E2 reconciliation
 
-The VOP schema registry MUST reserve the current public contract identities introduced by released Phase C-D and the active Phase-E track, including:
+The VOP schema registry MUST reserve the current public contract identities introduced by released Phase C-D and the canonical E1/E2 track, including:
 
 ```text
 execution-grant/v2
@@ -187,7 +188,7 @@ Static automation cannot infer every possible human-language semantic error. The
 Positive:
 
 - Phase E continues on the same language established by the trust-plane design;
-- released Phase C-D contracts cannot silently drift away from the vocabulary registry;
+- released Phase C-E2 contracts cannot silently drift away from the vocabulary registry;
 - future provider modules, API surfaces, receipts and UI labels have one semantic owner;
 - historical contract versions remain auditable instead of being rewritten;
 - OperationProof can later depend on stable semantic identities.
@@ -199,4 +200,6 @@ Cost:
 
 ## Phase-E gate
 
-E3 MUST NOT be treated as accepted until this terminology reconciliation is canonical on `main` and E2 is revalidated against that canonical baseline.
+E2 is canonical at `main@b9468d91f39ff04090e6d19d314b5e820e029913`.
+
+E3 MUST NOT be treated as accepted until this terminology reconciliation is canonical on `main` and has passed the required READY-state exact-head CI gate against the E2 baseline.
