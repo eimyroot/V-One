@@ -300,6 +300,8 @@ NOUN_DEFINITIONS: Final = MappingProxyType(
 
 
 def canonical_vocabulary() -> dict[str, Any]:
+    """Return the deterministic machine-readable VOP canonical vocabulary."""
+
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "vocabulary_type": VOCABULARY_TYPE,
@@ -320,9 +322,9 @@ def canonical_vocabulary() -> dict[str, Any]:
         "artifact_states": list(ARTIFACT_STATES),
         "operation_stages": list(OPERATION_STAGES),
         "schema_registry_ids": list(SCHEMA_REGISTRY_IDS),
-        "schema_supersessions": dict(SCHEMA_SUPERSESSIONS),
-        "forbidden_shorthands": dict(sorted(FORBIDDEN_SHORTHANDS.items())),
+        "schema_supersessions": dict(sorted(SCHEMA_SUPERSESSIONS.items())),
         "boundary_definitions": dict(sorted(BOUNDARY_DEFINITIONS.items())),
+        "forbidden_shorthands": dict(sorted(FORBIDDEN_SHORTHANDS.items())),
     }
     payload["vocabulary_digest"] = hashlib.sha256(
         canonical_json(payload).encode("utf-8")
@@ -330,20 +332,31 @@ def canonical_vocabulary() -> dict[str, Any]:
     return payload
 
 
-def require_canonical_term(term: str, *, category: str) -> str:
-    groups = {
+def require_canonical_term(term: object, *, category: str) -> str:
+    """Fail closed when code attempts to use an unregistered semantic term."""
+
+    categories = {
         "noun": CANONICAL_NOUNS,
         "verb": CANONICAL_VERBS,
         "relation": CANONICAL_RELATIONS,
+        "identity_field": IDENTITY_FIELDS,
+        "run_state": RUN_STATES,
+        "gate_status": GATE_STATUSES,
+        "task_outcome": TASK_OUTCOMES,
+        "artifact_state": ARTIFACT_STATES,
+        "schema_id": SCHEMA_REGISTRY_IDS,
     }
-    if category not in groups:
-        raise ValueError(f"unsupported VOP term category: {category}")
-    if term not in groups[category]:
-        raise ValueError(f"{term!r} is not canonical VOP {category}")
+    allowed = categories.get(category)
+    if allowed is None:
+        raise ValueError("canonical term category is unsupported")
+    if not isinstance(term, str) or term not in allowed:
+        raise ValueError(f"term is not canonical for category {category}")
     return term
 
 
-def require_vop_surface(surface: str) -> str:
-    if surface not in VOP_PUBLIC_SURFACES:
-        raise ValueError(f"{surface!r} is not a governed VOP public surface")
+def require_vop_surface(surface: object) -> str:
+    """Fail closed when a semantic surface is not one of the VOP-governed public surfaces."""
+
+    if not isinstance(surface, str) or surface not in VOP_PUBLIC_SURFACES:
+        raise ValueError("surface is not a governed VOP public surface")
     return surface
