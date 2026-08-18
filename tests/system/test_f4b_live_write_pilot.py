@@ -59,7 +59,8 @@ def test_full_f4b_chain_reaches_one_create_only_transport_call(monkeypatch) -> N
 
     encoded = str(result)
     assert "test-secret-never-serialized" not in encoded
-    assert "VERIFIED" not in encoded
+    assert "verification_result" not in result
+    assert "verdict" not in result
 
 
 def test_f4b_pilot_has_no_delete_or_force_update_provider_path() -> None:
