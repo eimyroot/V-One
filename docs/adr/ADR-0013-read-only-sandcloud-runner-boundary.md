@@ -1,14 +1,21 @@
-# ADR-0013: Read-Only SandCloud Runner Boundary
+# ADR-0013: Read-Only Runner Boundary (historical SandCloud naming)
 
 | Field | Value |
 |---|---|
-| Status | ACCEPTED |
+| Status | ACCEPTED / PARTIALLY SUPERSEDED |
 | Date | 2026-08-17 |
 | Scope | Phase D read-only isolated Runner boundary after Phase C durable dispatch completion |
 | Base | `main@724dd783e0c5f8dca64ea47d9171e98334fff8d6` |
 | Supersedes | ADR-0008 target-state assumptions where they conflict with the released Phase C authority chain |
+| Superseded by | ADR-0014 for SandCloud terminology; all execution/authority semantics below remain unless explicitly corrected |
 | Production effects | BLOCKED |
 | Provider mutation | BLOCKED |
+
+> Historical note: the original ADR title and one provider-abstraction section used `SandCloud` as
+> a name for the isolated execution boundary. ADR-0014 freezes the canonical meanings:
+> `SandCloud = governed non-canonical staging/review/validation/evidence`; `Runner = isolated
+> execution principal`; `CASTER-MINAL = governed execution control surface`. The historical naming
+> must not be used as current VOP semantics.
 
 ## Decision
 
@@ -152,16 +159,28 @@ The next bounded slice is a `CredentialBroker` contract with these required prop
 - stale or superseded execution epochs cannot obtain or reuse credentials;
 - no ambient environment credential fallback.
 
-## SandCloud provider abstraction
+## Execution-provider abstraction — terminology supersession
 
-`SandCloud` is the V-One provider-neutral name for the isolated execution boundary. It is not a
-trust primitive and it is not synonymous with one hosting vendor.
+The execution-provider abstraction remains provider-neutral, but **its canonical VOP name is the
+isolated `Runner` boundary, not SandCloud**.
 
-A provider adapter may use an implementation such as an isolated sandbox/microVM service, but the
-V-One kernel depends only on the versioned Runner contracts and their conformance tests. Changing
+A provider adapter may use an implementation such as an isolated sandbox/microVM/container service,
+but the V-One kernel depends only on versioned Runner contracts and their conformance tests. Changing
 provider must not change authority semantics.
 
-At D1, no external SandCloud provider is activated by this ADR and no remote command is executed.
+Canonical separation after ADR-0014:
+
+```text
+SandCloud    = governed non-canonical staging/review/validation/evidence
+CASTER-MINAL = governed execution control surface
+Runner       = isolated execution principal
+V-One        = authority/governance semantics
+```
+
+None of these layers may silently inherit the authority of another.
+
+At D1, no external isolated execution provider was activated by this ADR and no remote command was
+executed.
 
 ## Crash and recovery semantics
 
@@ -189,13 +208,18 @@ Costs:
 - concrete provider identity attestation remains unresolved until the provider adapter slice;
 - CredentialBroker and network-policy enforcement are still required before a real provider READ.
 
-## Next slices
+## Historical next-slice sequence
+
+At the time of this ADR the planned sequence was:
 
 ```text
-D1 RunnerIdentity + READ-ONLY RunnerBoundary     <- this decision
+D1 RunnerIdentity + READ-ONLY RunnerBoundary
   -> D2 CredentialBroker READ credential contract
-  -> D3 isolated SandCloud runtime adapter
+  -> D3 isolated Runner runtime adapter
   -> D4 first real read-only capability
   -> Phase D gate: NO PROVIDER MUTATION
   -> Phase E independent verification
 ```
+
+This sequence is historical decision context. Current product state is determined by canonical
+`main`, not by this historical roadmap block.
