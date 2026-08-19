@@ -13,24 +13,45 @@ rollback uses the current `ExecutionReceipt/v2 + VerificationResult/v1` evidence
 would therefore either lose current lineage or falsely imply compatibility that does not exist.
 
 `ExecutionReceipt/v2` deliberately records the bounded provider effect with
-`verification_status=NOT_EVALUATED`; it must not manufacture a verification verdict. The verdict is
-owned by the separately composed independent `VerificationResult/v1`.
+`verification_status=NOT_EVALUATED`; it must not manufacture a verification verdict.
+
+An adversarial R3 review of the first candidate found a material trust-boundary gap:
+`VerificationResult.create()` is a public deterministic constructor. Accepting a
+`VerificationResult/v1` object by type and verdict alone therefore does not prove that the verdict
+was derived through the independent Runner/Verifier readback pipeline.
 
 ## Decision
 
 Add `operation-proof/v2` as a new deterministic evidence contract beside v1. Do not modify or
 reinterpret v1.
 
-R1 accepts exactly:
+R1 accepts the complete retained evidence chain:
 
 ```text
 ExecutionReceipt/v2
++ GitHubRefObservation/v1
++ VerifierGitHubRefObservation/v1
++ IndependentVerificationBoundary/v1
++ ObservedPostState/v1
++ VerificationStrength/v1
 + VerificationResult/v1
+→ deterministic verification-chain recomputation
 → OperationProof/v2
 ```
 
-The proof binds the minimum portable roots needed to identify authority, effect and independent
-outcome evidence:
+`OperationProofV2.create()` must call the canonical `verify_github_ref_readback()` function over the
+retained Runner observation, Verifier observation, and independent boundary, using the revisions
+carried by the retained state/strength/result artifacts. Creation is denied unless the recomputed
+`ObservedPostState`, `VerificationStrength`, and `VerificationResult` exactly equal the supplied
+artifacts.
+
+This closes the first-candidate `VERIFIED-by-construction` gap without provider I/O and without
+creating a second verification algorithm.
+
+## Proof content
+
+The compact proof binds the minimum portable roots needed to identify authority, effect and
+independent outcome evidence:
 
 - execution/request/environment/capability identity,
 - exact target digest,
@@ -47,21 +68,31 @@ outcome evidence:
 - receipt and verification timestamps,
 - a canonical SHA-256 `proof_digest`.
 
+The full retained evidence objects are inputs to proof creation but are not embedded in the compact
+proof payload.
+
 ## Fail-closed invariants
 
 Creation is denied unless all are true:
 
 1. receipt is a valid `ExecutionReceipt/v2`,
-2. verification is a valid `VerificationResult/v1`,
-3. execution IDs match exactly,
-4. target digests match exactly,
-5. the receipt still says `NOT_EVALUATED`, preserving receipt/verifier separation,
-6. verification verdict is `VERIFIED`,
-7. verification reason is `OBSERVED_STATE_MATCH`,
-8. verification strength is `INDEPENDENT_PROVIDER_READBACK`,
-9. verification does not precede receipt recording,
-10. the proof records exactly one provider mutation and no automatic mutation retry,
-11. deserialization recomputes and verifies the proof digest.
+2. Runner observation is a valid `GitHubRefObservation/v1`,
+3. Verifier observation is a valid `VerifierGitHubRefObservation/v1`,
+4. boundary is a valid `IndependentVerificationBoundary/v1`,
+5. supplied `ObservedPostState/v1`, `VerificationStrength/v1`, and `VerificationResult/v1` exactly
+   equal the canonical recomputation from that evidence chain,
+6. execution IDs match exactly between receipt and recomputed verification,
+7. target digests match exactly,
+8. the receipt still says `NOT_EVALUATED`, preserving receipt/verifier separation,
+9. recomputed verification verdict is `VERIFIED`,
+10. recomputed verification reason is `OBSERVED_STATE_MATCH`,
+11. verification strength is `INDEPENDENT_PROVIDER_READBACK`,
+12. verification does not precede receipt recording,
+13. the receipt records exactly one provider mutation and no automatic mutation retry,
+14. deserialization recomputes and verifies the proof digest.
+
+A forged `VerificationResult.create(... verdict="VERIFIED" ...)` that is not equal to the canonical
+recomputation from retained read-only evidence must be rejected.
 
 ## Trust boundary
 
@@ -72,11 +103,11 @@ Creation is denied unless all are true:
 - no provider credential,
 - no provider mutation,
 - no authorization issuance,
-- no re-verification of provider state,
+- no new provider read,
 - no raw provider request/response bodies.
 
-A proof is a content-addressed composition of already validated evidence. It does not create new
-authority and does not substitute for the underlying receipt or verification evidence.
+The proof recomputes the deterministic verification artifacts from already-retained read-only
+observations. It does not call the provider and does not create new authority.
 
 ## Scope
 
@@ -93,18 +124,20 @@ Not included:
 - `OperationCell/v1`,
 - release/deploy/production changes,
 - provider effects,
-- modification or removal of `operation-proof/v1`.
+- modification or removal of `operation-proof/v1`,
+- changing `VerificationResult/v1` itself.
 
 ## 7×ANO gate
 
 ```text
-JEDNODUCHÁ: ANO — one new pure evidence contract.
-ÚČELNÁ: ANO — closes the type gap between Receipt/v2 and VerificationResult/v1.
-AUTOMATIZOVANÁ: ANO — deterministic create/from_dict/to_dict plus CI tests.
+JEDNODUCHÁ: ANO — one additive pure evidence contract using the existing canonical verifier.
+ÚČELNÁ: ANO — closes the type/provenance gap between Receipt/v2 and VerificationResult/v1.
+AUTOMATIZOVANÁ: ANO — deterministic create/from_dict/to_dict and canonical chain recomputation.
 BEZPEČNÁ: ANO — fail-closed, no I/O, no credentials, no authority expansion.
-MĚŘITELNÁ: ANO — deterministic digest and explicit negative tests.
+MĚŘITELNÁ: ANO — exact artifact equality, deterministic digest and negative forgery tests.
 VRATNÁ: ANO — isolated additive module/test/ADR; rollback is branch/commit revert.
-DŮKAZNĚ OVĚŘITELNÁ: ANO — exact digest bindings and CI evidence; independent R3 review remains required before merge.
+DŮKAZNĚ OVĚŘITELNÁ: ANO — exact digest bindings plus exact-head CI; organizationally independent
+R3 review remains a separate requirement unless the owner explicitly accepts that remaining risk.
 ```
 
 ## Verification plan
@@ -117,16 +150,45 @@ python -m compileall -q voodoo_product/operation_proof_v2.py tests/system/test_o
 python -m pytest -q tests/system/test_operation_proof_v2.py
 ```
 
-Then the repository's normal full CI gate must pass on the exact PR head.
+Then the repository's normal full CI gate and current-head D4b/E3/E4b regression workflows must pass
+again on the exact updated PR head.
+
+## Review finding closure
+
+First candidate head: `07b110eb90172fbe8325c5a48c6d65c5be16ee28`.
+
+Finding:
+
+```text
+R3-BLOCKER:
+OperationProofV2.create() accepted a standalone VerificationResult/v1.
+VerificationResult.create() can construct a structurally valid VERIFIED result from supplied digests.
+Therefore proof creation did not itself establish provenance through the canonical independent
+readback pipeline.
+```
+
+Required closure:
+
+```text
+OperationProofV2.create()
+→ require retained Runner/Verifier/boundary/state/strength/result evidence
+→ recompute via verify_github_ref_readback()
+→ require exact equality of recomputed state/strength/result
+→ only then permit VERIFIED OperationProof/v2
+```
 
 ## Merge gate
 
 This ADR remains `PROPOSED` and the candidate remains unmerged until:
 
-- exact-head CI is green,
+- the updated exact-head CI is green,
+- updated D4b/E3/E4b regression workflows are green,
 - review threads are zero,
-- independent R3 review evidence exists or the owner explicitly accepts the remaining review risk,
-- no `main` drift invalidates the candidate baseline without reconciliation.
+- this R3 blocker is proven closed by tests,
+- organizationally independent R3 review exists or the owner explicitly accepts the remaining
+  independence risk,
+- no `main` drift invalidates the candidate baseline without reconciliation,
+- a separate explicit merge authorization is received.
 
 ## Follow-up, explicitly separate
 
