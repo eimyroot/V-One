@@ -1,120 +1,210 @@
 # VOODOO One 0.9.0-rc2-dev — Security Overview
 
-## Controls implemented
+> Current security posture is evidence-scoped. This development version is not an unrestricted
+> production release and production effects remain disabled by default.
 
-- no hardcoded authentication secret,
-- generated local secrets stored outside Git,
-- `scrypt` password hashing with per-user salt,
-- context-bound v2 sessions signed with a purpose-derived HMAC key,
-- database-backed active-session allowlisting with server-side current-session logout,
-- HMAC-referenced session storage that excludes bearer tokens and raw nonces,
-- explicit identity-provider boundary for password, session and bearer authentication,
-- fail-closed startup for configured but unreleased OIDC identity,
-- HMAC-keyed, database-backed rate limits for login accounts, login sources and bootstrap attempts,
-- ordered, atomic SQLite migrations with immutable SHA-256 history and post-migration integrity checks,
-- immutable named application statements with explicit read/write modes and no dynamic service SQL,
-- fail-closed statement resolution when a backend dialect is absent or unknown,
-- normalized persistence errors that exclude SQL, schema names, credentials and driver diagnostics,
-- generic authentication failures with `Retry-After` on temporary lockout,
-- structured request/authentication events that exclude bodies, headers, query strings, raw paths, IP addresses and account identifiers,
-- validated request correlation IDs returned through `X-Request-ID`,
-- exact trusted-host allowlisting with wildcard and scheme rejection,
-- strict console/API CSP plus no-store, no-sniff, anti-frame and browser capability headers,
-- production-only HSTS and suppressed Uvicorn server headers,
-- live account and role validation on every authenticated request,
-- permission-based RBAC,
-- separation of requester and approver,
-- workspace-authoritative environment classification enforced by service checks and database triggers,
-- two distinct approvers for production requests,
-- production effects disabled by default,
-- allowlisted adapters only,
-- descriptor-relative sandbox writes with no-follow metadata checks, opened-directory identity verification and bounded artifact size,
-- subprocess execution without a shell,
-- bounded subprocess output and timeout,
-- execution idempotency,
-- bounded execution leases with monotonic completion fencing,
-- recovery restricted to security reviewers or administrators while emergency stop is active,
-- emergency stop,
-- hash-chained receipts and audit events,
-- database-sequenced receipt ordering independent of timestamps and random IDs,
-- non-root read-only Docker runtime with dropped capabilities.
+## Product/control-plane controls
 
-ADR-0007 accepts the pure deterministic execution-contract value objects as representation only.
-ADR-0008 and [`../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](../security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
-are owner-adopted for the exact isolated Runner design and safety-invariant scope; runtime isolation
-controls remain not implemented.
+Current released/local product controls include:
 
-`VOODOO_DATABASE_BACKEND=sqlite` is the only released database mode. Selecting `postgresql` aborts
-startup before the service accepts traffic. This prevents a SQLite-specific service layer from being
-misrepresented as production-ready PostgreSQL support. The statement catalog has no cross-dialect
-fallback, and a future adapter must preserve global write serialization until narrower locking has
-independent concurrency proofs.
+- no hardcoded authentication secret;
+- `scrypt` password hashing with per-user salt;
+- context-bound v2 sessions with purpose-derived signing keys;
+- database-backed active-session allowlisting and revocation;
+- raw bearer/session nonce exclusion from persistence;
+- persistent HMAC-keyed login/bootstrap throttling;
+- exact trusted-host validation, CSP, no-store/no-sniff/anti-frame headers and production-only HSTS;
+- live account/role revalidation and permission-based RBAC;
+- requester/approver separation and workspace-authoritative environment classification;
+- production effects disabled by default;
+- emergency stop and explicit recovery boundaries;
+- checksum-governed SQLite migrations and reviewed statement catalog;
+- hash-chained receipt and audit ledgers with separate integrity verification;
+- bounded legacy local adapters, filesystem path hardening and subprocess-without-shell controls.
 
-Sandbox directory traversal does not rely on `O_NOFOLLOW` alone. Every attacker-controlled directory component is inspected without following symlinks, opened descriptor-relatively, inspected again, and then matched by device and inode across all three views. Existing destination symlinks and non-regular files fail closed. The configured sandbox-root path and mutation by other local processes remain operator-owned boundaries; workspace and artifact path components beneath the root are treated as untrusted.
+These controls describe the currently composed product surface. They do not by themselves attest the
+newer isolated execution/verification path for every FastAPI execution.
 
-The liveness endpoint performs only constant-time runtime checks. Full audit and receipt-chain
-verification is an authenticated evidence operation, preventing chain growth from degrading the
-container health probe.
+## Current VOP authority controls
 
-Bearer tokens use version `v2`, fixed issuer and audience claims, bounded claim types and lifetime,
-and a signing key derived from the runtime root secret under a session-token-specific context. The
-raw root secret is not used directly as the token signing key. Legacy `v1` tokens fail closed after
-upgrade, so operators must expect all existing console and API sessions to authenticate again. The
-runtime also requires an exact active-session allowlist match, then revalidates active account state
-and the current database role on every request. Migration `0007` intentionally invalidates previously
-issued stateless sessions.
+Implemented/tested trust-plane components now include:
 
-FastAPI authentication routes now depend on an explicit identity-provider contract. The released
-`local` provider owns session issuance and bearer verification while depending on separate canonical
-credential-authentication, active-user lookup and session-lifecycle ports. Production composition does not inject the
-broad product compatibility facade. OIDC configuration requires exact HTTPS issuer and JWKS
-endpoints, audience and distinct identity claim names, but OIDC execution remains unavailable.
-Selecting it aborts startup before persistence initialization and never falls back to local
-passwords. External groups must not become internal roles until a separate allowlisted mapping and
-integration gate are released.
+```text
+AuthorizationSnapshot
+→ ExecutionGrant/v2
+→ durable one-time Grant consumption in CONTROL PLANE
+→ DispatchOutboxEntry/v1
+→ DispatchEnvelope/v1
+→ DispatchInboxAdmission/v1
+→ ExecutionEpoch + ExecutionLease/v1
+→ CurrentExecutionFence
+→ ExecutionCapsule / RunnerBoundary
+```
 
-The application derives the authentication source from the ASGI server's client address and does
-not parse forwarding headers itself. A production reverse proxy must therefore be configured as a
-trusted proxy at the ASGI server boundary; arbitrary client-supplied forwarding headers must not be
-trusted.
+Key authority invariant:
 
-Supported runtime commands disable Uvicorn's raw access log. The product middleware records only a
-route template, method, response status, bounded duration, correlation ID and allowlisted security
-metadata. Unexpected exception messages and tracebacks are not emitted by the request logger.
+```text
+Runner does not issue or consume ExecutionGrants.
+Grant consumption occurs before Dispatch in the control plane.
+Dispatch/lease/fence coordinate execution but do not create new authority.
+```
 
-The HTTP boundary rejects unlisted `Host` values before routing. Console actions are registered by
-external JavaScript event listeners, so the CSP does not require `unsafe-inline` or `unsafe-eval`.
-Production operators must allowlist both the external hostname and any separate internal healthcheck
-hostname or address.
+SQLite persistence is current through schema 13. `VOODOO_DATABASE_BACKEND=sqlite` remains the only
+released database mode; selecting unreleased PostgreSQL support fails closed.
 
-The environment stored on a workspace is authoritative. A change request must match it exactly; the
-console derives the value instead of accepting a second operator choice. The service revalidates the
-join before submit, review and execution, while SQLite triggers prevent direct-write bypass and block
-execution of preserved legacy mismatches. This prevents a production workspace from being relabeled
-`local` to bypass dual approval or the production-effects gate.
+## Isolated bounded Runner evidence
 
-An execution start commits a lease before the adapter runs. Normal completion succeeds only while
-the execution remains `RUNNING` with its original fence. After the lease expires, a security reviewer
-or administrator may recover it only while emergency stop is active. Recovery records one
-`INTERRUPTED` receipt with an `INDETERMINATE` outcome, increments the fence and marks the change
-request failed. A late worker may finish its external call, but it cannot overwrite the recovered
-database state or append a second receipt. Operators must investigate possible side effects before
-creating a new change request; the original idempotency key never triggers an automatic retry.
+The repository contains RunnerIdentity, RunnerBoundary, credential-decision, runtime-activation and
+provider-boundary contracts/tests. Bounded isolated GitHub READ behavior has real D4b/E3/E4b pilot
+evidence, with controls including exact runtime identity/binding, read-only filesystem/rootfs choices
+for the pilot, dropped Linux capabilities, bounded resources and default-deny egress with explicit
+provider allowlisting.
 
-The manual release-candidate workflow validates its version against the source tree, reruns the full
-verification suite, builds and smoke-tests the hardened product image, and emits checksums for both
-the source archive and CycloneDX SBOM. These checksums provide integrity, not signer identity. GitHub
-artifact attestations for private repositories require GitHub Enterprise Cloud; this private,
-user-owned repository must prove that eligibility (or move to an eligible organization) before
-`actions/attest@v4` can be made a mandatory fail-closed gate. Until then, no signed-SBOM or provenance
-claim is made.
+This does **not** mean the legacy FastAPI `ExecutionService` path has been replaced by that isolated
+execution plane. ProductComposition convergence is a separate gate.
 
-## Required security gates before enterprise release
+Historical F4b/F6b staging workflows additionally demonstrated narrowly scoped GitHub mutation and
+rollback paths. Those historical workflows are evidence artifacts, not generic current production
+mutation entrypoints.
 
-- external penetration test,
-- dependency and container scanning,
-- released OIDC/SAML integration with explicit role mapping,
-- tenant-specific key management,
-- PostgreSQL row-level tenant isolation,
-- signed SBOM and artifact provenance,
-- security incident and vulnerability disclosure contacts.
+## Execution receipt versus verification
+
+`ExecutionReceipt/v2` records the execution subsystem claim and must not manufacture independent
+verification state.
+
+```text
+ExecutionReceipt != VerificationResult
+receipt-chain integrity != independent provider verification
+execution succeeded != VERIFIED
+```
+
+The UI/API must therefore expose weaker intermediate state when independent verification is absent.
+
+## Independent verification controls
+
+The accepted verifier path separates:
+
+- Runner identity/instance;
+- Verifier identity/instance;
+- credential class;
+- provider readback;
+- observed post-state;
+- verification-strength classification;
+- final `VerificationResult/v1`.
+
+D4b/E3/E4b and historical F6b provide bounded GitHub readback evidence. The verifier path is READ-only
+for the accepted verification scope and must not inherit provider-mutation authority.
+
+## Proof and operation-cell controls
+
+`OperationProof/v2` accepts current execution evidence only after canonical independent-verification
+recomputation for its lineage. A merely self-consistent forged `VERIFIED` result is insufficient.
+
+`OperationCell/v1` is a minimal stable atom over a canonically revalidated `OperationProof/v2`; it
+contains no credential/provider authority and does not widen execution authority.
+
+```text
+VerificationResult != OperationProof
+OperationProof != OperationCell
+OperationCell != authority
+```
+
+Historical F6b evidence has a strictly validated proof and cell, but that historical success does not
+release production or automatically compose the current FastAPI product path.
+
+## Legacy local execution safety boundary
+
+The currently composed legacy `ExecutionService` still uses narrow local adapters. Existing safety
+controls include:
+
+- adapter allowlisting;
+- typed/bounded payloads and output;
+- descriptor-relative sandbox writes with symlink/path checks;
+- subprocess invocation without a shell;
+- execution idempotency;
+- legacy lease/fence recovery;
+- emergency stop;
+- production-effects gate.
+
+This compatibility path shares the product/control-plane process identity and must not be described as
+equivalent to the separately exercised isolated Runner pilot boundary.
+
+## Identity and HTTP boundary
+
+OIDC configuration remains unreleased and fail closed. The released `local` identity provider owns
+session issuance/verification and uses separate credential-authentication, active-user lookup and
+session-lifecycle ports. External groups must not become internal roles without a separately governed
+mapping/integration gate.
+
+The application does not trust arbitrary client forwarding headers. Any production reverse proxy must
+be explicitly trusted/configured at the ASGI boundary.
+
+Supported start commands suppress raw Uvicorn access logging; structured middleware logs only
+allowlisted metadata and avoid request bodies, headers, query strings, raw account identifiers and
+unexpected exception internals.
+
+## Persistence / migration boundary
+
+SQLite migration history is immutable/checksum verified and current through `0013`. Grant, dispatch
+and coordination tables use fail-closed binding/immutability rules appropriate to their contracts.
+There are no automated down migrations; rollback of an incompatible schema requires restoring a full
+pre-upgrade database/WAL/SHM backup.
+
+PostgreSQL remains a future release gate requiring an adapter, dialect-neutral service boundaries,
+transactional migration locking, concurrency tests, backup/restore operations and tenant-isolation
+proofs.
+
+## Supply-chain / release boundary
+
+The manual release-candidate workflow:
+
+- validates source version;
+- reruns verification;
+- builds and smoke-tests the product image;
+- produces source/SBOM checksums.
+
+Checksums provide integrity, not signer identity. Signed provenance/attestation remains separately
+gated. CI, a merge, a historical provider pilot, OperationProof or OperationCell is not deployment or
+release evidence.
+
+## GitHub governance boundary
+
+Repository policy requires PR-only `main`, latest-head `ci / verify`, no force push/delete and
+conversation resolution. Available connector evidence does not prove the complete modern GitHub
+ruleset; classic required-status enforcement is observed off. Therefore live repository enforcement
+remains `UNKNOWN / BLOCKED` until settings/ruleset evidence proves the full baseline.
+
+## Security Intelligence / CyberCore
+
+Security Intelligence R-SI1.1 is descriptive metadata/test logic only. CyberCore is an intelligence
+participant only. Neither may:
+
+- issue AuthorizationSnapshot or ExecutionGrant;
+- consume a Grant;
+- become Runner or Verifier by inference;
+- bypass human/policy gates;
+- cause provider mutation outside the canonical V-One lifecycle.
+
+CyberCore integration remains blocked until reconciliation and canonical ProductComposition gates
+pass.
+
+## Required gates before enterprise/unrestricted release
+
+- canonical authority→OperationCell ProductComposition path;
+- current reusable governed WRITE/rollback orchestration with separately authorized provider effects;
+- verified live GitHub main enforcement;
+- external penetration test;
+- dependency/container scanning and release evidence;
+- released enterprise identity/role mapping;
+- tenant-specific key management;
+- PostgreSQL tenant/isolation/concurrency gates if PostgreSQL is released;
+- signed SBOM/artifact provenance strategy;
+- incident/vulnerability disclosure contacts;
+- licensing, privacy, support and deployment runbooks.
+
+Until those gates pass:
+
+```text
+VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+UNRESTRICTED_PRODUCTION=BLOCKED
+```
