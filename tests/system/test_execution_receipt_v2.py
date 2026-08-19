@@ -7,14 +7,13 @@ import pytest
 from voodoo_product.execution_receipt_v2 import (
     EFFECT_RECORDED,
     EXECUTION_SUCCEEDED,
-    ExecutionReceiptV2,
     NOT_EVALUATED,
+    ExecutionReceiptV2,
     compose_write_execution_receipt_v2,
 )
 from voodoo_product.f4b_live_write_pilot import run_live_write_pilot
 from voodoo_product.github_create_ref_provider import GitHubCreateRefProviderResponse
 from voodoo_product.github_create_ref_runtime import GitHubApiCreateRefTransport
-
 
 FIXED_RECORDED_AT = "2026-08-19T00:00:00.000+00:00"
 FIXED_CLOCK_DIGEST = "c" * 64
