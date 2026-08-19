@@ -64,8 +64,11 @@ jobs:
         run: python -m pytest -q tests/system/test_checkpoint_evidence_verifier.py
       - name: Project documentation truth gate
         run: python -m pytest -q tests/system/test_project_documentation.py
-      - name: VOP terminology drift gate
-        run: python -m pytest -q tests/system/test_vop_canonical_vocabulary.py
+      - name: VOP terminology and truth drift gate
+        run: >-
+          python -m pytest -q
+          tests/system/test_vop_canonical_vocabulary.py
+          tests/system/test_reconciliation_truth_invariants.py
       - name: Authentication and HTTP gate
         run: >-
           python -m pytest -q
