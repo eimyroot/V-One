@@ -1,4 +1,4 @@
-# ADR-0017 — OperationCell/v1 rollback-absence trust envelope R1
+# ADR-0017 — OperationCell/v1 stable operation atom R1
 
 Status: `PROPOSED`
 Risk class: `R3`
@@ -8,230 +8,234 @@ Canonical base for this candidate: `main@67601a0a7bbac967433d668043851a4fe3ff2cc
 ## Decision card
 
 ```text
-NÁZEV: OperationCell/v1 rollback-absence trust envelope R1
+NÁZEV: OperationCell/v1 stable operation atom R1
 UŽIVATEL: V-One evidence/audit consumers and downstream governed composition
-PROBLÉM: OperationProof/v2 is canonical evidence, but there is no compact typed cell that binds
-         the operation's authorization, execution, verification and proof roots for downstream use.
-OČEKÁVANÝ OUTCOME: one deterministic OperationCell/v1 can be created for historical F6b only
-                   after its OperationProof/v2 provenance is freshly recomputed from retained
-                   rollback-absence evidence.
+PROBLÉM: one fully verified operation has no compact, stable, content-addressed product atom
+OČEKÁVANÝ OUTCOME: OperationCell/v1 freezes immutable indexing identity over a canonically
+                   revalidated OperationProof/v2 without duplicating nested evidence
 RISK CLASS: R3
-NEJMENŠÍ BEZPEČNÝ SLICE: one evidence-only schema/composer for rollback-absence OperationProof/v2
-ZDROJ PRAVDY: current main contracts + retained canonical proof/evidence lineage
-DOTČENÁ DATA A OPRÁVNĚNÍ: evidence digests only; no credentials; no new authority
-DŮKAZ ÚSPĚCHU: deterministic digest, canonical proof recomputation, negative forged-proof and
-                rehashed-cell substitution tests, exact-head CI
-ROLLBACK: revert/remove this additive three-file slice before acceptance
-MIMO ROZSAH: presence-lineage composer, provider I/O, execution, merge, deploy, release
-OWNER DECISION: authorized to create candidate/PR; merge remains separately gated
+NEJMENŠÍ BEZPEČNÝ SLICE: minimal provider-neutral schema + explicit rollback-absence composer
+ZDROJ PRAVDY: current main contracts + retained canonical F6b proof/evidence lineage + prior CASER design
+DOTČENÁ DATA A OPRÁVNĚNÍ: immutable evidence identifiers/digests only; no credentials; no authority
+DŮKAZ ÚSPĚCHU: exact canonical proof recomputation, 14-field schema, deterministic digest,
+                negative substitution/conformance tests, exact-head CI
+ROLLBACK: focused revert/removal of the additive three-file candidate
+MIMO ROZSAH: provider effects, historical cell instance, merge, deploy, release, API/UI integration
+OWNER DECISION: candidate/PR authorized; merge remains separately gated
 ```
 
 ## Context
 
-Historical F6b now has a strictly validated `OperationProof/v2` rooted in:
+Historical F6b has a strictly validated `OperationProof/v2`. That proof already content-binds the
+important lifecycle evidence. `ExecutionReceipt/v2` transitively binds the lower execution chain.
+
+The architectural target prepared before this implementation defines `OperationCell/v1` as the
+stable product atom over that content-addressed closure:
 
 ```text
-AuthorizationSnapshot
-→ ExecutionGrant
-→ ExecutionReceipt/v2
-→ rollback-absence runner observation
-→ independent rollback-absence verifier observation
-→ ObservedPostState/v1
-→ VerificationStrength/v1
-→ VerificationResult/v1
-→ OperationProof/v2
+OperationCell/v1
+        ↓ exact content-addressed root
+OperationProof/v2
+        ↓
+ExecutionReceipt/v2 + independent verification roots
+        ↓
+authority / capsule / dispatch / lease / runner / provider evidence
 ```
 
-`OperationProof/v2` is the canonical proof of one verified operation. Downstream audit, evidence graph,
-handoff and future composition need a smaller typed root that can identify the operation and its
-major lifecycle evidence without carrying raw authority objects, raw provider responses, credentials,
-or the entire proof payload.
+The cell is not a second proof format. It must not widen authority and must not independently restate
+mutable facts already content-bound below it.
 
-A naive cell that merely accepts a standalone `OperationProofV2` object is insufficient. The current
-`OperationProofV2.from_dict()` validates schema, digest and local invariants, but provenance of a
-`VERIFIED` proof is established by the canonical composer and its retained verification evidence.
-`OperationCell/v1` therefore must not upgrade a standalone self-consistent proof into a trusted cell.
+An initial draft of this candidate copied additional proof roots and encoded rollback lineage in the
+serialized cell. R3 self/adversarial review rejected that shape because it duplicated evidence and
+would make `OperationCell/v1` unnecessarily lineage-specific. This ADR records the hardened minimal
+contract instead.
 
 ## Decision
 
-Add `voodoo_product/operation_cell_v1.py` with a compact `OperationCellV1` contract.
+Add:
 
-R1 supports one explicit creation path:
+- `voodoo_product/operation_cell_v1.py`
+- `tests/system/test_operation_cell_v1.py`
+- this ADR
+
+The serialized `operation-cell/v1` schema is provider- and verification-lineage-neutral.
+
+The first trusted composer is explicitly lineage-specific:
 
 ```text
-OperationCellV1.create_from_absence(...)
+create_operation_cell_v1_from_absence(...)
 ```
 
-The composer requires:
+It receives the retained F6b proof inputs, reruns the accepted
+`create_operation_proof_v2_from_absence(...)` path, requires the supplied `OperationProof/v2` to equal
+that canonical recomputation exactly, and only then freezes immutable indexing claims into the cell.
 
-- the supplied `OperationProof/v2`,
-- `ExecutionReceipt/v2`,
-- `GitHubRefAbsenceObservation/v1`,
-- `VerifierGitHubRefAbsenceObservation/v1`,
-- `IndependentVerificationBoundary/v2`,
-- `ObservedPostState/v1`,
-- `VerificationStrength/v1`,
-- `VerificationResult/v1`.
+Additional lineage composers require separate review, but may remain additive as long as they preserve
+this exact serialized `OperationCell/v1` contract and semantics.
 
-Before creating a cell it calls the accepted
-`create_operation_proof_v2_from_absence(...)` composer using the supplied proof revision and requires
-the recomputed proof to equal the supplied proof exactly.
+## Exact serialized contract
 
-The cell then derives all exposed operation fields from that canonically recomputed proof.
-
-## Serialized contract
-
-`operation-cell/v1` contains only compact, derived evidence:
+`OperationCell/v1` contains exactly 14 fields:
 
 ```text
 schema_version
 cell_type
-verification_lineage
-operation_proof_type
-operation_proof_digest
 execution_id
 execution_epoch
 request_id
 environment
 capability
 target_digest
-authorization_snapshot_digest
-execution_grant_digest
-execution_receipt_digest
-verification_result_digest
-provider_operation
-provider_mutation_count
-rollback_performed
-verification_strength_class
+proof_type
+operation_proof_digest
 final_verdict
-proof_revision
+verification_strength_class
 cell_revision
 cell_digest
 ```
 
-R1 sets:
+Required constants for R1:
 
 ```text
-verification_lineage = rollback-absence/v1
-operation_proof_type = operation-proof/v2
+schema_version = 1
+cell_type = operation-cell/v1
+proof_type = operation-proof/v2
 final_verdict = VERIFIED
+verification_strength_class = INDEPENDENT_PROVIDER_READBACK
 ```
 
-The cell contains digests, identifiers and bounded effect metadata only. It contains no raw
-authorization snapshot, grant, receipt, observation, verification result, provider request/response,
-credential, token or secret.
+No authorization snapshot, grant, receipt, observations, provider metadata or verification result is
+copied into the cell. Those remain transitively content-bound by `operation_proof_digest`.
 
-## Provenance-safe deserialization
+## Creation rule
 
-`OperationCellV1.from_dict(...)` does not accept serialized bytes in isolation as trusted evidence.
+`create_operation_cell_v1_from_absence(...)` must:
 
-To deserialize a cell it requires the same canonical rollback-absence source artifacts and the
-corresponding `OperationProof/v2`. It:
+1. require an `OperationProofV2` and the retained rollback-absence proof inputs;
+2. rerun `create_operation_proof_v2_from_absence(...)` using the supplied proof revision;
+3. require exact equality between the supplied proof and canonical recomputation;
+4. copy only `execution_id`, `execution_epoch`, `request_id`, `environment`, `capability`,
+   `target_digest`, proof identity/verdict/strength and cell revision;
+5. compute `cell_digest` from canonical JSON of all cell claims except `cell_digest`;
+6. perform no I/O, provider call, credential access, authority issuance, mutation, deploy or release.
 
-1. validates the exact field set, schema and self-digest,
-2. recomputes the canonical absence proof from retained evidence,
-3. requires exact equality with the supplied proof,
-4. recomputes the expected cell from that proof,
-5. requires exact equality with the serialized cell.
+A merely self-consistent forged proof JSON therefore cannot be promoted to a trusted cell through the
+canonical composer.
 
-A rehashed cell with substituted metadata therefore remains invalid.
+## Parsing versus provenance verification
 
-## Why the cell exists
+`OperationCellV1.from_dict(...)` is a strict parser for the serialized atom. It validates:
 
-The cell is not a second proof and does not add trust.
+- exact field set,
+- schema/type constants,
+- text/digest forms,
+- execution epoch,
+- VERIFIED verdict,
+- independent-provider-readback strength,
+- exact cell self-digest.
 
-Its purpose is to provide one stable, addressable and indexable operation unit for:
+Parsing alone is not a provenance claim. Trusted creation or lineage verification requires a canonical
+lineage-specific composer. This mirrors the core rule that content self-consistency is not equivalent
+to proof provenance.
 
-- evidence graphs,
-- audit navigation,
-- downstream governed composition,
-- compact lifecycle handoff,
-- later aggregation without copying raw evidence.
+## Required invariants
 
-The authoritative evidence remains the upstream proof and its canonical roots.
+- `schema_version == 1`
+- `cell_type == operation-cell/v1`
+- supplied proof must be exact `OperationProof/v2`
+- proof must be canonically recomputed for its verification lineage
+- supplied proof must exactly equal that recomputation
+- cell execution ID/epoch/request/environment/capability/target exactly equal proof claims
+- `proof_type == operation-proof/v2`
+- `operation_proof_digest == proof.proof_digest`
+- proof final verdict is `VERIFIED`
+- proof strength is `INDEPENDENT_PROVIDER_READBACK` for R1
+- nested `ExecutionReceipt/v2` remains `NOT_EVALUATED` and valid through canonical proof recomputation
+- `cell_digest` equals SHA-256 of canonical JSON for the 13 non-digest claims
+- no I/O, credentials, provider mutation or new authority
 
-## Why rollback-absence only in R1
+## Why the schema stays small
 
-Historical F6b is the concrete accepted use case and its canonical lineage is rollback-absence.
+`OperationProof/v2` already binds:
 
-R1 deliberately does not introduce a union-based generic composer or silently accept presence
-evidence. A future presence/read-ref composer can be added as a separate additive path after a real
-use case and its own review.
+- authorization snapshot,
+- execution grant,
+- execution receipt,
+- Runner observation,
+- Verifier observation,
+- observed post-state,
+- verification boundary,
+- verification strength,
+- verification result.
 
-This keeps the current trust boundary explicit and prevents accidental cross-lineage substitution.
+`ExecutionReceipt/v2` transitively binds:
 
-## Fail-closed invariants
+- execution capsule,
+- grant consumption,
+- dispatch envelope/admission,
+- execution lease,
+- Runner identity/boundary,
+- credential decision,
+- runtime activation,
+- write preflight,
+- provider request/response roots.
 
-Creation is denied unless:
+Duplicating those claims in `OperationCell/v1` would create a second representation that can drift.
+The cell therefore freezes the content-addressed closure rather than copying it.
 
-- the supplied proof is `OperationProofV2`,
-- canonical `create_operation_proof_v2_from_absence(...)` recomputation succeeds,
-- the supplied proof exactly equals that recomputation,
-- the proof represents exactly one bounded provider mutation,
-- automatic mutation retry is already forbidden by `OperationProof/v2`,
-- rollback is true,
-- verification strength is `INDEPENDENT_PROVIDER_READBACK`,
-- final verdict is `VERIFIED`,
-- all exposed lifecycle roots are derived from the recomputed proof,
-- the cell digest matches canonical JSON of all cell claims.
+## Required conformance / adversarial coverage
 
-Deserialization additionally fails unless the serialized cell exactly equals a fresh cell recomputed
-from the supplied canonical evidence.
+The candidate must cover:
+
+- deterministic output and exact round trip;
+- exact 14-field schema;
+- proof digest binding;
+- proof substitution from another execution ID;
+- another execution epoch;
+- another request ID;
+- another environment;
+- another capability;
+- another target;
+- self-consistent forged `VERIFIED` proof rejected by canonical recomputation;
+- receipt/proof execution mismatch;
+- receipt/proof target mismatch;
+- chronology mismatch;
+- unknown and missing cell fields;
+- tampered cell digest;
+- non-VERIFIED and weaker-strength serialized claims rejected;
+- no duplicated nested/raw authority, verification or provider evidence.
+
+The existing `ExecutionReceipt/v2` and `OperationProof/v2` contracts retain their own fail-closed
+coverage, including `verification_status=NOT_EVALUATED`, exact mutation count and no automatic retry.
 
 ## Trust boundary
 
-`OperationCell/v1` is evidence-only:
+`OperationCell/v1`:
 
-- no network I/O,
-- no filesystem I/O,
-- no provider read,
-- no provider write,
-- no retry,
-- no credential access,
-- no authorization issuance,
-- no approval semantics,
-- no execution,
-- no deployment,
-- no release.
+- creates no authority,
+- performs no network or filesystem I/O,
+- performs no provider read/write,
+- accesses no credentials,
+- cannot retry an effect,
+- cannot execute an operation,
+- cannot deploy or release,
+- does not repair or rewrite development-process governance history.
 
-It cannot make an unverified operation verified and cannot authorize a new effect.
-
-## Scope
-
-Included:
-
-- `voodoo_product/operation_cell_v1.py`,
-- `tests/system/test_operation_cell_v1.py`,
-- this ADR.
-
-Not included:
-
-- changing `OperationProof/v2`,
-- changing the accepted absence composer,
-- presence/read-ref OperationCell composer,
-- historical provider re-execution,
-- provider mutation,
-- runtime API/UI integration,
-- persistence changes,
-- merge,
-- deploy,
-- release.
+It only freezes an already-proven operation into a stable content-addressed product atom.
 
 ## 7×ANO gate
 
 ```text
-JEDNODUCHÁ: ANO — one additive contract/composer for one proven use case.
-ÚČELNÁ: ANO — creates the missing compact trust unit above an existing verified proof.
-AUTOMATIZOVANÁ: ANO — deterministic proof and cell recomputation.
-BEZPEČNÁ: ANO — standalone/rehashed proof or cell substitution fails closed; no I/O or authority.
-MĚŘITELNÁ: ANO — exact object equality, exact digests and focused negative regression tests.
-VRATNÁ: ANO — additive three-file slice; rollback is a focused revert/removal.
-DŮKAZNĚ OVĚŘITELNÁ: ANO — exact-head tests/CI plus retained proof and evidence roots.
+JEDNODUCHÁ: ANO — exact 14-field atom + one explicit first composer.
+ÚČELNÁ: ANO — closes the missing Phase-H product atom over an already verified operation.
+AUTOMATIZOVANÁ: ANO — deterministic proof recomputation and cell hashing.
+BEZPEČNÁ: ANO — no authority/I/O; canonical proof equality blocks forged proof promotion.
+MĚŘITELNÁ: ANO — exact schema, exact digests and explicit negative conformance cases.
+VRATNÁ: ANO — additive three-file slice; focused revert before acceptance.
+DŮKAZNĚ OVĚŘITELNÁ: ANO — canonical roots + exact-head tests/CI + R3 review gate.
 ```
 
 ## Verification plan
-
-Focused:
 
 ```bash
 python -m ruff check \
@@ -250,46 +254,52 @@ python -m pytest -q \
   tests/system/test_operation_proof_v2.py
 ```
 
-Then require the repository's normal exact-head CI and relevant D4b/E3/E4b regression workflows.
+Then require the repository's exact-head CI plus relevant D4b/E3/E4b regression workflows.
 
-## Required adversarial cases
+## Scope
 
-The candidate must prove at least:
+Included:
 
-1. deterministic creation and provenance-aware round trip,
-2. exact binding of lifecycle trust roots to `OperationProof/v2`,
-3. a standalone forged/rehashed `VERIFIED` proof is rejected when it does not match canonical
-   rollback-absence recomputation,
-4. a rehashed serialized cell with substituted metadata is rejected,
-5. unknown serialized fields are rejected,
-6. the cell contains no raw authority or secret material.
+- minimal `OperationCell/v1` contract,
+- rollback-absence trusted composer,
+- focused positive/negative tests,
+- ADR and candidate verification.
+
+Not included:
+
+- modification of `OperationProof/v2`,
+- modification of the accepted absence proof composer,
+- historical F6b `OperationCell/v1` instance composition,
+- provider mutation or historical effect replay,
+- persistence/runtime API/UI integration,
+- merge,
+- deploy,
+- release.
 
 ## Acceptance / merge gate
 
 This candidate remains `PROPOSED` and unmerged until:
 
-- focused tests are green,
-- exact-head CI is green,
-- relevant existing proof/verification workflows remain green,
-- complete scoped diff is reviewed,
-- review threads are zero,
-- R3 independent review requirement is satisfied or the owner explicitly accepts the remaining
-  review-independence risk,
-- fresh head/main preflight passes,
+- focused and relevant regression tests are green;
+- exact-head CI is green;
+- D4b/E3/E4b regressions are green;
+- complete scoped diff receives R3 review;
+- unresolved review threads are zero;
+- a genuine independent review exists or the owner explicitly accepts remaining review-independence risk;
+- fresh exact-head/main preflight passes;
 - a separate explicit merge authorization is received.
 
 ## Governance truth boundary
 
-The historical PR #125 merge-authorization provenance remains separate governance metadata and is
-not repaired, rewritten or hidden by `OperationCell/v1`.
+Historical PR #125's separate pre-merge merge-authorization provenance remains `NOT VERIFIED`. This
+candidate does not repair, hide or reinterpret that governance fact.
 
-The cell represents operation evidence only. It does not make claims about historical development
-process authorization that are not already verified.
+The OperationCell contract represents operation evidence. It does not manufacture development-process
+authorization evidence.
 
 ## Follow-up, explicitly separate
 
-If this candidate is later accepted on `main`, a separate governed step may compose and archive the
-historical F6b `OperationCell/v1` instance from the retained F6b evidence and the existing
-`OperationProof/v2`.
+Only after this contract candidate is accepted on canonical `main` may a separately authorized step
+compose and archive the historical F6b `OperationCell/v1` instance.
 
-That historical cell instance is not created by this candidate and requires its own authorization.
+The current `GO OperationCell/v1` does not authorize merge or historical cell-instance composition.
