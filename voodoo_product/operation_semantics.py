@@ -48,7 +48,8 @@ _MEMBER_PURPOSES = {
         "Binds independent human or organizational approvals to exact operation evidence."
     ),
     "runner": (
-        "Consumes a scoped grant, performs the bounded effect, and emits a structured receipt."
+        "Executes an already-authorized dispatch under current lease and fence state, performs the "
+        "bounded effect, and emits a structured receipt without issuing or consuming grants."
     ),
     "verifier": (
         "Checks real provider state independently from the actor, planner, and runner claim."
@@ -63,7 +64,7 @@ _MEMBER_AUTHORITY = {
     "cybercore": "intelligence_only",
     "policy_engine": "decision_projection_or_gate",
     "approval_quorum": "approval_evidence",
-    "runner": "grant_consumption_only",
+    "runner": "bounded_execution_only",
     "verifier": "verification_evidence",
     "evidence_fabric": "evidence_integrity",
 }
