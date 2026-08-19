@@ -11,7 +11,7 @@ Before every technical task:
 
 1. Verify that `WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md` exists.
 2. Compute its SHA-256 and require
-   `ed44c6147049887d941b7497f1bce3b817f22b6ae00a5136a27365a2f688d918`.
+   `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`.
 3. Read the task-relevant sections before work.
 4. Before implementation, architecture or security changes, remote writes,
    releases, or destructive operations, read the entire file.
