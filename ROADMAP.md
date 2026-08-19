@@ -68,6 +68,11 @@ bounded milestones:
 These are component/pilot/evidence milestones. They do **not** mean the current FastAPI product has one
 fully composed runtime path through every row.
 
+The organization-scoped approval/profile design remains separately **PROPOSED** in
+[ADR-0003](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md). Its presence does
+not activate Solo, Team or Regulated policy behavior and does not weaken current human-authorization
+or production fail-closed requirements.
+
 ## Current critical gate — Reconciliation R1
 
 **Status: IMPLEMENTED candidate / verification in progress (PR #128).**
@@ -227,7 +232,7 @@ verification → proof/cell chain.
 After the above gates:
 
 - multi-provider semantic modules;
-- organization/tenant policy maturation;
+- organization/tenant policy maturation through the separately governed ADR-0003 lineage;
 - released enterprise identity;
 - PostgreSQL adapter and isolation gates;
 - artifact provenance/signing eligibility;
