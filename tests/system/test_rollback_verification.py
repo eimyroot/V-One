@@ -16,7 +16,6 @@ from voodoo_product.runner_identity import RunnerIdentity
 from voodoo_product.verifier_credential import VerifierCredentialPolicy
 from voodoo_product.verifier_identity import VerifierIdentity
 
-
 NOW = "2026-08-19T01:10:00.000+00:00"
 LATER = "2026-08-19T01:10:01.000+00:00"
 EXPIRES = "2026-08-19T01:14:00.000+00:00"
