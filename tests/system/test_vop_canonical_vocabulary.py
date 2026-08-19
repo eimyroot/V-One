@@ -16,6 +16,8 @@ from voodoo_product.execution_lease import EXECUTION_LEASE_TYPE
 from voodoo_product.github_read_provider import GITHUB_REF_OBSERVATION_TYPE
 from voodoo_product.grant_consumption import GRANT_CONSUMPTION_WITNESS_TYPE
 from voodoo_product.isolated_runner import RUNTIME_ACTIVATION_TYPE, RUNTIME_BOOTSTRAP_TYPE
+from voodoo_product.operation_cell_v1 import OPERATION_CELL_V1_TYPE
+from voodoo_product.operation_proof_v2 import OPERATION_PROOF_V2_TYPE
 from voodoo_product.operation_semantics import OPERATION_STAGES as SEMANTICS_OPERATION_STAGES
 from voodoo_product.runner_identity import RUNNER_BOUNDARY_TYPE, RUNNER_IDENTITY_TYPE
 from voodoo_product.verification_result import (
@@ -112,6 +114,7 @@ def test_canonical_definition_maps_are_runtime_immutable() -> None:
 
 def test_require_canonical_term_and_surface_fail_closed() -> None:
     assert require_canonical_term("Operation", category="noun") == "Operation"
+    assert require_canonical_term("OperationCell", category="noun") == "OperationCell"
     assert require_canonical_term("AUTHORIZE", category="verb") == "AUTHORIZE"
     assert require_canonical_term("PROVES", category="relation") == "PROVES"
     assert require_vop_surface("code") == "code"
@@ -127,6 +130,7 @@ def test_require_canonical_term_and_surface_fail_closed() -> None:
 
 def test_operation_semantics_uses_the_same_canonical_stage_sequence() -> None:
     assert SEMANTICS_OPERATION_STAGES == OPERATION_STAGES
+    assert OPERATION_STAGES[-1] == "operation_cell"
 
 
 def test_schema_registry_manifest_matches_runtime_registry_and_version_lineage() -> None:
@@ -143,9 +147,10 @@ def test_schema_registry_manifest_matches_runtime_registry_and_version_lineage()
     assert registry["surface_consistency_rule"] == SURFACE_CONSISTENCY_RULE
     assert registry["semantic_change_rule"] == SEMANTIC_CHANGE_RULE
     assert SCHEMA_SUPERSESSIONS["execution-grant/v1"] == EXECUTION_GRANT_V2_TYPE
+    assert SCHEMA_SUPERSESSIONS["operation-proof/v1"] == OPERATION_PROOF_V2_TYPE
 
 
-def test_released_phase_c_d_e1_e2_e3_e4_contract_ids_are_reserved_in_one_registry() -> None:
+def test_released_current_contract_ids_are_reserved_in_one_registry() -> None:
     released_ids = {
         EXECUTION_GRANT_V2_TYPE,
         GRANT_CONSUMPTION_WITNESS_TYPE,
@@ -167,9 +172,12 @@ def test_released_phase_c_d_e1_e2_e3_e4_contract_ids_are_reserved_in_one_registr
         OBSERVED_POST_STATE_TYPE,
         VERIFICATION_STRENGTH_TYPE,
         VERIFICATION_RESULT_TYPE,
+        OPERATION_PROOF_V2_TYPE,
+        OPERATION_CELL_V1_TYPE,
     }
 
     assert released_ids <= set(SCHEMA_REGISTRY_IDS)
+    assert "OperationCell" in CANONICAL_NOUNS
 
 
 def test_vop_cross_surface_invariant_is_normative_and_not_redefined() -> None:
@@ -213,6 +221,7 @@ def test_canonical_document_contains_non_conflation_and_system_invariants() -> N
         "AUTHORIZE\n!= ISSUE",
         "EXECUTE\n!= VERIFY",
         "RELEASE\n!= DEPLOY",
+        "OperationProof\n!= OperationCell",
         "ONE SYSTEM\n=\nONE SEMANTIC LANGUAGE",
         "One language. One authority model. One proof model. Many providers.",
     )
