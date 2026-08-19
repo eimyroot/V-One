@@ -17,7 +17,7 @@ env:
   F6B_EXPECTED_PR: "123"
   F6B_EXPECTED_HEAD_REF: "feat/f6b-first-live-governed-delete-prep-r1"
   F6B_CANONICAL_MAIN_SHA: "2473a37f791c51a8a419a9eb88a78fdbd23a9bcd"
-  F6B_PREP_PARENT_SHA: "1c2f21ca634c6967fb2302f58121cb6333a5606c"
+  F6B_PREP_PARENT_SHA: "ed203ad8e0a4b40de7489a45b01c28ba7b63c4e8"
   F6B_ACCEPTED_F6_DRY_HEAD: "e76b26a08a7edce369fab5617c1613f1075572d6"
   F6B_TARGET_REPOSITORY: "nulleimy/V-One"
   F6B_TARGET_REF: "refs/heads/vone-canary/f4b-pr120-32185703943"
@@ -77,9 +77,10 @@ jobs:
           assert 'F6B_LIVE_EFFECT_AUTHORIZED: "false"' in text
           lines = text.splitlines()
           barrier = lines.index('  live-delete-authorized-only:')
-          assert lines[barrier + 1].strip().startswith('if:')
-          assert 'false' in lines[barrier + 1].casefold()
-          assert lines[barrier + 4].strip() == 'contents: read'
+          assert lines[barrier + 1].strip().startswith('if:'), 'live barrier has no explicit job-level if'
+          assert 'false' in lines[barrier + 1].casefold(), 'live barrier is not hard-disabled'
+          assert lines[barrier + 4].strip() == 'permissions:', 'live barrier permissions block moved unexpectedly'
+          assert lines[barrier + 5].strip() == 'contents: read', 'live barrier permission is not read-only'
           print('F6B_PREP_ZERO_EFFECT_CEILING=PASS')
           PY
           echo "F6B_EXACT_PREP_LINEAGE=PASS"
