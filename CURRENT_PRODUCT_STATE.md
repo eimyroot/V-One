@@ -8,19 +8,35 @@
 
 ```text
 AS_OF: 2026-08-20
+EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
+RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_TREE: 423e234757686f720de20decd762270c43e0a8bb
 AUDIT: VONE_RECONCILIATION_AUDIT_20260819T2209Z
 AUDIT_STATUS: RECONCILIATION_REQUIRED_TECHNICAL_CORE_STRONG_PRODUCT_TRUTH_DRIFT_FOUND
 RECONCILIATION_CANDIDATE: PR #128 / feat/reconciliation-p0-p1-r1
+LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 PRODUCT_VERSION: 0.9.0-rc2-dev
 PRODUCTION_EFFECTS: DISABLED
 RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-Exact live Git identity must still be queried directly. The SHA above is the immutable input baseline
-for this reconciliation, not a self-updating claim about future `main`.
+Exact live Git identity must still be queried directly. The reconciliation SHA is an immutable input
+baseline, not a self-updating claim about future `main`.
+
+## Historical runtime checkpoint boundary
+
+The latest retained full local runtime-attested checkpoint remains historical development evidence for
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
+
+```text
+EVIDENCE_ARCHIVE: POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
+PRODUCT_IMAGE_ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
+```
+
+It does **not** attest the later reconciliation baseline or later source changes. Those later trees
+require their own commit-bound CI/pilot evidence.
 
 ## How status is represented
 
