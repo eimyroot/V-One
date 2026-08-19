@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, Self
