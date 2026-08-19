@@ -16,9 +16,9 @@ from voodoo_product.execution_receipt_v2 import (
 )
 from voodoo_product.operation_cell_v1 import (
     OPERATION_CELL_V1_TYPE,
-    ROLLBACK_ABSENCE_LINEAGE_V1,
     OperationCellV1,
     OperationCellV1Denied,
+    create_operation_cell_v1_from_absence,
 )
 from voodoo_product.operation_proof_v2 import OperationProofV2
 from voodoo_product.operation_proof_v2_absence import (
@@ -31,6 +31,7 @@ from voodoo_product.rollback_verification import (
     verify_github_ref_absence,
 )
 from voodoo_product.verification_result import (
+    INDEPENDENT_PROVIDER_READBACK,
     VERIFIED,
     ObservedPostState,
     VerificationResult,
@@ -58,13 +59,21 @@ def _digest(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def _receipt() -> ExecutionReceiptV2:
+def _receipt(
+    *,
+    execution_id: str,
+    request_id: str,
+    environment: str,
+    capability: str,
+    target_digest: str,
+    recorded_at: str = "2026-08-18T11:59:00.000+00:00",
+) -> ExecutionReceiptV2:
     return ExecutionReceiptV2.create(
-        execution_id="exec_f6b_cell",
-        request_id="req_f6b_cell",
-        environment="staging",
-        capability="github.delete-exact-created-ref/v1",
-        target_digest=D1,
+        execution_id=execution_id,
+        request_id=request_id,
+        environment=environment,
+        capability=capability,
+        target_digest=target_digest,
         authorization_snapshot_digest=D2,
         execution_grant_digest=D3,
         execution_capsule_digest=D4,
@@ -90,25 +99,30 @@ def _receipt() -> ExecutionReceiptV2:
         effect_status=EFFECT_RECORDED,
         verification_status=NOT_EVALUATED,
         recording_clock_witness_digest=D5,
-        recorded_at="2026-08-18T11:59:00.000+00:00",
+        recorded_at=recorded_at,
         receipt_revision="execution-receipt/f6b-cell-test-r1",
     )
 
 
-def _runner() -> GitHubRefAbsenceObservation:
+def _runner(
+    *,
+    execution_id: str,
+    execution_epoch: int,
+    target_digest: str,
+) -> GitHubRefAbsenceObservation:
     claims: dict[str, Any] = {
         "schema_version": 1,
         "observation_type": "github-ref-absence-observation/v1",
         "repository": "nulleimy/V-One",
         "ref": "refs/heads/vone-canary/f6b-cell-test",
-        "target_digest": D1,
+        "target_digest": target_digest,
         "provider": "github",
         "provider_instance_id": "gha:f6b-cell-runner:test",
         "runner_id": D2,
         "runner_identity_digest": D3,
         "runner_boundary_digest": D4,
-        "execution_id": "exec_f6b_cell",
-        "execution_epoch": 1,
+        "execution_id": execution_id,
+        "execution_epoch": execution_epoch,
         "source_identity": "github-api-runner-readback/f6b-cell-test-r1",
         "http_status": 404,
         "presence": "ABSENT",
@@ -125,7 +139,11 @@ def _runner() -> GitHubRefAbsenceObservation:
     )
 
 
-def _boundary(runner: GitHubRefAbsenceObservation) -> IndependentVerificationBoundaryV2:
+def _boundary(
+    runner: GitHubRefAbsenceObservation,
+    *,
+    environment: str,
+) -> IndependentVerificationBoundaryV2:
     claims: dict[str, Any] = {
         "schema_version": 2,
         "boundary_type": "independent-verification-boundary/v2",
@@ -142,7 +160,7 @@ def _boundary(runner: GitHubRefAbsenceObservation) -> IndependentVerificationBou
         "execution_epoch": runner.execution_epoch,
         "target_digest": runner.target_digest,
         "runner_observation_digest": runner.observation_digest,
-        "environment": "staging",
+        "environment": environment,
         "provider_mutation_allowed": False,
         "independence_class": INDEPENDENCE_CLASS,
         "boundary_revision": "independent-verification-boundary/f6b-cell-test-r1",
@@ -192,7 +210,16 @@ def _verifier(
     )
 
 
-def _bundle() -> tuple[
+def _bundle(
+    *,
+    execution_id: str = "exec_f6b_cell",
+    execution_epoch: int = 1,
+    request_id: str = "req_f6b_cell",
+    environment: str = "staging",
+    capability: str = "github.delete-exact-created-ref/v1",
+    target_digest: str = D1,
+    recorded_at: str = "2026-08-18T11:59:00.000+00:00",
+) -> tuple[
     ExecutionReceiptV2,
     GitHubRefAbsenceObservation,
     VerifierGitHubRefAbsenceObservation,
@@ -202,9 +229,20 @@ def _bundle() -> tuple[
     VerificationResult,
     OperationProofV2,
 ]:
-    receipt = _receipt()
-    runner = _runner()
-    boundary = _boundary(runner)
+    receipt = _receipt(
+        execution_id=execution_id,
+        request_id=request_id,
+        environment=environment,
+        capability=capability,
+        target_digest=target_digest,
+        recorded_at=recorded_at,
+    )
+    runner = _runner(
+        execution_id=execution_id,
+        execution_epoch=execution_epoch,
+        target_digest=target_digest,
+    )
+    boundary = _boundary(runner, environment=environment)
     verifier = _verifier(runner, boundary)
     state, strength, result = verify_github_ref_absence(
         runner_observation=runner,
@@ -227,21 +265,25 @@ def _bundle() -> tuple[
     return receipt, runner, verifier, boundary, state, strength, result, proof
 
 
-def _cell() -> tuple[
-    OperationCellV1,
-    ExecutionReceiptV2,
-    GitHubRefAbsenceObservation,
-    VerifierGitHubRefAbsenceObservation,
-    IndependentVerificationBoundaryV2,
-    ObservedPostState,
-    VerificationStrength,
-    VerificationResult,
-    OperationProofV2,
-]:
-    receipt, runner, verifier, boundary, state, strength, result, proof = _bundle()
-    cell = OperationCellV1.create_from_absence(
-        proof=proof,
-        receipt=receipt,
+def _compose(
+    source: tuple[
+        ExecutionReceiptV2,
+        GitHubRefAbsenceObservation,
+        VerifierGitHubRefAbsenceObservation,
+        IndependentVerificationBoundaryV2,
+        ObservedPostState,
+        VerificationStrength,
+        VerificationResult,
+        OperationProofV2,
+    ],
+    *,
+    proof: OperationProofV2 | None = None,
+    receipt: ExecutionReceiptV2 | None = None,
+) -> OperationCellV1:
+    canonical_receipt, runner, verifier, boundary, state, strength, result, canonical_proof = source
+    return create_operation_cell_v1_from_absence(
+        proof=proof or canonical_proof,
+        receipt=receipt or canonical_receipt,
         runner_observation=runner,
         verifier_observation=verifier,
         boundary=boundary,
@@ -250,45 +292,77 @@ def _cell() -> tuple[
         verification=result,
         cell_revision="operation-cell/f6b-test-r1",
     )
-    return cell, receipt, runner, verifier, boundary, state, strength, result, proof
 
 
-def test_operation_cell_v1_is_deterministic_and_provenance_round_trippable() -> None:
-    cell, receipt, runner, verifier, boundary, state, strength, result, proof = _cell()
+def test_operation_cell_v1_is_minimal_deterministic_and_round_trippable() -> None:
+    source = _bundle()
+    cell = _compose(source)
+    value = cell.to_dict()
 
-    parsed = OperationCellV1.from_dict(
-        cell.to_dict(),
-        proof=proof,
-        receipt=receipt,
-        runner_observation=runner,
-        verifier_observation=verifier,
-        boundary=boundary,
-        observed_post_state=state,
-        verification_strength=strength,
-        verification=result,
-    )
+    assert frozenset(value) == {
+        "schema_version",
+        "cell_type",
+        "execution_id",
+        "execution_epoch",
+        "request_id",
+        "environment",
+        "capability",
+        "target_digest",
+        "proof_type",
+        "operation_proof_digest",
+        "final_verdict",
+        "verification_strength_class",
+        "cell_revision",
+        "cell_digest",
+    }
+    assert value["cell_type"] == OPERATION_CELL_V1_TYPE
+    assert OperationCellV1.from_dict(value) == cell
+    assert _compose(_bundle()).cell_digest == cell.cell_digest
 
-    assert parsed == cell
-    assert cell.to_dict()["cell_type"] == OPERATION_CELL_V1_TYPE
-    assert cell.verification_lineage == ROLLBACK_ABSENCE_LINEAGE_V1
-    assert cell.final_verdict == VERIFIED
-    assert _cell()[0].cell_digest == cell.cell_digest
 
+def test_operation_cell_v1_freezes_only_proof_indexing_claims() -> None:
+    source = _bundle()
+    proof = source[-1]
+    cell = _compose(source)
 
-def test_operation_cell_v1_binds_lifecycle_trust_roots_to_proof() -> None:
-    cell, _, _, _, _, _, _, _, proof = _cell()
-
-    assert cell.authorization_snapshot_digest == proof.authorization_snapshot_digest
-    assert cell.execution_grant_digest == proof.execution_grant_digest
-    assert cell.execution_receipt_digest == proof.execution_receipt_digest
-    assert cell.verification_result_digest == proof.verification_result_digest
-    assert cell.operation_proof_digest == proof.proof_digest
     assert cell.execution_id == proof.execution_id
+    assert cell.execution_epoch == proof.execution_epoch
+    assert cell.request_id == proof.request_id
+    assert cell.environment == proof.environment
+    assert cell.capability == proof.capability
     assert cell.target_digest == proof.target_digest
+    assert cell.proof_type == "operation-proof/v2"
+    assert cell.operation_proof_digest == proof.proof_digest
+    assert cell.final_verdict == VERIFIED
+    assert cell.verification_strength_class == INDEPENDENT_PROVIDER_READBACK
 
 
-def test_operation_cell_v1_rejects_standalone_forged_verified_proof() -> None:
-    receipt, runner, verifier, boundary, state, strength, result, proof = _bundle()
+@pytest.mark.parametrize(
+    "other_source",
+    [
+        _bundle(execution_id="exec_other"),
+        _bundle(execution_epoch=2),
+        _bundle(request_id="req_other"),
+        _bundle(environment="production"),
+        _bundle(capability="github.other-capability/v1"),
+        _bundle(target_digest=DE),
+    ],
+    ids=["execution", "epoch", "request", "environment", "capability", "target"],
+)
+def test_operation_cell_v1_rejects_proof_identity_substitution(other_source: tuple[Any, ...]) -> None:
+    canonical = _bundle()
+    other_proof = other_source[-1]
+
+    with pytest.raises(
+        OperationCellV1Denied,
+        match="OPERATION_CELL_V1_OPERATION_PROOF_MISMATCH",
+    ):
+        _compose(canonical, proof=other_proof)
+
+
+def test_operation_cell_v1_rejects_self_consistent_forged_verified_proof() -> None:
+    source = _bundle()
+    proof = source[-1]
     forged_value = deepcopy(proof.to_dict())
     forged_value["verification_result_digest"] = DE
     forged_claims = {
@@ -301,78 +375,102 @@ def test_operation_cell_v1_rejects_standalone_forged_verified_proof() -> None:
         OperationCellV1Denied,
         match="OPERATION_CELL_V1_OPERATION_PROOF_MISMATCH",
     ):
-        OperationCellV1.create_from_absence(
-            proof=forged,
-            receipt=receipt,
-            runner_observation=runner,
-            verifier_observation=verifier,
-            boundary=boundary,
-            observed_post_state=state,
-            verification_strength=strength,
-            verification=result,
-            cell_revision="operation-cell/f6b-forged-proof-test-r1",
-        )
+        _compose(source, proof=forged)
 
 
-def test_operation_cell_v1_rejects_rehashed_serialized_metadata_substitution() -> None:
-    cell, receipt, runner, verifier, boundary, state, strength, result, proof = _cell()
-    value = deepcopy(cell.to_dict())
-    value["environment"] = "production"
-    claims = {key: item for key, item in value.items() if key != "cell_digest"}
-    value["cell_digest"] = _digest(claims)
+def test_operation_cell_v1_rejects_receipt_execution_substitution() -> None:
+    source = _bundle()
+    substituted = _receipt(
+        execution_id="exec_other",
+        request_id="req_f6b_cell",
+        environment="staging",
+        capability="github.delete-exact-created-ref/v1",
+        target_digest=D1,
+    )
 
-    with pytest.raises(
-        OperationCellV1Denied,
-        match="OPERATION_CELL_V1_EVIDENCE_BINDING_MISMATCH",
-    ):
-        OperationCellV1.from_dict(
-            value,
-            proof=proof,
-            receipt=receipt,
-            runner_observation=runner,
-            verifier_observation=verifier,
-            boundary=boundary,
-            observed_post_state=state,
-            verification_strength=strength,
-            verification=result,
-        )
+    with pytest.raises(PermissionError, match="OPERATION_PROOF_V2_EXECUTION_MISMATCH"):
+        _compose(source, receipt=substituted)
 
 
-def test_operation_cell_v1_rejects_unknown_serialized_fields() -> None:
-    cell, receipt, runner, verifier, boundary, state, strength, result, proof = _cell()
-    value = deepcopy(cell.to_dict())
-    value["unexpected"] = "field"
+def test_operation_cell_v1_rejects_receipt_target_substitution() -> None:
+    source = _bundle()
+    substituted = _receipt(
+        execution_id="exec_f6b_cell",
+        request_id="req_f6b_cell",
+        environment="staging",
+        capability="github.delete-exact-created-ref/v1",
+        target_digest=DE,
+    )
+
+    with pytest.raises(PermissionError, match="OPERATION_PROOF_V2_TARGET_MISMATCH"):
+        _compose(source, receipt=substituted)
+
+
+def test_operation_cell_v1_rejects_chronology_mismatch() -> None:
+    source = _bundle()
+    late_receipt = _receipt(
+        execution_id="exec_f6b_cell",
+        request_id="req_f6b_cell",
+        environment="staging",
+        capability="github.delete-exact-created-ref/v1",
+        target_digest=D1,
+        recorded_at="2026-08-18T12:02:00.000+00:00",
+    )
+
+    with pytest.raises(PermissionError, match="OPERATION_PROOF_V2_VERIFICATION_PRECEDES_RECEIPT"):
+        _compose(source, receipt=late_receipt)
+
+
+def test_operation_cell_v1_rejects_tampered_serialized_cell() -> None:
+    value = deepcopy(_compose(_bundle()).to_dict())
+    value["operation_proof_digest"] = DE
+
+    with pytest.raises(ValueError, match="cell_digest does not match"):
+        OperationCellV1.from_dict(value)
+
+
+def test_operation_cell_v1_rejects_unknown_or_missing_serialized_fields() -> None:
+    value = _compose(_bundle()).to_dict()
+    unknown = {**value, "unexpected": "field"}
+    missing = {key: item for key, item in value.items() if key != "target_digest"}
 
     with pytest.raises(ValueError, match="operation-cell/v1 fields are invalid"):
-        OperationCellV1.from_dict(
-            value,
-            proof=proof,
-            receipt=receipt,
-            runner_observation=runner,
-            verifier_observation=verifier,
-            boundary=boundary,
-            observed_post_state=state,
-            verification_strength=strength,
-            verification=result,
-        )
+        OperationCellV1.from_dict(unknown)
+    with pytest.raises(ValueError, match="operation-cell/v1 fields are invalid"):
+        OperationCellV1.from_dict(missing)
 
 
-def test_operation_cell_v1_contains_no_raw_authority_or_secret_material() -> None:
-    cell = _cell()[0]
-    value = cell.to_dict()
-    forbidden_exact_fields = {
+def test_operation_cell_v1_rejects_weaker_or_non_verified_serialized_claims() -> None:
+    value = _compose(_bundle()).to_dict()
+
+    for field, replacement, message in (
+        ("verification_strength_class", "SELF_ATTESTED", "independent provider readback"),
+        ("final_verdict", "FAILED", "may only freeze VERIFIED"),
+    ):
+        changed = deepcopy(value)
+        changed[field] = replacement
+        claims = {key: item for key, item in changed.items() if key != "cell_digest"}
+        changed["cell_digest"] = _digest(claims)
+        with pytest.raises(ValueError, match=message):
+            OperationCellV1.from_dict(changed)
+
+
+def test_operation_cell_v1_contains_no_duplicated_raw_or_nested_evidence() -> None:
+    value = _compose(_bundle()).to_dict()
+    forbidden_fields = {
+        "authorization_snapshot_digest",
+        "execution_grant_digest",
+        "execution_receipt_digest",
+        "verification_result_digest",
+        "runner_observation_digest",
+        "verifier_observation_digest",
+        "verification_boundary_digest",
+        "provider_operation",
+        "provider_response_digest",
         "token",
         "secret",
-        "authorization_snapshot",
-        "execution_grant",
-        "execution_receipt",
-        "provider_request",
-        "provider_response",
         "credential",
         "operation_proof",
-        "verification_result",
     }
 
-    assert forbidden_exact_fields.isdisjoint(value)
-    assert value["provider_mutation_count"] == 1
-    assert value["rollback_performed"] is True
+    assert forbidden_fields.isdisjoint(value)
