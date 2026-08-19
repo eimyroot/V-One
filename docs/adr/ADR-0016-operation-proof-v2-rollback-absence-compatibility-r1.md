@@ -56,10 +56,13 @@ The absence composer must:
    recomputation,
 7. preserve receipt/verifier separation (`verification_status=NOT_EVALUATED`),
 8. require exact execution and target binding,
-9. require `VERIFIED / OBSERVED_STATE_MATCH / INDEPENDENT_PROVIDER_READBACK`,
-10. require verification time not to precede receipt recording,
-11. emit the existing compact `OperationProof/v2` payload through `OperationProofV2.from_dict()`,
-12. perform no provider I/O or authority issuance.
+9. require receipt environment to equal the rollback verification boundary environment,
+10. require receipt provider operation `DELETE_REF`,
+11. require `rollback_performed=true`,
+12. require `VERIFIED / OBSERVED_STATE_MATCH / INDEPENDENT_PROVIDER_READBACK`,
+13. require verification time not to precede receipt recording,
+14. emit the existing compact `OperationProof/v2` payload through `OperationProofV2.from_dict()`,
+15. perform no provider I/O or authority issuance.
 
 ## Why a separate composer
 
@@ -83,6 +86,9 @@ Creation is denied unless:
 - supplied state/strength/result exactly equal recomputed values,
 - receipt and verification execution IDs match,
 - receipt and verification target digests match,
+- receipt environment equals the rollback verification boundary environment,
+- receipt provider operation is exactly `DELETE_REF`,
+- receipt records `rollback_performed=true`,
 - receipt verification status remains `NOT_EVALUATED`,
 - final verification is `VERIFIED`,
 - reason is `OBSERVED_STATE_MATCH`,
@@ -94,6 +100,12 @@ A structurally valid forged `VerificationResult/v1` is insufficient.
 
 A `GitHubRefObservation/v1` from the presence lineage is not accepted as a rollback absence
 observation.
+
+A self/adversarial review of the first compatibility candidate also found that absence post-state
+alone did not bind the semantic meaning of the receipt strongly enough. Without explicit checks, a
+same-execution/same-target receipt could claim a different provider operation or environment. R1
+therefore fails closed unless the receipt says `DELETE_REF`, records `rollback_performed=true`, and
+matches the verification boundary environment.
 
 ## Trust boundary
 
@@ -135,7 +147,7 @@ Not included:
 JEDNODUCHÁ: ANO — one companion composer; existing accepted path stays unchanged.
 ÚČELNÁ: ANO — closes the observed F6b lineage compatibility blocker.
 AUTOMATIZOVANÁ: ANO — deterministic canonical recomputation and proof construction.
-BEZPEČNÁ: ANO — explicit typed lineage, fail-closed substitution checks, no I/O or authority.
+BEZPEČNÁ: ANO — typed lineage plus delete/rollback/environment binding; no I/O or authority.
 MĚŘITELNÁ: ANO — exact artifact equality, deterministic digest, focused negative tests.
 VRATNÁ: ANO — three-file additive slice; rollback is revert/removal before acceptance.
 DŮKAZNĚ OVĚŘITELNÁ: ANO — exact-head CI plus retained F6b evidence roots and review gate.
@@ -168,6 +180,7 @@ This candidate remains `PROPOSED` and unmerged until:
 - existing presence-lineage tests remain green,
 - absence-lineage focused tests are green,
 - cross-lineage substitution is proven fail-closed,
+- non-delete, non-rollback, and cross-environment receipt substitution are proven fail-closed,
 - review threads are zero,
 - R3 review requirement is satisfied or the owner explicitly accepts remaining review-independence
   risk,
