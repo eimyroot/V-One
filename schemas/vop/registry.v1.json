@@ -63,11 +63,14 @@
     "observed-post-state/v1",
     "verification-strength/v1",
     "verification-result/v1",
-    "operation-proof/v1"
+    "operation-proof/v1",
+    "operation-proof/v2",
+    "operation-cell/v1"
   ],
   "schema_supersessions": {
     "execution-grant/v1": "execution-grant/v2",
-    "execution-receipt/v1": "execution-receipt/v2"
+    "execution-receipt/v1": "execution-receipt/v2",
+    "operation-proof/v1": "operation-proof/v2"
   },
   "identity_grammar": [
     "logical_identity",
