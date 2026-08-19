@@ -12,13 +12,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: f6b-first-live-governed-delete-pr123
+  group: f6b-first-live-governed-delete-pr123-r2
   cancel-in-progress: false
 
 env:
   F6B_EXPECTED_PR: "123"
   F6B_EXPECTED_HEAD_REF: "feat/f6b-first-live-governed-delete-prep-r1"
-  F6B_LIVE_PARENT_SHA: "3b9b24957b9a2eec2e141cbf447acfe2f20b913d"
+  F6B_LIVE_PARENT_SHA: "18e95c2526c85b1e2678c437c67aeab7942af7f4"
   F6B_CANONICAL_MAIN_SHA: "2473a37f791c51a8a419a9eb88a78fdbd23a9bcd"
   F6B_TARGET_REPOSITORY: "nulleimy/V-One"
   F6B_TARGET_REF: "refs/heads/vone-canary/f4b-pr120-32185703943"
@@ -80,39 +80,20 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json
-          import os
-          import time
-          import urllib.parse
-          import urllib.request
-
-          token = os.environ['GH_READ_TOKEN']
-          repo = os.environ['F6B_TARGET_REPOSITORY']
-          sha = os.environ['EVENT_HEAD_SHA']
-          headers = {
-              'Accept': 'application/vnd.github+json',
-              'Authorization': f'Bearer {token}',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'v-one-f6b-ci-fence/2',
-          }
-          url = f'https://api.github.com/repos/{repo}/actions/runs?' + urllib.parse.urlencode(
-              {'head_sha': sha, 'event': 'pull_request', 'per_page': 100}
-          )
+          import json, os, time, urllib.parse, urllib.request
+          token=os.environ['GH_READ_TOKEN']; repo=os.environ['F6B_TARGET_REPOSITORY']; sha=os.environ['EVENT_HEAD_SHA']
+          headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v-one-f6b-ci-fence/3'}
+          url=f'https://api.github.com/repos/{repo}/actions/runs?'+urllib.parse.urlencode({'head_sha':sha,'event':'pull_request','per_page':100})
           for _ in range(180):
-              request = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(request, timeout=15) as response:
-                  payload = json.loads(response.read().decode('utf-8'))
-              ci_runs = [run for run in payload.get('workflow_runs', []) if run.get('name') == 'ci']
-              if ci_runs:
-                  run = max(ci_runs, key=lambda item: item['id'])
-                  if run.get('status') == 'completed':
-                      if run.get('conclusion') != 'success':
-                          raise SystemExit(f"F6B_EXACT_HEAD_CI={run.get('conclusion')}")
-                      print(f"F6B_EXACT_HEAD_CI=PASS run_id={run['id']} head={sha}")
-                      break
+              with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=15) as response: payload=json.loads(response.read().decode())
+              runs=[r for r in payload.get('workflow_runs',[]) if r.get('name')=='ci']
+              if runs:
+                  run=max(runs,key=lambda x:x['id'])
+                  if run.get('status')=='completed':
+                      if run.get('conclusion')!='success': raise SystemExit(f"F6B_EXACT_HEAD_CI={run.get('conclusion')}")
+                      print(f"F6B_EXACT_HEAD_CI=PASS run_id={run['id']} head={sha}"); break
               time.sleep(4)
-          else:
-              raise SystemExit('F6B_EXACT_HEAD_CI_TIMEOUT')
+          else: raise SystemExit('F6B_EXACT_HEAD_CI_TIMEOUT')
           PY
 
       - name: Fresh review, main-drift and exact-target preflight
@@ -124,79 +105,25 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-          from datetime import UTC, datetime
-
-          token = os.environ['GH_READ_TOKEN']
-          repo = os.environ['F6B_TARGET_REPOSITORY']
-          owner, name = repo.split('/', 1)
-          expected_head = os.environ['EVENT_HEAD_SHA']
-          expected_main = os.environ['F6B_CANONICAL_MAIN_SHA']
-          target_ref = os.environ['F6B_TARGET_REF']
-          expected_target = os.environ['F6B_EXPECTED_REF_SHA']
-          headers = {
-              'Accept': 'application/vnd.github+json',
-              'Authorization': f'Bearer {token}',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'v-one-f6b-fresh-preflight/2',
-          }
-
+          import hashlib,json,os,urllib.error,urllib.request
+          from datetime import UTC,datetime
+          token=os.environ['GH_READ_TOKEN']; repo=os.environ['F6B_TARGET_REPOSITORY']; owner,name=repo.split('/',1); head=os.environ['EVENT_HEAD_SHA']; main_sha=os.environ['F6B_CANONICAL_MAIN_SHA']; ref=os.environ['F6B_TARGET_REF']; target_sha=os.environ['F6B_EXPECTED_REF_SHA']
+          headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v-one-f6b-fresh-preflight/3'}
           def get(path):
-              request = urllib.request.Request(f'https://api.github.com/repos/{repo}{path}', headers=headers)
+              req=urllib.request.Request(f'https://api.github.com/repos/{repo}{path}',headers=headers)
               try:
-                  with urllib.request.urlopen(request, timeout=15) as response:
-                      return response.status, json.loads(response.read().decode('utf-8'))
-              except urllib.error.HTTPError as exc:
-                  return exc.code, None
-
-          status, pr = get('/pulls/123')
-          assert status == 200 and pr['state'] == 'open'
-          assert pr['head']['sha'] == expected_head
-          assert pr['head']['ref'] == os.environ['F6B_EXPECTED_HEAD_REF']
-          assert pr['base']['ref'] == 'main' and pr['base']['sha'] == expected_main
-
-          query = '''query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved} pageInfo{hasNextPage}}}}}'''
-          body = json.dumps({'query': query, 'variables': {'owner': owner, 'name': name, 'number': 123}}).encode()
-          gql = urllib.request.Request(
-              'https://api.github.com/graphql', data=body,
-              headers={**headers, 'Content-Type': 'application/json'}, method='POST'
-          )
-          with urllib.request.urlopen(gql, timeout=15) as response:
-              graph = json.loads(response.read().decode('utf-8'))
-          assert not graph.get('errors'), graph.get('errors')
-          threads = graph['data']['repository']['pullRequest']['reviewThreads']
-          assert threads['pageInfo']['hasNextPage'] is False
-          assert [node for node in threads['nodes'] if not node['isResolved']] == []
-
-          status, main = get('/git/ref/heads/main')
-          assert status == 200 and main['object']['sha'] == expected_main, 'main drift detected'
-          ref_path = target_ref.removeprefix('refs/')
-          status, target = get(f'/git/ref/{ref_path}')
-          assert status == 200, f'F4b canary missing before DELETE: {status}'
-          assert target['ref'] == target_ref and target['object']['sha'] == expected_target
-
-          record = {
-              'schema_version': 1,
-              'record_type': 'f6b-live-pre-effect-authorization-record/v1',
-              'pr': 123,
-              'head_sha': expected_head,
-              'base_sha': expected_main,
-              'target_repository': repo,
-              'target_ref': target_ref,
-              'expected_sha': expected_target,
-              'capability': os.environ['F6B_CAPABILITY'],
-              'temporal_model': os.environ['F6B_TEMPORAL_MODEL'],
-              'max_provider_mutations': 1,
-              'unresolved_review_threads': 0,
-              'checked_at': datetime.now(UTC).isoformat(timespec='milliseconds'),
-          }
-          digest = hashlib.sha256(json.dumps(record, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
-              output.write(f'preflight_digest={digest}\n')
+                  with urllib.request.urlopen(req,timeout=15) as response:return response.status,json.loads(response.read().decode())
+              except urllib.error.HTTPError as exc:return exc.code,None
+          status,pr=get('/pulls/123'); assert status==200 and pr['state']=='open' and pr['head']['sha']==head and pr['head']['ref']==os.environ['F6B_EXPECTED_HEAD_REF'] and pr['base']['ref']=='main' and pr['base']['sha']==main_sha
+          query='''query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved} pageInfo{hasNextPage}}}}}'''
+          body=json.dumps({'query':query,'variables':{'owner':owner,'name':name,'number':123}}).encode(); gql=urllib.request.Request('https://api.github.com/graphql',data=body,headers={**headers,'Content-Type':'application/json'},method='POST')
+          with urllib.request.urlopen(gql,timeout=15) as response: graph=json.loads(response.read().decode())
+          assert not graph.get('errors'); threads=graph['data']['repository']['pullRequest']['reviewThreads']; assert not threads['pageInfo']['hasNextPage'] and not [n for n in threads['nodes'] if not n['isResolved']]
+          status,main=get('/git/ref/heads/main'); assert status==200 and main['object']['sha']==main_sha
+          ref_path=ref.removeprefix('refs/'); status,target=get(f'/git/ref/{ref_path}'); assert status==200 and target['ref']==ref and target['object']['sha']==target_sha
+          record={'schema_version':1,'record_type':'f6b-live-pre-effect-authorization-record/v1','pr':123,'head_sha':head,'base_sha':main_sha,'target_repository':repo,'target_ref':ref,'expected_sha':target_sha,'capability':os.environ['F6B_CAPABILITY'],'temporal_model':os.environ['F6B_TEMPORAL_MODEL'],'max_provider_mutations':1,'unresolved_review_threads':0,'checked_at':datetime.now(UTC).isoformat(timespec='milliseconds')}
+          digest=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:output.write(f'preflight_digest={digest}\n')
           print(f'F6B_FRESH_LIVE_PREFLIGHT=PASS digest={digest}')
           PY
 
@@ -205,22 +132,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --require-hashes -r requirements-dev.lock
-          python -m ruff check \
-            voodoo_product/rollback_control.py \
-            voodoo_product/rollback_runtime.py \
-            voodoo_product/github_delete_ref_runtime.py \
-            voodoo_product/rollback_verification.py \
-            voodoo_product/execution_receipt_v2.py \
-            tests/system/test_rollback_control.py \
-            tests/system/test_github_delete_ref_runtime.py \
-            tests/system/test_rollback_verification.py \
-            tests/system/test_f6_vop_registry.py
+          python -m ruff check voodoo_product/rollback_control.py voodoo_product/rollback_runtime.py voodoo_product/github_delete_ref_runtime.py voodoo_product/rollback_verification.py voodoo_product/execution_receipt_v2.py tests/system/test_rollback_control.py tests/system/test_github_delete_ref_runtime.py tests/system/test_rollback_verification.py tests/system/test_f6_vop_registry.py
           python -m compileall -q voodoo_product tests
-          python -m pytest -q \
-            tests/system/test_rollback_control.py \
-            tests/system/test_github_delete_ref_runtime.py \
-            tests/system/test_rollback_verification.py \
-            tests/system/test_f6_vop_registry.py
+          python -m pytest -q tests/system/test_rollback_control.py tests/system/test_github_delete_ref_runtime.py tests/system/test_rollback_verification.py tests/system/test_f6_vop_registry.py
           echo "F6B_LIVE_STATIC_PRE_EFFECT_GATE=PASS"
 
   execute-one-governed-delete:
@@ -237,7 +151,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-
       - name: Final fence, one DELETE, Runner absence, ExecutionReceipt/v2
         id: execute
         shell: bash
@@ -249,109 +162,35 @@ jobs:
           set -euo pipefail
           test "$GITHUB_RUN_ATTEMPT" = "1"
           python - <<'PY'
-          import base64
-          import hashlib
-          import http.client
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-          from datetime import UTC, datetime
-
+          import base64,hashlib,http.client,json,os,urllib.error,urllib.request
+          from datetime import UTC,datetime
           from voodoo_product.execution_receipt_v2 import compose_write_execution_receipt_v2
           from voodoo_product.rollback_verification import GitHubRefAbsenceObservation
-
-          token = os.environ['F6B_WRITE_TOKEN']
-          repo = os.environ['F6B_TARGET_REPOSITORY']
-          target_ref = os.environ['F6B_TARGET_REF']
-          expected_sha = os.environ['F6B_EXPECTED_REF_SHA']
-          expected_main = os.environ['F6B_CANONICAL_MAIN_SHA']
-          head_sha = os.environ['EVENT_HEAD_SHA']
-          preflight_digest = os.environ['PREFLIGHT_DIGEST']
-          run_id = os.environ['GITHUB_RUN_ID']
-          execution_id = f'f6b-live-{run_id}'
-          request_id = 'pr123-f6b-live-go-20260819'
-          provider_instance_id = f'gha-f6b-runner:{run_id}:execute-one-governed-delete:1'
-          credential_class = os.environ['F6B_CREDENTIAL_CLASS']
-
-          def now(): return datetime.now(UTC).isoformat(timespec='milliseconds')
-          def canonical(value): return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
-          def digest(value):
-              raw = value if isinstance(value, str) else canonical(value)
-              return hashlib.sha256(raw.encode()).hexdigest()
-          def sealed(value, field):
-              result = dict(value); result[field] = digest(value); return result
-
-          headers = {
-              'Accept': 'application/vnd.github+json',
-              'Authorization': f'Bearer {token}',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'v-one-f6b-live-delete/2',
-          }
+          token=os.environ['F6B_WRITE_TOKEN']; repo=os.environ['F6B_TARGET_REPOSITORY']; ref=os.environ['F6B_TARGET_REF']; expected=os.environ['F6B_EXPECTED_REF_SHA']; main_sha=os.environ['F6B_CANONICAL_MAIN_SHA']; head=os.environ['EVENT_HEAD_SHA']; preflight=os.environ['PREFLIGHT_DIGEST']; run_id=os.environ['GITHUB_RUN_ID']; execution_id=f'f6b-live-{run_id}'; request_id='pr123-f6b-live-go-20260819'; instance=f'gha-f6b-runner:{run_id}:execute-one-governed-delete:1'; credential=os.environ['F6B_CREDENTIAL_CLASS']
+          def now():return datetime.now(UTC).isoformat(timespec='milliseconds')
+          def canonical(v):return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+          def digest(v):return hashlib.sha256((v if isinstance(v,str) else canonical(v)).encode()).hexdigest()
+          def seal(v,f):r=dict(v);r[f]=digest(v);return r
+          headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v-one-f6b-live-delete/3'}
           def read(path):
-              request = urllib.request.Request(f'https://api.github.com/repos/{repo}{path}', headers=headers)
+              req=urllib.request.Request(f'https://api.github.com/repos/{repo}{path}',headers=headers)
               try:
-                  with urllib.request.urlopen(request, timeout=15) as response:
-                      return response.status, json.loads(response.read().decode('utf-8'))
-              except urllib.error.HTTPError as exc:
-                  return exc.code, None
-
-          status, pr = read('/pulls/123')
-          assert status == 200 and pr['state'] == 'open' and pr['head']['sha'] == head_sha
-          assert pr['base']['sha'] == expected_main
-          status, main = read('/git/ref/heads/main')
-          assert status == 200 and main['object']['sha'] == expected_main
-          ref_path = target_ref.removeprefix('refs/')
-          status, current = read(f'/git/ref/{ref_path}')
-          assert status == 200 and current['ref'] == target_ref
-          assert current['object']['sha'] == expected_sha, 'F6B_FINAL_TARGET_SHA_MISMATCH'
-          final_read_at = now()
-
-          target = sealed({'schema_version':1,'target_type':'execution-target/v1','target_kind':'git_ref','repository':repo,'ref':target_ref,'expected_sha':expected_sha}, 'target_digest')
-          authorization = sealed({'schema_version':1,'record_type':'f6b-live-authorization-snapshot-evidence/v1','source':'explicit-user-go-f6b-2026-08-19','pr':123,'head_sha':head_sha,'base_sha':expected_main,'target_digest':target['target_digest'],'preflight_digest':preflight_digest,'capability':os.environ['F6B_CAPABILITY'],'authorized_provider_mutations':1}, 'authorization_snapshot_digest')
-          capsule = sealed({'schema_version':1,'record_type':'f6b-live-execution-capsule-evidence/v1','head_sha':head_sha,'workflow':'.github/workflows/f6b-live-governed-delete-prep.yml','transport':'python-http.client/fixed-api.github.com-one-shot-delete','temporal_model':os.environ['F6B_TEMPORAL_MODEL']}, 'execution_capsule_digest')
-          grant = sealed({'schema_version':2,'grant_type':'execution-grant/v2','execution_id':execution_id,'request_id':request_id,'environment':'staging','capability':os.environ['F6B_CAPABILITY'],'target_digest':target['target_digest'],'authorization_snapshot_digest':authorization['authorization_snapshot_digest'],'execution_capsule_digest':capsule['execution_capsule_digest'],'max_provider_mutations':1,'one_time':True}, 'grant_digest')
-          consumption = sealed({'schema_version':1,'witness_type':'grant-consumption-witness/v1','grant_digest':grant['grant_digest'],'execution_id':execution_id,'run_id':run_id,'consumed':True}, 'witness_digest')
-          envelope = sealed({'schema_version':1,'envelope_type':'dispatch-envelope/v1','grant_digest':grant['grant_digest'],'execution_id':execution_id,'consumption_witness_digest':consumption['witness_digest'],'target_digest':target['target_digest']}, 'envelope_digest')
-          admission = sealed({'schema_version':1,'admission_type':'dispatch-inbox-admission/v1','envelope_digest':envelope['envelope_digest'],'execution_id':execution_id,'admitted':True}, 'admission_digest')
-          lease = sealed({'schema_version':1,'lease_type':'execution-lease/v1','admission_digest':admission['admission_digest'],'execution_id':execution_id,'execution_epoch':1,'run_attempt':1}, 'lease_digest')
-          runner_id = digest({'type':'runner-logical-identity/f6b-r1','execution_id':execution_id})
-          runner_identity = sealed({'schema_version':1,'identity_type':'runner-identity/v1','runner_id':runner_id,'provider_instance_id':provider_instance_id,'environment':'staging','credential_class':credential_class,'head_sha':head_sha}, 'identity_digest')
-          runner_boundary = sealed({'schema_version':3,'boundary_type':'runner-boundary/v3','runner_id':runner_id,'runner_identity_digest':runner_identity['identity_digest'],'lease_digest':lease['lease_digest'],'execution_id':execution_id,'execution_epoch':1,'target_digest':target['target_digest'],'credential_class':credential_class,'max_provider_mutations':1,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']}, 'boundary_digest')
-          credential_decision = sealed({'schema_version':3,'decision_type':'credential-access-decision/v3','runner_boundary_digest':runner_boundary['boundary_digest'],'execution_id':execution_id,'credential_class':credential_class,'provider':'github','audience':'api.github.com','access_mode':'WRITE_BOUNDED','provider_operation':'DELETE_REF','max_provider_mutations':1}, 'decision_digest')
-          activation = sealed({'schema_version':2,'activation_type':'write-runtime-activation/v2','runner_boundary_digest':runner_boundary['boundary_digest'],'credential_decision_digest':credential_decision['decision_digest'],'execution_id':execution_id,'provider_operation':'DELETE_REF','max_provider_mutations':1,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']}, 'activation_digest')
-          provider_request = sealed({'schema_version':1,'request_type':'github-delete-exact-created-ref-request/v1','repository':repo,'ref':target_ref,'expected_sha':expected_sha,'target_digest':target['target_digest'],'runner_boundary_digest':runner_boundary['boundary_digest'],'credential_decision_digest':credential_decision['decision_digest']}, 'request_digest')
-          effect_preflight = sealed({'schema_version':2,'preflight_type':'write-effect-preflight/v2','grant_digest':grant['grant_digest'],'consumption_witness_digest':consumption['witness_digest'],'dispatch_envelope_digest':envelope['envelope_digest'],'admission_digest':admission['admission_digest'],'lease_digest':lease['lease_digest'],'runner_identity_digest':runner_identity['identity_digest'],'runner_boundary_digest':runner_boundary['boundary_digest'],'credential_decision_digest':credential_decision['decision_digest'],'runtime_activation_digest':activation['activation_digest'],'target_digest':target['target_digest'],'request_digest':provider_request['request_digest'],'execution_id':execution_id,'observed_ref_sha':expected_sha,'checked_at':final_read_at,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']}, 'preflight_digest')
-
-          connection = http.client.HTTPSConnection('api.github.com', timeout=15)
-          delete_path = f'/repos/{repo}/git/refs/{ref_path}'
+                  with urllib.request.urlopen(req,timeout=15) as response:return response.status,json.loads(response.read().decode())
+              except urllib.error.HTTPError as exc:return exc.code,None
+          status,pr=read('/pulls/123'); assert status==200 and pr['state']=='open' and pr['head']['sha']==head and pr['base']['sha']==main_sha
+          status,main=read('/git/ref/heads/main'); assert status==200 and main['object']['sha']==main_sha
+          ref_path=ref.removeprefix('refs/');status,current=read(f'/git/ref/{ref_path}');assert status==200 and current['ref']==ref and current['object']['sha']==expected
+          checked=now();target=seal({'schema_version':1,'target_type':'execution-target/v1','target_kind':'git_ref','repository':repo,'ref':ref,'expected_sha':expected},'target_digest');authorization=seal({'schema_version':1,'record_type':'f6b-live-authorization-snapshot-evidence/v1','source':'explicit-user-go-f6b-2026-08-19','pr':123,'head_sha':head,'base_sha':main_sha,'target_digest':target['target_digest'],'preflight_digest':preflight,'capability':os.environ['F6B_CAPABILITY'],'authorized_provider_mutations':1},'authorization_snapshot_digest');capsule=seal({'schema_version':1,'record_type':'f6b-live-execution-capsule-evidence/v1','head_sha':head,'workflow':'.github/workflows/f6b-live-governed-delete-prep.yml','transport':'python-http.client/fixed-api.github.com-one-shot-delete','temporal_model':os.environ['F6B_TEMPORAL_MODEL']},'execution_capsule_digest');grant=seal({'schema_version':2,'grant_type':'execution-grant/v2','execution_id':execution_id,'request_id':request_id,'environment':'staging','capability':os.environ['F6B_CAPABILITY'],'target_digest':target['target_digest'],'authorization_snapshot_digest':authorization['authorization_snapshot_digest'],'execution_capsule_digest':capsule['execution_capsule_digest'],'max_provider_mutations':1,'one_time':True},'grant_digest');consumption=seal({'schema_version':1,'witness_type':'grant-consumption-witness/v1','grant_digest':grant['grant_digest'],'execution_id':execution_id,'run_id':run_id,'consumed':True},'witness_digest');envelope=seal({'schema_version':1,'envelope_type':'dispatch-envelope/v1','grant_digest':grant['grant_digest'],'execution_id':execution_id,'consumption_witness_digest':consumption['witness_digest'],'target_digest':target['target_digest']},'envelope_digest');admission=seal({'schema_version':1,'admission_type':'dispatch-inbox-admission/v1','envelope_digest':envelope['envelope_digest'],'execution_id':execution_id,'admitted':True},'admission_digest');lease=seal({'schema_version':1,'lease_type':'execution-lease/v1','admission_digest':admission['admission_digest'],'execution_id':execution_id,'execution_epoch':1,'run_attempt':1},'lease_digest');runner_id=digest({'type':'runner-logical-identity/f6b-r1','execution_id':execution_id});identity=seal({'schema_version':1,'identity_type':'runner-identity/v1','runner_id':runner_id,'provider_instance_id':instance,'environment':'staging','credential_class':credential,'head_sha':head},'identity_digest');boundary=seal({'schema_version':3,'boundary_type':'runner-boundary/v3','runner_id':runner_id,'runner_identity_digest':identity['identity_digest'],'lease_digest':lease['lease_digest'],'execution_id':execution_id,'execution_epoch':1,'target_digest':target['target_digest'],'credential_class':credential,'max_provider_mutations':1,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']},'boundary_digest');decision=seal({'schema_version':3,'decision_type':'credential-access-decision/v3','runner_boundary_digest':boundary['boundary_digest'],'execution_id':execution_id,'credential_class':credential,'provider':'github','audience':'api.github.com','access_mode':'WRITE_BOUNDED','provider_operation':'DELETE_REF','max_provider_mutations':1},'decision_digest');activation=seal({'schema_version':2,'activation_type':'write-runtime-activation/v2','runner_boundary_digest':boundary['boundary_digest'],'credential_decision_digest':decision['decision_digest'],'execution_id':execution_id,'provider_operation':'DELETE_REF','max_provider_mutations':1,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']},'activation_digest');request=seal({'schema_version':1,'request_type':'github-delete-exact-created-ref-request/v1','repository':repo,'ref':ref,'expected_sha':expected,'target_digest':target['target_digest'],'runner_boundary_digest':boundary['boundary_digest'],'credential_decision_digest':decision['decision_digest']},'request_digest');effect=seal({'schema_version':2,'preflight_type':'write-effect-preflight/v2','grant_digest':grant['grant_digest'],'consumption_witness_digest':consumption['witness_digest'],'dispatch_envelope_digest':envelope['envelope_digest'],'admission_digest':admission['admission_digest'],'lease_digest':lease['lease_digest'],'runner_identity_digest':identity['identity_digest'],'runner_boundary_digest':boundary['boundary_digest'],'credential_decision_digest':decision['decision_digest'],'runtime_activation_digest':activation['activation_digest'],'target_digest':target['target_digest'],'request_digest':request['request_digest'],'execution_id':execution_id,'observed_ref_sha':expected,'checked_at':checked,'temporal_model':os.environ['F6B_TEMPORAL_MODEL']},'preflight_digest')
+          connection=http.client.HTTPSConnection('api.github.com',timeout=15);delete_path=f'/repos/{repo}/git/refs/{ref_path}'
           try:
-              connection.request('DELETE', delete_path, headers=headers)
-              response = connection.getresponse(); status_code = response.status; response.read()
-          except Exception as exc:
-              raise SystemExit(f'F6B_DELETE_PROVIDER_OUTCOME_AMBIGUOUS_NO_RETRY:{type(exc).__name__}') from exc
-          finally:
-              connection.close()
-          if status_code != 204:
-              raise SystemExit(f'F6B_DELETE_PROVIDER_REJECTED_NO_RETRY:{status_code}')
-
-          provider_response = sealed({'schema_version':1,'response_type':'github-delete-ref-provider-response/v1','repository':repo,'ref':target_ref,'expected_sha':expected_sha,'http_status':204,'provider_mutation_performed':True,'provider_mutation_count':1,'automatic_retry_performed':False,'provider_instance_id':provider_instance_id,'completed_at':now()}, 'response_digest')
-          completion = {'schema_version':1,'completion_type':'f6b-durable-completion-evidence/v1','outcome':'COMPLETED','completion_digest':provider_response['response_digest']}
-          write_result = {'status':'EFFECT_RECORDED_NOT_VERIFIED','authorization_snapshot_digest':authorization['authorization_snapshot_digest'],'target':target,'execution_grant':grant,'grant_consumption':consumption,'dispatch_envelope':envelope,'dispatch_admission':admission,'execution_lease':lease,'runner_identity':runner_identity,'runner_boundary':runner_boundary,'credential_decision':credential_decision,'runtime_activation':activation,'write_effect_preflight':effect_preflight,'provider_request':provider_request,'provider_response':provider_response,'durable_completion':completion,'provider_operation':'DELETE_REF','provider_mutation_performed':True,'provider_mutation_count':1,'automatic_retry_performed':False,'rollback_performed':True}
-          recorded_at = now(); clock_digest = digest({'source':'github-actions-system-utc/f6b-live-r1','recorded_at':recorded_at})
-          receipt = compose_write_execution_receipt_v2(write_result=write_result,recording_clock_witness_digest=clock_digest,recorded_at=recorded_at,receipt_revision='execution-receipt/f6b-live-r1')
-
-          status, _ = read(f'/git/ref/{ref_path}')
-          assert status == 404, f'F6B_RUNNER_ABSENCE_READBACK={status}'
-          observed_at = now()
-          observation_claims = {'schema_version':1,'observation_type':'github-ref-absence-observation/v1','repository':repo,'ref':target_ref,'target_digest':target['target_digest'],'provider':'github','provider_instance_id':provider_instance_id,'runner_id':runner_id,'runner_identity_digest':runner_identity['identity_digest'],'runner_boundary_digest':runner_boundary['boundary_digest'],'execution_id':execution_id,'execution_epoch':1,'source_identity':'github-api-runner-readback/f6b-live-r1','http_status':404,'presence':'ABSENT','observed_at':observed_at,'observation_revision':'github-ref-absence-observation/f6b-live-r1'}
-          runner_observation = GitHubRefAbsenceObservation(**{k:v for k,v in observation_claims.items() if k not in {'schema_version','observation_type'}},observation_digest=digest(observation_claims))
-          bundle = {'schema_version':1,'bundle_type':'f6b-runner-effect-bundle/v1','head_sha':head_sha,'target':target,'authorization':authorization,'execution_capsule':capsule,'write_result':write_result,'execution_receipt_v2':receipt.to_dict(),'runner_observation':runner_observation.to_dict(),'runner_provider_instance_id':provider_instance_id,'runner_credential_class':credential_class}
-          encoded = base64.b64encode(canonical(bundle).encode()).decode()
-          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output: output.write(f'runner_bundle_b64={encoded}\n')
-          print('F6B_PROVIDER_DELETE=PASS status=204 mutations=1 retry=false')
-          print(f'F6B_EXECUTION_RECEIPT_V2=PASS digest={receipt.receipt_digest}')
-          print(f'F6B_RUNNER_ABSENCE=PASS digest={runner_observation.observation_digest}')
+              connection.request('DELETE',delete_path,headers=headers);response=connection.getresponse();code=response.status;response.read()
+          except Exception as exc:raise SystemExit(f'F6B_DELETE_PROVIDER_OUTCOME_AMBIGUOUS_NO_RETRY:{type(exc).__name__}') from exc
+          finally:connection.close()
+          if code!=204:raise SystemExit(f'F6B_DELETE_PROVIDER_REJECTED_NO_RETRY:{code}')
+          provider_response=seal({'schema_version':1,'response_type':'github-delete-ref-provider-response/v1','repository':repo,'ref':ref,'expected_sha':expected,'http_status':204,'provider_mutation_performed':True,'provider_mutation_count':1,'automatic_retry_performed':False,'provider_instance_id':instance,'completed_at':now()},'response_digest');completion={'schema_version':1,'completion_type':'f6b-durable-completion-evidence/v1','outcome':'COMPLETED','completion_digest':provider_response['response_digest']};write_result={'status':'EFFECT_RECORDED_NOT_VERIFIED','authorization_snapshot_digest':authorization['authorization_snapshot_digest'],'target':target,'execution_grant':grant,'grant_consumption':consumption,'dispatch_envelope':envelope,'dispatch_admission':admission,'execution_lease':lease,'runner_identity':identity,'runner_boundary':boundary,'credential_decision':decision,'runtime_activation':activation,'write_effect_preflight':effect,'provider_request':request,'provider_response':provider_response,'durable_completion':completion,'provider_operation':'DELETE_REF','provider_mutation_performed':True,'provider_mutation_count':1,'automatic_retry_performed':False,'rollback_performed':True};recorded=now();clock=digest({'source':'github-actions-system-utc/f6b-live-r1','recorded_at':recorded});receipt=compose_write_execution_receipt_v2(write_result=write_result,recording_clock_witness_digest=clock,recorded_at=recorded,receipt_revision='execution-receipt/f6b-live-r1')
+          status,_=read(f'/git/ref/{ref_path}');assert status==404,f'F6B_RUNNER_ABSENCE_READBACK={status}';observed=now();oc={'schema_version':1,'observation_type':'github-ref-absence-observation/v1','repository':repo,'ref':ref,'target_digest':target['target_digest'],'provider':'github','provider_instance_id':instance,'runner_id':runner_id,'runner_identity_digest':identity['identity_digest'],'runner_boundary_digest':boundary['boundary_digest'],'execution_id':execution_id,'execution_epoch':1,'source_identity':'github-api-runner-readback/f6b-live-r1','http_status':404,'presence':'ABSENT','observed_at':observed,'observation_revision':'github-ref-absence-observation/f6b-live-r1'};runner=GitHubRefAbsenceObservation(**{k:v for k,v in oc.items() if k not in {'schema_version','observation_type'}},observation_digest=digest(oc));bundle={'schema_version':1,'bundle_type':'f6b-runner-effect-bundle/v1','head_sha':head,'target':target,'authorization':authorization,'execution_capsule':capsule,'write_result':write_result,'execution_receipt_v2':receipt.to_dict(),'runner_observation':runner.to_dict(),'runner_provider_instance_id':instance,'runner_credential_class':credential};encoded=base64.b64encode(canonical(bundle).encode()).decode()
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:output.write(f'runner_bundle_b64={encoded}\n')
+          print('F6B_PROVIDER_DELETE=PASS status=204 mutations=1 retry=false');print(f'F6B_EXECUTION_RECEIPT_V2=PASS digest={receipt.receipt_digest}');print(f'F6B_RUNNER_ABSENCE=PASS digest={runner.observation_digest}')
           PY
 
   independent-absence-verifier:
@@ -377,36 +216,19 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import base64, hashlib, json, os, urllib.error, urllib.request
-          from datetime import UTC, datetime, timedelta
-          from voodoo_product.rollback_verification import IndependentVerificationBoundaryV2, VerifierCredentialDecisionV2, VerifierGitHubRefAbsenceObservation
-
-          def dt(): return datetime.now(UTC)
-          def ts(v): return v.isoformat(timespec='milliseconds')
-          def canonical(v): return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=True)
-          def digest(v): return hashlib.sha256((v if isinstance(v,str) else canonical(v)).encode()).hexdigest()
-
-          bundle=json.loads(base64.b64decode(os.environ['RUNNER_BUNDLE_B64']).decode()); runner=bundle['runner_observation']; target=bundle['target']
-          repo=os.environ['F6B_TARGET_REPOSITORY']; target_ref=os.environ['F6B_TARGET_REF']; token=os.environ['F6B_VERIFIER_TOKEN']; run_id=os.environ['GITHUB_RUN_ID']
-          verifier_instance=f'gha-f6b-verifier:{run_id}:independent-absence-verifier:1'; verifier_id=digest({'type':'verifier-logical-identity/f6b-live-r1','run_id':run_id})
-          identity={'schema_version':1,'identity_type':'verifier-identity/v1','verifier_id':verifier_id,'verifier_class':'github-actions.independent-read/v1','provider':'github','provider_instance_id':verifier_instance,'environment':'staging','credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'head_sha':bundle['head_sha']}; identity_digest=digest(identity)
-          bc={'schema_version':2,'boundary_type':'independent-verification-boundary/v2','verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verifier_provider_instance_id':verifier_instance,'verifier_credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'runner_id':runner['runner_id'],'runner_identity_digest':runner['runner_identity_digest'],'runner_boundary_digest':runner['runner_boundary_digest'],'runner_provider_instance_id':bundle['runner_provider_instance_id'],'runner_credential_class':bundle['runner_credential_class'],'execution_id':runner['execution_id'],'execution_epoch':1,'target_digest':target['target_digest'],'runner_observation_digest':runner['observation_digest'],'environment':'staging','provider_mutation_allowed':False,'independence_class':'SEPARATE_IDENTITY_INSTANCE_CREDENTIAL','boundary_revision':'independent-verification-boundary/f6b-live-r1'}
-          boundary=IndependentVerificationBoundaryV2(**{k:v for k,v in bc.items() if k not in {'schema_version','boundary_type'}},boundary_digest=digest(bc))
-          vf=dt(); ex=vf+timedelta(minutes=4); policy_digest=digest({'type':'verifier-credential-policy/f6b-live-r1','credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'provider':'github','audience':'api.github.com','access_mode':'READ_ONLY','provider_mutation_allowed':False})
-          decision_id=digest({'decision_type':'verifier-credential-decision-id/v2','verifier_id':verifier_id,'verification_boundary_digest':boundary.boundary_digest,'policy_digest':policy_digest,'valid_from':ts(vf),'expires_at':ts(ex)})
-          dc={'schema_version':2,'decision_type':'verifier-credential-decision/v2','decision_id':decision_id,'verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verification_boundary_digest':boundary.boundary_digest,'runner_observation_digest':runner['observation_digest'],'target_digest':target['target_digest'],'execution_id':runner['execution_id'],'execution_epoch':1,'credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'provider':'github','audience':'api.github.com','environment':'staging','access_mode':'READ_ONLY','provider_mutation_allowed':False,'valid_from':ts(vf),'expires_at':ts(ex),'policy_digest':policy_digest,'decision_revision':'verifier-credential-decision/f6b-live-r1'}
-          decision=VerifierCredentialDecisionV2(**{k:v for k,v in dc.items() if k not in {'schema_version','decision_type'}},decision_digest=digest(dc))
-          headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v-one-f6b-independent-verifier/2'}; ref_path=target_ref.removeprefix('refs/')
-          request=urllib.request.Request(f'https://api.github.com/repos/{repo}/git/ref/{ref_path}',headers=headers)
+          import base64,hashlib,json,os,urllib.error,urllib.request
+          from datetime import UTC,datetime,timedelta
+          from voodoo_product.rollback_verification import IndependentVerificationBoundaryV2,VerifierCredentialDecisionV2,VerifierGitHubRefAbsenceObservation
+          def dt():return datetime.now(UTC)
+          def ts(v):return v.isoformat(timespec='milliseconds')
+          def canonical(v):return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+          def digest(v):return hashlib.sha256((v if isinstance(v,str) else canonical(v)).encode()).hexdigest()
+          bundle=json.loads(base64.b64decode(os.environ['RUNNER_BUNDLE_B64']).decode());runner=bundle['runner_observation'];target=bundle['target'];repo=os.environ['F6B_TARGET_REPOSITORY'];ref=os.environ['F6B_TARGET_REF'];token=os.environ['F6B_VERIFIER_TOKEN'];run_id=os.environ['GITHUB_RUN_ID'];instance=f'gha-f6b-verifier:{run_id}:independent-absence-verifier:1';verifier_id=digest({'type':'verifier-logical-identity/f6b-live-r1','run_id':run_id});identity={'schema_version':1,'identity_type':'verifier-identity/v1','verifier_id':verifier_id,'verifier_class':'github-actions.independent-read/v1','provider':'github','provider_instance_id':instance,'environment':'staging','credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'head_sha':bundle['head_sha']};identity_digest=digest(identity);bc={'schema_version':2,'boundary_type':'independent-verification-boundary/v2','verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verifier_provider_instance_id':instance,'verifier_credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'runner_id':runner['runner_id'],'runner_identity_digest':runner['runner_identity_digest'],'runner_boundary_digest':runner['runner_boundary_digest'],'runner_provider_instance_id':bundle['runner_provider_instance_id'],'runner_credential_class':bundle['runner_credential_class'],'execution_id':runner['execution_id'],'execution_epoch':1,'target_digest':target['target_digest'],'runner_observation_digest':runner['observation_digest'],'environment':'staging','provider_mutation_allowed':False,'independence_class':'SEPARATE_IDENTITY_INSTANCE_CREDENTIAL','boundary_revision':'independent-verification-boundary/f6b-live-r1'};boundary=IndependentVerificationBoundaryV2(**{k:v for k,v in bc.items() if k not in {'schema_version','boundary_type'}},boundary_digest=digest(bc));vf=dt();ex=vf+timedelta(minutes=4);policy=digest({'type':'verifier-credential-policy/f6b-live-r1','credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'provider':'github','audience':'api.github.com','access_mode':'READ_ONLY','provider_mutation_allowed':False});decision_id=digest({'decision_type':'verifier-credential-decision-id/v2','verifier_id':verifier_id,'verification_boundary_digest':boundary.boundary_digest,'policy_digest':policy,'valid_from':ts(vf),'expires_at':ts(ex)});dc={'schema_version':2,'decision_type':'verifier-credential-decision/v2','decision_id':decision_id,'verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verification_boundary_digest':boundary.boundary_digest,'runner_observation_digest':runner['observation_digest'],'target_digest':target['target_digest'],'execution_id':runner['execution_id'],'execution_epoch':1,'credential_class':os.environ['F6B_VERIFIER_CREDENTIAL_CLASS'],'provider':'github','audience':'api.github.com','environment':'staging','access_mode':'READ_ONLY','provider_mutation_allowed':False,'valid_from':ts(vf),'expires_at':ts(ex),'policy_digest':policy,'decision_revision':'verifier-credential-decision/f6b-live-r1'};decision=VerifierCredentialDecisionV2(**{k:v for k,v in dc.items() if k not in {'schema_version','decision_type'}},decision_digest=digest(dc));headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'v-one-f6b-independent-verifier/3'};ref_path=ref.removeprefix('refs/');request=urllib.request.Request(f'https://api.github.com/repos/{repo}/git/ref/{ref_path}',headers=headers)
           try:
-              with urllib.request.urlopen(request,timeout=15) as response: status=response.status
-          except urllib.error.HTTPError as exc: status=exc.code
-          assert status==404, f'F6B_INDEPENDENT_ABSENCE_READBACK={status}'
-          observed_at=ts(dt()); claims={'schema_version':1,'observation_type':'verifier-github-ref-absence-observation/v1','repository':repo,'ref':target_ref,'target_digest':target['target_digest'],'provider':'github','provider_instance_id':verifier_instance,'verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verification_boundary_digest':boundary.boundary_digest,'verifier_credential_decision_digest':decision.decision_digest,'runner_observation_digest':runner['observation_digest'],'execution_id':runner['execution_id'],'execution_epoch':1,'source_identity':'github-api-independent-verifier/f6b-live-r1','http_status':404,'presence':'ABSENT','observed_at':observed_at,'observation_revision':'verifier-github-ref-absence-observation/f6b-live-r1'}
-          observation=VerifierGitHubRefAbsenceObservation(**{k:v for k,v in claims.items() if k not in {'schema_version','observation_type'}},observation_digest=digest(claims))
-          result={'schema_version':1,'bundle_type':'f6b-independent-verifier-bundle/v1','verifier_identity':{**identity,'identity_digest':identity_digest},'verification_boundary':boundary.to_dict(),'verifier_credential_decision':decision.to_dict(),'verifier_observation':observation.to_dict()}
-          encoded=base64.b64encode(canonical(result).encode()).decode()
-          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output: output.write(f'verifier_bundle_b64={encoded}\n')
+              with urllib.request.urlopen(request,timeout=15) as response:status=response.status
+          except urllib.error.HTTPError as exc:status=exc.code
+          assert status==404,f'F6B_INDEPENDENT_ABSENCE_READBACK={status}';observed=ts(dt());claims={'schema_version':1,'observation_type':'verifier-github-ref-absence-observation/v1','repository':repo,'ref':ref,'target_digest':target['target_digest'],'provider':'github','provider_instance_id':instance,'verifier_id':verifier_id,'verifier_identity_digest':identity_digest,'verification_boundary_digest':boundary.boundary_digest,'verifier_credential_decision_digest':decision.decision_digest,'runner_observation_digest':runner['observation_digest'],'execution_id':runner['execution_id'],'execution_epoch':1,'source_identity':'github-api-independent-verifier/f6b-live-r1','http_status':404,'presence':'ABSENT','observed_at':observed,'observation_revision':'verifier-github-ref-absence-observation/f6b-live-r1'};observation=VerifierGitHubRefAbsenceObservation(**{k:v for k,v in claims.items() if k not in {'schema_version','observation_type'}},observation_digest=digest(claims));result={'schema_version':1,'bundle_type':'f6b-independent-verifier-bundle/v1','verifier_identity':{**identity,'identity_digest':identity_digest},'verification_boundary':boundary.to_dict(),'verifier_credential_decision':decision.to_dict(),'verifier_observation':observation.to_dict()};encoded=base64.b64encode(canonical(result).encode()).decode()
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:output.write(f'verifier_bundle_b64={encoded}\n')
           print(f'F6B_INDEPENDENT_ABSENCE=PASS digest={observation.observation_digest}')
           PY
 
@@ -432,17 +254,5 @@ jobs:
           python - <<'PY'
           import base64,json,os
           from voodoo_product.rollback_verification import GitHubRefAbsenceObservation,IndependentVerificationBoundaryV2,VerifierGitHubRefAbsenceObservation,verify_github_ref_absence
-          rb=json.loads(base64.b64decode(os.environ['RUNNER_BUNDLE_B64']).decode()); vb=json.loads(base64.b64decode(os.environ['VERIFIER_BUNDLE_B64']).decode())
-          rr=rb['runner_observation']; br=vb['verification_boundary']; vr=vb['verifier_observation']
-          runner=GitHubRefAbsenceObservation(**{k:v for k,v in rr.items() if k not in {'schema_version','observation_type','observation_digest'}},observation_digest=rr['observation_digest'])
-          boundary=IndependentVerificationBoundaryV2(**{k:v for k,v in br.items() if k not in {'schema_version','boundary_type','boundary_digest'}},boundary_digest=br['boundary_digest'])
-          verifier=VerifierGitHubRefAbsenceObservation(**{k:v for k,v in vr.items() if k not in {'schema_version','observation_type','observation_digest'}},observation_digest=vr['observation_digest'])
-          observed,strength,result=verify_github_ref_absence(runner_observation=runner,verifier_observation=verifier,boundary=boundary,observed_post_state_revision='observed-post-state/f6b-live-r1',strength_revision='verification-strength/f6b-live-r1',result_revision='verification-result/f6b-live-r1')
-          assert result.verdict=='VERIFIED'
-          final={'schema_version':1,'bundle_type':'f6b-first-live-governed-delete-evidence/v1','head_sha':rb['head_sha'],'target':rb['target'],'execution_receipt_v2':rb['execution_receipt_v2'],'runner_observation':rr,'verifier_identity':vb['verifier_identity'],'independent_verification_boundary_v2':boundary.to_dict(),'verifier_credential_decision_v2':vb['verifier_credential_decision'],'verifier_observation':vr,'observed_post_state_v1':observed.to_dict(),'verification_strength_v1':strength.to_dict(),'verification_result_v1':result.to_dict(),'operation_proof_created':False,'operation_cell_created':False}
-          encoded=base64.b64encode(json.dumps(final,sort_keys=True,separators=(',',':')).encode()).decode()
-          print(f'F6B_VERIFICATION_RESULT=VERIFIED digest={result.result_digest}')
-          print(f'F6B_EXECUTION_RECEIPT_V2_DIGEST={rb["execution_receipt_v2"]["receipt_digest"]}')
-          print(f'F6B_FINAL_EVIDENCE_B64={encoded}')
-          print('F6B_FIRST_LIVE_GOVERNED_DELETE=COMPLETE')
+          rb=json.loads(base64.b64decode(os.environ['RUNNER_BUNDLE_B64']).decode());vb=json.loads(base64.b64decode(os.environ['VERIFIER_BUNDLE_B64']).decode());rr=rb['runner_observation'];br=vb['verification_boundary'];vr=vb['verifier_observation'];runner=GitHubRefAbsenceObservation(**{k:v for k,v in rr.items() if k not in {'schema_version','observation_type','observation_digest'}},observation_digest=rr['observation_digest']);boundary=IndependentVerificationBoundaryV2(**{k:v for k,v in br.items() if k not in {'schema_version','boundary_type','boundary_digest'}},boundary_digest=br['boundary_digest']);verifier=VerifierGitHubRefAbsenceObservation(**{k:v for k,v in vr.items() if k not in {'schema_version','observation_type','observation_digest'}},observation_digest=vr['observation_digest']);observed,strength,result=verify_github_ref_absence(runner_observation=runner,verifier_observation=verifier,boundary=boundary,observed_post_state_revision='observed-post-state/f6b-live-r1',strength_revision='verification-strength/f6b-live-r1',result_revision='verification-result/f6b-live-r1');assert result.verdict=='VERIFIED';final={'schema_version':1,'bundle_type':'f6b-first-live-governed-delete-evidence/v1','head_sha':rb['head_sha'],'target':rb['target'],'execution_receipt_v2':rb['execution_receipt_v2'],'runner_observation':rr,'verifier_identity':vb['verifier_identity'],'independent_verification_boundary_v2':boundary.to_dict(),'verifier_credential_decision_v2':vb['verifier_credential_decision'],'verifier_observation':vr,'observed_post_state_v1':observed.to_dict(),'verification_strength_v1':strength.to_dict(),'verification_result_v1':result.to_dict(),'operation_proof_created':False,'operation_cell_created':False};encoded=base64.b64encode(json.dumps(final,sort_keys=True,separators=(',',':')).encode()).decode();print(f'F6B_VERIFICATION_RESULT=VERIFIED digest={result.result_digest}');print(f'F6B_EXECUTION_RECEIPT_V2_DIGEST={rb["execution_receipt_v2"]["receipt_digest"]}');print(f'F6B_FINAL_EVIDENCE_B64={encoded}');print('F6B_FIRST_LIVE_GOVERNED_DELETE=COMPLETE')
           PY
