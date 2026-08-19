@@ -8,12 +8,18 @@ from typing import Any, Final, Self
 
 from .evidence_primitives import canonical_json
 from .execution_receipt_v2 import NOT_EVALUATED, ExecutionReceiptV2
+from .github_read_provider import GitHubRefObservation
 from .verification_result import (
     INDEPENDENT_PROVIDER_READBACK,
     OBSERVED_STATE_MATCH,
     VERIFIED,
+    ObservedPostState,
     VerificationResult,
+    VerificationStrength,
+    verify_github_ref_readback,
 )
+from .verifier_identity import IndependentVerificationBoundary
+from .verifier_observation import VerifierGitHubRefObservation
 
 OPERATION_PROOF_V2_TYPE: Final = "operation-proof/v2"
 
@@ -99,12 +105,53 @@ def _same(actual: object, expected: object, *, reason: str) -> None:
         raise OperationProofV2Denied(reason)
 
 
+def _validate_verification_lineage(
+    *,
+    runner_observation: GitHubRefObservation,
+    verifier_observation: VerifierGitHubRefObservation,
+    boundary: IndependentVerificationBoundary,
+    observed_post_state: ObservedPostState,
+    verification_strength: VerificationStrength,
+    verification: VerificationResult,
+) -> None:
+    if not isinstance(observed_post_state, ObservedPostState):
+        raise TypeError("observed_post_state must be ObservedPostState")
+    if not isinstance(verification_strength, VerificationStrength):
+        raise TypeError("verification_strength must be VerificationStrength")
+    if not isinstance(verification, VerificationResult):
+        raise TypeError("verification must be VerificationResult")
+
+    recomputed_state, recomputed_strength, recomputed_result = verify_github_ref_readback(
+        runner_observation=runner_observation,
+        verifier_observation=verifier_observation,
+        boundary=boundary,
+        observed_post_state_revision=observed_post_state.state_revision,
+        strength_revision=verification_strength.strength_revision,
+        result_revision=verification.result_revision,
+    )
+    _same(
+        observed_post_state,
+        recomputed_state,
+        reason="OPERATION_PROOF_V2_OBSERVED_POST_STATE_MISMATCH",
+    )
+    _same(
+        verification_strength,
+        recomputed_strength,
+        reason="OPERATION_PROOF_V2_VERIFICATION_STRENGTH_MISMATCH",
+    )
+    _same(
+        verification,
+        recomputed_result,
+        reason="OPERATION_PROOF_V2_VERIFICATION_RESULT_MISMATCH",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class OperationProofV2:
     """Deterministic proof binding one ExecutionReceipt/v2 to independent verification.
 
     This contract is evidence-only. It performs no I/O, carries no credential material,
-    and derives VERIFIED only from a separately validated VerificationResult/v1.
+    and derives VERIFIED only by recomputing the retained read-only verification chain.
     """
 
     execution_id: str
@@ -194,14 +241,26 @@ class OperationProofV2:
         cls,
         *,
         receipt: ExecutionReceiptV2,
+        runner_observation: GitHubRefObservation,
+        verifier_observation: VerifierGitHubRefObservation,
+        boundary: IndependentVerificationBoundary,
+        observed_post_state: ObservedPostState,
+        verification_strength: VerificationStrength,
         verification: VerificationResult,
         proof_revision: str,
     ) -> Self:
         if not isinstance(receipt, ExecutionReceiptV2):
             raise TypeError("receipt must be ExecutionReceiptV2")
-        if not isinstance(verification, VerificationResult):
-            raise TypeError("verification must be VerificationResult")
         _require_text(proof_revision, field="proof_revision")
+
+        _validate_verification_lineage(
+            runner_observation=runner_observation,
+            verifier_observation=verifier_observation,
+            boundary=boundary,
+            observed_post_state=observed_post_state,
+            verification_strength=verification_strength,
+            verification=verification,
+        )
 
         _same(
             receipt.execution_id,
@@ -258,11 +317,11 @@ class OperationProofV2:
             "rollback_performed": receipt.rollback_performed,
             "runner_observation_digest": verification.runner_observation_digest,
             "verifier_observation_digest": verification.verifier_observation_digest,
-            "observed_post_state_digest": verification.observed_post_state_digest,
-            "verification_boundary_digest": verification.verification_boundary_digest,
+            "observed_post_state_digest": observed_post_state.state_digest,
+            "verification_boundary_digest": boundary.boundary_digest,
             "verifier_id": verification.verifier_id,
             "verifier_identity_digest": verification.verifier_identity_digest,
-            "verification_strength_digest": verification.verification_strength_digest,
+            "verification_strength_digest": verification_strength.strength_digest,
             "verification_strength_class": verification.verification_strength_class,
             "verification_result_digest": verification.result_digest,
             "receipt_recorded_at": receipt.recorded_at,
