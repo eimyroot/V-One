@@ -58,6 +58,7 @@ CANONICAL_NOUNS: Final = (
     "VerificationResult",
     "Evidence",
     "OperationProof",
+    "OperationCell",
     "Module",
     "Candidate",
     "Activation",
@@ -163,6 +164,7 @@ OPERATION_STAGES: Final = (
     "execution_receipt",
     "independent_verification",
     "operation_proof",
+    "operation_cell",
 )
 
 # Registry presence reserves semantic identity. It never implies implementation, verification,
@@ -227,6 +229,8 @@ SCHEMA_REGISTRY_IDS: Final = (
     "verification-strength/v1",
     "verification-result/v1",
     "operation-proof/v1",
+    "operation-proof/v2",
+    "operation-cell/v1",
 )
 
 SCHEMA_SUPERSESSIONS: Final = MappingProxyType(
@@ -234,9 +238,12 @@ SCHEMA_SUPERSESSIONS: Final = MappingProxyType(
         # v1 remains a historical deterministic value contract. v2 is the current authoritative
         # execution-authority contract and must not be silently described as v1.
         "execution-grant/v1": "execution-grant/v2",
-        # v1 remains reserved for the historical proof model. v2 records the current A→B→C→F
-        # effect lineage without manufacturing independent verification.
+        # v1 remains reserved for the historical receipt model. v2 carries the current effect
+        # lineage while preserving receipt/verification separation.
         "execution-receipt/v1": "execution-receipt/v2",
+        # v1 remains reserved for the historical proof lineage. v2 is the current proof contract
+        # over ExecutionReceipt/v2 + independent VerificationResult/v1 evidence.
+        "operation-proof/v1": "operation-proof/v2",
     }
 )
 
@@ -320,6 +327,10 @@ NOUN_DEFINITIONS: Final = MappingProxyType(
         "VerificationResult": "An independent determination of observed real post-state.",
         "Evidence": "An auditable evidence artifact.",
         "OperationProof": "Portable proof binding the governed operation chain.",
+        "OperationCell": (
+            "Stable content-addressed product atom over one canonically revalidated OperationProof/v2; "
+            "it does not widen authority or duplicate nested evidence."
+        ),
         "Module": "A provider or domain translation and implementation package.",
         "Candidate": "A proposed definition or implementation that is not active authority.",
         "Activation": "Explicit adoption of a concrete definition or implementation for use.",
