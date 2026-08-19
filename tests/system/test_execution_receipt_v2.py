@@ -7,8 +7,8 @@ import pytest
 from voodoo_product.execution_receipt_v2 import (
     EFFECT_RECORDED,
     EXECUTION_SUCCEEDED,
-    NOT_EVALUATED,
     ExecutionReceiptV2,
+    NOT_EVALUATED,
     compose_write_execution_receipt_v2,
 )
 from voodoo_product.f4b_live_write_pilot import run_live_write_pilot
