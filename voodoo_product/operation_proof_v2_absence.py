@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from .evidence_primitives import canonical_json
 from .execution_receipt_v2 import NOT_EVALUATED, ExecutionReceiptV2
@@ -26,6 +26,8 @@ from .verification_result import (
     VerificationResult,
     VerificationStrength,
 )
+
+DELETE_REF_PROVIDER_OPERATION: Final = "DELETE_REF"
 
 
 def _digest(value: Mapping[str, Any]) -> str:
@@ -121,6 +123,21 @@ def create_operation_proof_v2_from_absence(
         reason="OPERATION_PROOF_V2_VERIFICATION_RESULT_MISMATCH",
     )
 
+    _same(
+        receipt.environment,
+        boundary.environment,
+        reason="OPERATION_PROOF_V2_ENVIRONMENT_MISMATCH",
+    )
+    _same(
+        receipt.provider_operation,
+        DELETE_REF_PROVIDER_OPERATION,
+        reason="OPERATION_PROOF_V2_ABSENCE_PROVIDER_OPERATION_INVALID",
+    )
+    _same(
+        receipt.rollback_performed,
+        True,
+        reason="OPERATION_PROOF_V2_ABSENCE_ROLLBACK_REQUIRED",
+    )
     _same(
         receipt.execution_id,
         verification.execution_id,
