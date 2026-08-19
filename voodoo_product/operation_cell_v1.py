@@ -23,31 +23,21 @@ from .verification_result import (
 )
 
 OPERATION_CELL_V1_TYPE: Final = "operation-cell/v1"
-ROLLBACK_ABSENCE_LINEAGE_V1: Final = "rollback-absence/v1"
 
 _CELL_FIELDS = frozenset(
     {
         "schema_version",
         "cell_type",
-        "verification_lineage",
-        "operation_proof_type",
-        "operation_proof_digest",
         "execution_id",
         "execution_epoch",
         "request_id",
         "environment",
         "capability",
         "target_digest",
-        "authorization_snapshot_digest",
-        "execution_grant_digest",
-        "execution_receipt_digest",
-        "verification_result_digest",
-        "provider_operation",
-        "provider_mutation_count",
-        "rollback_performed",
-        "verification_strength_class",
+        "proof_type",
+        "operation_proof_digest",
         "final_verdict",
-        "proof_revision",
+        "verification_strength_class",
         "cell_revision",
         "cell_digest",
     }
@@ -88,159 +78,62 @@ def _same(actual: object, expected: object, *, reason: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class OperationCellV1:
-    """Compact trust envelope rooted in one canonically recomputed OperationProof/v2.
+    """Stable content-addressed atom over one already-proven operation lifecycle.
 
-    OperationCell/v1 is evidence-only. It performs no I/O, grants no authority, and does
-    not accept a standalone proof as provenance. The current composer supports the
-    rollback-absence lineage used by historical F6b and requires recomputation of that
-    proof from its retained canonical evidence roots before the cell may be created.
+    The serialized cell stays provider- and verification-lineage-neutral. Trusted cell
+    creation happens through a lineage-specific composer that revalidates OperationProof/v2
+    from its retained canonical evidence before freezing these immutable indexing claims.
     """
 
-    verification_lineage: str
-    operation_proof_type: str
-    operation_proof_digest: str
     execution_id: str
     execution_epoch: int
     request_id: str
     environment: str
     capability: str
     target_digest: str
-    authorization_snapshot_digest: str
-    execution_grant_digest: str
-    execution_receipt_digest: str
-    verification_result_digest: str
-    provider_operation: str
-    provider_mutation_count: int
-    rollback_performed: bool
-    verification_strength_class: str
+    proof_type: str
+    operation_proof_digest: str
     final_verdict: str
-    proof_revision: str
+    verification_strength_class: str
     cell_revision: str
     cell_digest: str
 
     def __post_init__(self) -> None:
         for field in (
-            "verification_lineage",
-            "operation_proof_type",
             "execution_id",
             "request_id",
             "environment",
             "capability",
-            "provider_operation",
-            "verification_strength_class",
+            "proof_type",
             "final_verdict",
-            "proof_revision",
+            "verification_strength_class",
             "cell_revision",
         ):
             _require_text(getattr(self, field), field=field)
         for field in (
-            "operation_proof_digest",
             "target_digest",
-            "authorization_snapshot_digest",
-            "execution_grant_digest",
-            "execution_receipt_digest",
-            "verification_result_digest",
+            "operation_proof_digest",
             "cell_digest",
         ):
             _require_digest(getattr(self, field), field=field)
-        if self.verification_lineage != ROLLBACK_ABSENCE_LINEAGE_V1:
-            raise ValueError("OperationCell/v1 current composer requires rollback-absence/v1")
-        if self.operation_proof_type != OPERATION_PROOF_V2_TYPE:
-            raise ValueError("OperationCell/v1 requires operation-proof/v2")
         if type(self.execution_epoch) is not int or self.execution_epoch < 1:
             raise ValueError("execution_epoch must be >= 1")
-        if type(self.provider_mutation_count) is not int or self.provider_mutation_count != 1:
-            raise ValueError("OperationCell/v1 requires exactly one bounded provider mutation")
-        if type(self.rollback_performed) is not bool or self.rollback_performed is not True:
-            raise ValueError("OperationCell/v1 rollback-absence lineage requires rollback")
-        if self.verification_strength_class != INDEPENDENT_PROVIDER_READBACK:
-            raise ValueError("OperationCell/v1 requires independent provider readback")
+        if self.proof_type != OPERATION_PROOF_V2_TYPE:
+            raise ValueError("OperationCell/v1 requires operation-proof/v2")
         if self.final_verdict != VERIFIED:
-            raise ValueError("OperationCell/v1 may only represent VERIFIED operations")
+            raise ValueError("OperationCell/v1 may only freeze VERIFIED operations")
+        if self.verification_strength_class != INDEPENDENT_PROVIDER_READBACK:
+            raise ValueError("OperationCell/v1 R1 requires independent provider readback")
         if self.cell_digest != _digest(self._claims_without_digest()):
             raise ValueError("cell_digest does not match OperationCell/v1")
 
     @classmethod
-    def create_from_absence(
-        cls,
-        *,
-        proof: OperationProofV2,
-        receipt: ExecutionReceiptV2,
-        runner_observation: GitHubRefAbsenceObservation,
-        verifier_observation: VerifierGitHubRefAbsenceObservation,
-        boundary: IndependentVerificationBoundaryV2,
-        observed_post_state: ObservedPostState,
-        verification_strength: VerificationStrength,
-        verification: VerificationResult,
-        cell_revision: str,
-    ) -> Self:
-        if not isinstance(proof, OperationProofV2):
-            raise TypeError("proof must be OperationProofV2")
-        _require_text(cell_revision, field="cell_revision")
+    def from_dict(cls, value: Mapping[str, Any]) -> Self:
+        """Parse the exact serialized cell shape.
 
-        recomputed_proof = create_operation_proof_v2_from_absence(
-            receipt=receipt,
-            runner_observation=runner_observation,
-            verifier_observation=verifier_observation,
-            boundary=boundary,
-            observed_post_state=observed_post_state,
-            verification_strength=verification_strength,
-            verification=verification,
-            proof_revision=proof.proof_revision,
-        )
-        _same(
-            proof,
-            recomputed_proof,
-            reason="OPERATION_CELL_V1_OPERATION_PROOF_MISMATCH",
-        )
-
-        claims = {
-            "schema_version": 1,
-            "cell_type": OPERATION_CELL_V1_TYPE,
-            "verification_lineage": ROLLBACK_ABSENCE_LINEAGE_V1,
-            "operation_proof_type": OPERATION_PROOF_V2_TYPE,
-            "operation_proof_digest": proof.proof_digest,
-            "execution_id": proof.execution_id,
-            "execution_epoch": proof.execution_epoch,
-            "request_id": proof.request_id,
-            "environment": proof.environment,
-            "capability": proof.capability,
-            "target_digest": proof.target_digest,
-            "authorization_snapshot_digest": proof.authorization_snapshot_digest,
-            "execution_grant_digest": proof.execution_grant_digest,
-            "execution_receipt_digest": proof.execution_receipt_digest,
-            "verification_result_digest": proof.verification_result_digest,
-            "provider_operation": proof.provider_operation,
-            "provider_mutation_count": proof.provider_mutation_count,
-            "rollback_performed": proof.rollback_performed,
-            "verification_strength_class": proof.verification_strength_class,
-            "final_verdict": proof.final_verdict,
-            "proof_revision": proof.proof_revision,
-            "cell_revision": cell_revision,
-        }
-        return cls(
-            **{
-                key: value
-                for key, value in claims.items()
-                if key not in {"schema_version", "cell_type"}
-            },
-            cell_digest=_digest(claims),
-        )
-
-    @classmethod
-    def from_dict(
-        cls,
-        value: Mapping[str, Any],
-        *,
-        proof: OperationProofV2,
-        receipt: ExecutionReceiptV2,
-        runner_observation: GitHubRefAbsenceObservation,
-        verifier_observation: VerifierGitHubRefAbsenceObservation,
-        boundary: IndependentVerificationBoundaryV2,
-        observed_post_state: ObservedPostState,
-        verification_strength: VerificationStrength,
-        verification: VerificationResult,
-    ) -> Self:
+        This validates schema and self-integrity only. Provenance trust is established by a
+        lineage-specific composer such as ``create_operation_cell_v1_from_absence``.
+        """
         if not isinstance(value, Mapping):
             raise ValueError("operation-cell/v1 must be an object")
         actual = frozenset(value)
@@ -252,57 +145,88 @@ class OperationCellV1:
             )
         if value["schema_version"] != 1 or value["cell_type"] != OPERATION_CELL_V1_TYPE:
             raise ValueError("operation-cell/v1 schema or type is unsupported")
-
-        parsed = cls(
+        return cls(
             **{
                 key: value[key]
                 for key in _CELL_FIELDS
                 if key not in {"schema_version", "cell_type"}
             }
         )
-        expected = cls.create_from_absence(
-            proof=proof,
-            receipt=receipt,
-            runner_observation=runner_observation,
-            verifier_observation=verifier_observation,
-            boundary=boundary,
-            observed_post_state=observed_post_state,
-            verification_strength=verification_strength,
-            verification=verification,
-            cell_revision=parsed.cell_revision,
-        )
-        _same(
-            parsed,
-            expected,
-            reason="OPERATION_CELL_V1_EVIDENCE_BINDING_MISMATCH",
-        )
-        return parsed
 
     def _claims_without_digest(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
             "cell_type": OPERATION_CELL_V1_TYPE,
-            "verification_lineage": self.verification_lineage,
-            "operation_proof_type": self.operation_proof_type,
-            "operation_proof_digest": self.operation_proof_digest,
             "execution_id": self.execution_id,
             "execution_epoch": self.execution_epoch,
             "request_id": self.request_id,
             "environment": self.environment,
             "capability": self.capability,
             "target_digest": self.target_digest,
-            "authorization_snapshot_digest": self.authorization_snapshot_digest,
-            "execution_grant_digest": self.execution_grant_digest,
-            "execution_receipt_digest": self.execution_receipt_digest,
-            "verification_result_digest": self.verification_result_digest,
-            "provider_operation": self.provider_operation,
-            "provider_mutation_count": self.provider_mutation_count,
-            "rollback_performed": self.rollback_performed,
-            "verification_strength_class": self.verification_strength_class,
+            "proof_type": self.proof_type,
+            "operation_proof_digest": self.operation_proof_digest,
             "final_verdict": self.final_verdict,
-            "proof_revision": self.proof_revision,
+            "verification_strength_class": self.verification_strength_class,
             "cell_revision": self.cell_revision,
         }
 
     def to_dict(self) -> dict[str, Any]:
         return {**self._claims_without_digest(), "cell_digest": self.cell_digest}
+
+
+def create_operation_cell_v1_from_absence(
+    *,
+    proof: OperationProofV2,
+    receipt: ExecutionReceiptV2,
+    runner_observation: GitHubRefAbsenceObservation,
+    verifier_observation: VerifierGitHubRefAbsenceObservation,
+    boundary: IndependentVerificationBoundaryV2,
+    observed_post_state: ObservedPostState,
+    verification_strength: VerificationStrength,
+    verification: VerificationResult,
+    cell_revision: str,
+) -> OperationCellV1:
+    """Freeze one rollback-absence operation after canonical proof recomputation."""
+    if not isinstance(proof, OperationProofV2):
+        raise TypeError("proof must be OperationProofV2")
+    _require_text(cell_revision, field="cell_revision")
+
+    recomputed_proof = create_operation_proof_v2_from_absence(
+        receipt=receipt,
+        runner_observation=runner_observation,
+        verifier_observation=verifier_observation,
+        boundary=boundary,
+        observed_post_state=observed_post_state,
+        verification_strength=verification_strength,
+        verification=verification,
+        proof_revision=proof.proof_revision,
+    )
+    _same(
+        proof,
+        recomputed_proof,
+        reason="OPERATION_CELL_V1_OPERATION_PROOF_MISMATCH",
+    )
+
+    claims = {
+        "schema_version": 1,
+        "cell_type": OPERATION_CELL_V1_TYPE,
+        "execution_id": recomputed_proof.execution_id,
+        "execution_epoch": recomputed_proof.execution_epoch,
+        "request_id": recomputed_proof.request_id,
+        "environment": recomputed_proof.environment,
+        "capability": recomputed_proof.capability,
+        "target_digest": recomputed_proof.target_digest,
+        "proof_type": OPERATION_PROOF_V2_TYPE,
+        "operation_proof_digest": recomputed_proof.proof_digest,
+        "final_verdict": recomputed_proof.final_verdict,
+        "verification_strength_class": recomputed_proof.verification_strength_class,
+        "cell_revision": cell_revision,
+    }
+    return OperationCellV1(
+        **{
+            key: value
+            for key, value in claims.items()
+            if key not in {"schema_version", "cell_type"}
+        },
+        cell_digest=_digest(claims),
+    )
