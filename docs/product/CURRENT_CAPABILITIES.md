@@ -42,6 +42,8 @@ Do not collapse those questions into one stronger claim.
 | Static command-center console | IMPLEMENTED | product HTTP/static surface | reconciliation PR #128 corrects receipt-to-VERIFIED overclaim |
 | Local bootstrap, login and sessions | VERIFIED | authentication/bootstrap/session tests | no released OIDC/MFA enterprise identity path |
 | RBAC and approval separation | VERIFIED | governance/service tests | current product roles are not full multi-tenant organization policy |
+| Approval policy decision model | VERIFIED | deterministic policy-decision tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not implemented |
+| Policy Decision Graph | PROPOSED | ADR-0003 design only | organization-scoped policy activation is not runtime authority |
 | Workspace environment invariants | VERIFIED | service + database-trigger tests | SQLite pilot backend |
 | Change-request lifecycle | VERIFIED | change-request/product tests | VOP end-to-end mapping into new trust-plane runtime is partial |
 | VOP canonical vocabulary | IMPLEMENTED | machine vocabulary + registry + terminology tests | PR #128 reconciles proof/cell identities and Runner semantics |
@@ -80,6 +82,7 @@ Do not collapse those questions into one stronger claim.
 | Main required `ci / verify` enforcement | UNKNOWN | classic required-status metadata observed off | must be proven/enforced via live GitHub settings/ruleset |
 | Release-candidate build | VERIFIED | manual fail-closed workflow + image/SBOM checks | build/release candidate is not deployment |
 | Unrestricted production release | BLOCKED | production effects default disabled | separate security/legal/ops/release authorization required |
+| Public commercial distribution | BLOCKED | no release/distribution authorization | licensing/EULA/privacy/support and production gates remain separate |
 
 ## Verified historical complete operation atom
 
