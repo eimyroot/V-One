@@ -291,6 +291,9 @@ def compose_write_execution_receipt_v2(
     _same(result.get("provider_mutation_performed"), True, reason="RECEIPT_PROVIDER_EFFECT_MISSING")
     _same(result.get("provider_mutation_count"), 1, reason="RECEIPT_PROVIDER_MUTATION_COUNT_INVALID")
     _same(result.get("automatic_retry_performed"), False, reason="RECEIPT_AUTOMATIC_RETRY_FORBIDDEN")
+    rollback_performed = result.get("rollback_performed")
+    if type(rollback_performed) is not bool:
+        raise ValueError("rollback_performed must be bool")
 
     target = _mapping(result.get("target"), field="target")
     grant = _mapping(result.get("execution_grant"), field="execution_grant")
@@ -303,7 +306,10 @@ def compose_write_execution_receipt_v2(
     decision = _mapping(result.get("credential_decision"), field="credential_decision")
     activation = _mapping(result.get("runtime_activation"), field="runtime_activation")
     preflight = _mapping(result.get("write_effect_preflight"), field="write_effect_preflight")
-    request = _mapping(result.get("create_ref_request"), field="provider_request")
+    provider_request = result.get("provider_request")
+    if provider_request is None:
+        provider_request = result.get("create_ref_request")
+    request = _mapping(provider_request, field="provider_request")
     response = _mapping(result.get("provider_response"), field="provider_response")
     completion = _mapping(result.get("durable_completion"), field="durable_completion")
 
@@ -392,7 +398,7 @@ def compose_write_execution_receipt_v2(
         provider_mutation_performed=True,
         provider_mutation_count=1,
         automatic_retry_performed=False,
-        rollback_performed=bool(result.get("rollback_performed")),
+        rollback_performed=rollback_performed,
         durable_completion_outcome="COMPLETED",
         durable_completion_digest=response_digest,
         execution_status=EXECUTION_SUCCEEDED,
