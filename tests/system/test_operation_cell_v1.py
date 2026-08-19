@@ -294,6 +294,14 @@ def _compose(
     )
 
 
+def _rehashed_proof(proof: OperationProofV2, **changes: Any) -> OperationProofV2:
+    value = deepcopy(proof.to_dict())
+    value.update(changes)
+    claims = {key: item for key, item in value.items() if key != "proof_digest"}
+    value["proof_digest"] = _digest(claims)
+    return OperationProofV2.from_dict(value)
+
+
 def test_operation_cell_v1_is_minimal_deterministic_and_round_trippable() -> None:
     source = _bundle()
     cell = _compose(source)
@@ -343,11 +351,10 @@ def test_operation_cell_v1_freezes_only_proof_indexing_claims() -> None:
         _bundle(execution_id="exec_other"),
         _bundle(execution_epoch=2),
         _bundle(request_id="req_other"),
-        _bundle(environment="production"),
         _bundle(capability="github.other-capability/v1"),
         _bundle(target_digest=DE),
     ],
-    ids=["execution", "epoch", "request", "environment", "capability", "target"],
+    ids=["execution", "epoch", "request", "capability", "target"],
 )
 def test_operation_cell_v1_rejects_proof_identity_substitution(other_source: tuple[Any, ...]) -> None:
     canonical = _bundle()
@@ -360,16 +367,20 @@ def test_operation_cell_v1_rejects_proof_identity_substitution(other_source: tup
         _compose(canonical, proof=other_proof)
 
 
+def test_operation_cell_v1_rejects_rehashed_environment_substitution() -> None:
+    source = _bundle()
+    forged = _rehashed_proof(source[-1], environment="production")
+
+    with pytest.raises(
+        OperationCellV1Denied,
+        match="OPERATION_CELL_V1_OPERATION_PROOF_MISMATCH",
+    ):
+        _compose(source, proof=forged)
+
+
 def test_operation_cell_v1_rejects_self_consistent_forged_verified_proof() -> None:
     source = _bundle()
-    proof = source[-1]
-    forged_value = deepcopy(proof.to_dict())
-    forged_value["verification_result_digest"] = DE
-    forged_claims = {
-        key: value for key, value in forged_value.items() if key != "proof_digest"
-    }
-    forged_value["proof_digest"] = _digest(forged_claims)
-    forged = OperationProofV2.from_dict(forged_value)
+    forged = _rehashed_proof(source[-1], verification_result_digest=DE)
 
     with pytest.raises(
         OperationCellV1Denied,
