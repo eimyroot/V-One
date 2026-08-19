@@ -204,6 +204,7 @@ SCHEMA_REGISTRY_IDS: Final = (
     "github-ref-observation/v1",
     "verifier-github-ref-observation/v1",
     "execution-receipt/v1",
+    "execution-receipt/v2",
     "verifier-identity/v1",
     "independent-verification-boundary/v1",
     "verifier-credential-policy/v1",
@@ -219,6 +220,9 @@ SCHEMA_SUPERSESSIONS: Final = MappingProxyType(
         # v1 remains a historical deterministic value contract. v2 is the current authoritative
         # execution-authority contract and must not be silently described as v1.
         "execution-grant/v1": "execution-grant/v2",
+        # v1 remains reserved for the historical proof model. v2 records the current A→B→C→F
+        # effect lineage without manufacturing independent verification.
+        "execution-receipt/v1": "execution-receipt/v2",
     }
 )
 
