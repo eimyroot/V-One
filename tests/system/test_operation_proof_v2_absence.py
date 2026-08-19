@@ -365,6 +365,30 @@ def test_operation_proof_v2_absence_rejects_target_substitution() -> None:
         _proof(receipt=_receipt(target_digest=DE))
 
 
+def test_operation_proof_v2_absence_rejects_environment_substitution() -> None:
+    with pytest.raises(
+        OperationProofV2Denied,
+        match="OPERATION_PROOF_V2_ENVIRONMENT_MISMATCH",
+    ):
+        _proof(receipt=_receipt(environment="production"))
+
+
+def test_operation_proof_v2_absence_rejects_non_delete_receipt() -> None:
+    with pytest.raises(
+        OperationProofV2Denied,
+        match="OPERATION_PROOF_V2_ABSENCE_PROVIDER_OPERATION_INVALID",
+    ):
+        _proof(receipt=_receipt(provider_operation="CREATE_REF"))
+
+
+def test_operation_proof_v2_absence_requires_rollback_receipt() -> None:
+    with pytest.raises(
+        OperationProofV2Denied,
+        match="OPERATION_PROOF_V2_ABSENCE_ROLLBACK_REQUIRED",
+    ):
+        _proof(receipt=_receipt(rollback_performed=False))
+
+
 def test_operation_proof_v2_absence_rejects_verification_before_receipt() -> None:
     with pytest.raises(
         OperationProofV2Denied,
