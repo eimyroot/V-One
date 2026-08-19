@@ -1,0 +1,172 @@
+name: f6b-first-live-governed-delete-prep
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - ".github/workflows/f6b-live-governed-delete-prep.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f6b-first-live-governed-delete-pr123
+  cancel-in-progress: false
+
+env:
+  F6B_EXPECTED_PR: "123"
+  F6B_EXPECTED_HEAD_REF: "feat/f6b-first-live-governed-delete-prep-r1"
+  F6B_CANONICAL_MAIN_SHA: "2473a37f791c51a8a419a9eb88a78fdbd23a9bcd"
+  F6B_PREP_PARENT_SHA: "41ab91d3394166bd519bfbf9b106b50e5b2f3e1f"
+  F6B_ACCEPTED_F6_DRY_HEAD: "e76b26a08a7edce369fab5617c1613f1075572d6"
+  F6B_TARGET_REPOSITORY: "nulleimy/V-One"
+  F6B_TARGET_REF: "refs/heads/vone-canary/f4b-pr120-32185703943"
+  F6B_EXPECTED_REF_SHA: "83f9c43357460e49b1eba82f124a13015a8e6a88"
+  F6B_MAX_PROVIDER_MUTATIONS: "1"
+  F6B_TEMPORAL_MODEL: "READ_THEN_DELETE_NON_ATOMIC"
+  F6B_LIVE_EFFECT_AUTHORIZED: "false"
+
+jobs:
+  dry-static-pre-effect-gate:
+    if: >-
+      github.event.pull_request.number == 123 &&
+      github.event.pull_request.head.ref == 'feat/f6b-first-live-governed-delete-prep-r1' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact F6b preparation head without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Prove exact preparation lineage and zero-effect workflow ceiling
+        shell: bash
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$F6B_TARGET_REPOSITORY"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$EVENT_BASE_SHA" = "$F6B_CANONICAL_MAIN_SHA"
+          test "$(git rev-parse HEAD)" = "$EVENT_HEAD_SHA"
+          test "$(git rev-parse HEAD^)" = "$F6B_PREP_PARENT_SHA"
+          CHANGED="$(git diff --name-only "$F6B_PREP_PARENT_SHA" HEAD)"
+          test "$CHANGED" = ".github/workflows/f6b-live-governed-delete-prep.yml"
+          test "$F6B_LIVE_EFFECT_AUTHORIZED" = "false"
+          test "$F6B_MAX_PROVIDER_MUTATIONS" = "1"
+          test "$F6B_TEMPORAL_MODEL" = "READ_THEN_DELETE_NON_ATOMIC"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/f6b-live-governed-delete-prep.yml')
+          text = path.read_text(encoding='utf-8')
+          assert 'contents: write' not in text, 'prep workflow must not grant contents:write'
+          assert 'GitHubApiDeleteRefTransport' not in text, 'prep workflow must not instantiate DELETE transport'
+          assert '.delete_ref(' not in text, 'prep workflow must not invoke DELETE transport'
+          assert 'F6B_LIVE_EFFECT_AUTHORIZED: "false"' in text
+          assert 'if: ${{ false }}' in text
+          print('F6B_PREP_ZERO_EFFECT_CEILING=PASS')
+          PY
+          echo "F6B_EXACT_PREP_LINEAGE=PASS"
+
+      - name: READ current main and exact F4b canary before any future effect
+        shell: bash
+        env:
+          F6B_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ['F6B_READ_TOKEN']
+          repository = os.environ['F6B_TARGET_REPOSITORY']
+          expected_main = os.environ['F6B_CANONICAL_MAIN_SHA']
+          target_ref = os.environ['F6B_TARGET_REF']
+          expected_ref_sha = os.environ['F6B_EXPECTED_REF_SHA']
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'v-one-f6b-prep-read/1',
+          }
+
+          def read(path: str):
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repository}{path}',
+                  headers=headers,
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      return response.status, json.loads(response.read().decode('utf-8'))
+              except urllib.error.HTTPError as exc:
+                  return exc.code, None
+
+          status, main = read('/git/ref/heads/main')
+          assert status == 200, f'current main read failed: {status}'
+          assert main['object']['sha'] == expected_main, 'main drift detected; F6b prep denied'
+
+          ref_path = target_ref.removeprefix('refs/')
+          status, current = read(f'/git/ref/{ref_path}')
+          assert status == 200, f'exact F4b canary missing before rollback authorization: {status}'
+          assert current['ref'] == target_ref, 'provider returned a substituted ref'
+          assert current['object']['sha'] == expected_ref_sha, 'F4b canary SHA changed; rollback denied'
+          print('F6B_CURRENT_MAIN_BINDING=PASS')
+          print('F6B_EXACT_TARGET_EXISTS=PASS')
+          print('F6B_EXACT_TARGET_SHA_BINDING=PASS')
+          PY
+
+      - name: Install locked dry-gate dependencies
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Run F6 rollback static and mocked-effect gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m ruff check \
+            voodoo_product/rollback_control.py \
+            voodoo_product/rollback_runtime.py \
+            voodoo_product/github_delete_ref_runtime.py \
+            voodoo_product/rollback_verification.py \
+            voodoo_product/vop_vocabulary.py \
+            tests/system/test_rollback_control.py \
+            tests/system/test_github_delete_ref_runtime.py \
+            tests/system/test_rollback_verification.py \
+            tests/system/test_f6_vop_registry.py
+          python -m compileall -q voodoo_product tests
+          python -m pytest -q \
+            tests/system/test_rollback_control.py \
+            tests/system/test_github_delete_ref_runtime.py \
+            tests/system/test_rollback_verification.py \
+            tests/system/test_f6_vop_registry.py
+          echo "F6B_DRY_STATIC_VALIDATION=PASS"
+          echo "F6B_PROVIDER_MUTATIONS=0"
+
+  live-delete-authorized-only:
+    if: ${{ false }}
+    needs: dry-static-pre-effect-gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Hard authorization barrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "F6B_LIVE_DELETE_NOT_AUTHORIZED"
+          exit 1
