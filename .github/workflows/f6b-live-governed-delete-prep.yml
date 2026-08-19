@@ -17,7 +17,7 @@ env:
   F6B_EXPECTED_PR: "123"
   F6B_EXPECTED_HEAD_REF: "feat/f6b-first-live-governed-delete-prep-r1"
   F6B_CANONICAL_MAIN_SHA: "2473a37f791c51a8a419a9eb88a78fdbd23a9bcd"
-  F6B_PREP_PARENT_SHA: "41ab91d3394166bd519bfbf9b106b50e5b2f3e1f"
+  F6B_PREP_PARENT_SHA: "1c2f21ca634c6967fb2302f58121cb6333a5606c"
   F6B_ACCEPTED_F6_DRY_HEAD: "e76b26a08a7edce369fab5617c1613f1075572d6"
   F6B_TARGET_REPOSITORY: "nulleimy/V-One"
   F6B_TARGET_REF: "refs/heads/vone-canary/f4b-pr120-32185703943"
@@ -68,11 +68,18 @@ jobs:
 
           path = Path('.github/workflows/f6b-live-governed-delete-prep.yml')
           text = path.read_text(encoding='utf-8')
-          assert 'contents: write' not in text, 'prep workflow must not grant contents:write'
-          assert 'GitHubApiDeleteRefTransport' not in text, 'prep workflow must not instantiate DELETE transport'
-          assert '.delete_ref(' not in text, 'prep workflow must not invoke DELETE transport'
+          forbidden_permission = 'contents:' + ' write'
+          forbidden_transport = 'GitHubApi' + 'DeleteRefTransport'
+          forbidden_call = '.delete_' + 'ref('
+          assert forbidden_permission not in text, 'prep workflow unexpectedly grants write permission'
+          assert forbidden_transport not in text, 'prep workflow unexpectedly instantiates provider mutation transport'
+          assert forbidden_call not in text, 'prep workflow unexpectedly invokes provider mutation transport'
           assert 'F6B_LIVE_EFFECT_AUTHORIZED: "false"' in text
-          assert 'if: ${{ false }}' in text
+          lines = text.splitlines()
+          barrier = lines.index('  live-delete-authorized-only:')
+          assert lines[barrier + 1].strip().startswith('if:')
+          assert 'false' in lines[barrier + 1].casefold()
+          assert lines[barrier + 4].strip() == 'contents: read'
           print('F6B_PREP_ZERO_EFFECT_CEILING=PASS')
           PY
           echo "F6B_EXACT_PREP_LINEAGE=PASS"
