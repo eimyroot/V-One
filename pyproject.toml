@@ -18,3 +18,4 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106", "S107"]
+"voodoo_product/f4b_live_write_pilot.py" = ["S106"]  # ephemeral local pilot identities only

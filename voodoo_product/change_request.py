@@ -22,7 +22,7 @@ from .persistence import DatabaseIntegrityError, DatabaseRow, ProductDatabaseAda
 IdFactory = Callable[[str], str]
 Clock = Callable[[], str]
 
-VALID_ADAPTERS = {"echo", "write_artifact", "run_validation"}
+VALID_ADAPTERS = {"echo", "write_artifact", "run_validation", "github-create-ref"}
 MAX_CHANGE_PAYLOAD_BYTES = 65_536
 
 

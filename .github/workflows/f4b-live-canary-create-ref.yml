@@ -1,0 +1,699 @@
+name: f4b-first-live-canary-create-ref
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - ".github/workflows/f4b-live-canary-create-ref.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f4b-first-live-canary-pr120
+  cancel-in-progress: false
+
+env:
+  F4B_EXPECTED_PR: "120"
+  F4B_EXPECTED_HEAD_REF: "feat/f4b-first-live-canary-create-ref-r1"
+  F4B_DRY_GREEN_HEAD: "721f8264752082480b0173cf187d8154c7183d2a"
+  F4B_CANONICAL_MAIN_SHA: "83f9c43357460e49b1eba82f124a13015a8e6a88"
+  F4B_TARGET_REPOSITORY: "nulleimy/V-One"
+
+jobs:
+  static-pre-effect-gate:
+    if: >-
+      github.event.pull_request.number == 120 &&
+      github.event.pull_request.head.ref == 'feat/f4b-first-live-canary-create-ref-r1' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      canary_ref: ${{ steps.gate.outputs.canary_ref }}
+      target_sha: ${{ steps.gate.outputs.target_sha }}
+
+    steps:
+      - name: Checkout exact F4b head without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Prove exact one-shot workflow commit lineage
+        id: gate
+        shell: bash
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$F4B_TARGET_REPOSITORY"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$EVENT_BASE_SHA" = "$F4B_CANONICAL_MAIN_SHA"
+          test "$(git rev-parse HEAD)" = "$EVENT_HEAD_SHA"
+          test "$(git rev-parse HEAD^)" = "$F4B_DRY_GREEN_HEAD"
+          CHANGED="$(git diff --name-only "$F4B_DRY_GREEN_HEAD" HEAD)"
+          test "$CHANGED" = ".github/workflows/f4b-live-canary-create-ref.yml"
+          CANARY_REF="refs/heads/vone-canary/f4b-pr120-${GITHUB_RUN_ID}"
+          case "$CANARY_REF" in
+            refs/heads/vone-canary/*) ;;
+            *) exit 1 ;;
+          esac
+          echo "canary_ref=$CANARY_REF" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$F4B_CANONICAL_MAIN_SHA" >> "$GITHUB_OUTPUT"
+          echo "F4B_EXACT_COMMIT_LINEAGE=PASS"
+
+      - name: Verify current canonical main and canary absence
+        shell: bash
+        env:
+          F4B_READ_TOKEN: ${{ github.token }}
+          CANARY_REF: ${{ steps.gate.outputs.canary_ref }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["F4B_READ_TOKEN"]
+          repository = os.environ["F4B_TARGET_REPOSITORY"]
+          expected_main = os.environ["F4B_CANONICAL_MAIN_SHA"]
+          canary_ref = os.environ["CANARY_REF"]
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "v-one-f4b-pre-effect/1",
+          }
+
+          def read(path: str):
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repository}{path}",
+                  headers=headers,
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      return response.status, json.loads(response.read().decode("utf-8"))
+              except urllib.error.HTTPError as exc:
+                  return exc.code, None
+
+          status, main = read("/git/ref/heads/main")
+          assert status == 200
+          assert main["object"]["sha"] == expected_main
+          ref_path = canary_ref.removeprefix("refs/")
+          status, _ = read(f"/git/ref/{ref_path}")
+          assert status == 404, "canary ref already exists; create-only mutation denied"
+          print("F4B_CURRENT_MAIN_BINDING=PASS")
+          print("F4B_CANARY_ABSENCE_OBSERVATION=PASS")
+          PY
+
+      - name: Install locked dry-gate dependencies
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+
+      - name: Run F1 through F4b static and mocked-effect gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m ruff check \
+            voodoo_product/controlled_write.py \
+            voodoo_product/write_boundary.py \
+            voodoo_product/github_create_ref_provider.py \
+            voodoo_product/write_runtime.py \
+            voodoo_product/github_create_ref_runtime.py \
+            voodoo_product/f4b_live_write_pilot.py \
+            tests/system/test_controlled_write.py \
+            tests/system/test_write_boundary.py \
+            tests/system/test_github_create_ref_provider.py \
+            tests/system/test_write_runtime.py \
+            tests/system/test_github_create_ref_runtime.py \
+            tests/system/test_f4b_live_write_pilot.py
+          python -m compileall -q voodoo_product tests
+          python -m pytest -q \
+            tests/system/test_controlled_write.py \
+            tests/system/test_write_boundary.py \
+            tests/system/test_github_create_ref_provider.py \
+            tests/system/test_write_runtime.py \
+            tests/system/test_github_create_ref_runtime.py \
+            tests/system/test_f4b_live_write_pilot.py
+          echo "F4B_STATIC_PRE_EFFECT_GATE=PASS"
+
+  write-canary:
+    needs: static-pre-effect-gate
+    if: ${{ github.run_attempt == 1 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      canary_ref: ${{ steps.capture-write.outputs.canary_ref }}
+      target_sha: ${{ steps.capture-write.outputs.target_sha }}
+      write_result_b64: ${{ steps.capture-write.outputs.write_result_b64 }}
+
+    steps:
+      - name: Checkout exact F4b candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Build content-addressed write runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-f4b-write:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_F4B_WRITE_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_RUNTIME_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded write runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_F4B_WRITE_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated bounded-write runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-f4b-write-${GITHUB_RUN_ID}"
+          CONTAINER="vone-f4b-write-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=96m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_F4B_WRITE_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_F4B_WRITE_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_F4B_WRITE_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_F4B_WRITE_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_F4B_WRITE_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_F4B_WRITE_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce write default-deny egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -I DOCKER-USER 1 -s "$VONE_F4B_WRITE_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_F4B_WRITE_CONTAINER_IP" \
+            -d "$VONE_F4B_WRITE_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_F4B_WRITE_CONTAINER_IP" \
+            -d "$VONE_F4B_WRITE_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER -s "$VONE_F4B_WRITE_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary write-runtime egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_F4B_WRITE_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "F4B_WRITE_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "F4B_WRITE_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute exactly one governed GitHub CREATE_REF
+        shell: bash
+        env:
+          F4B_GITHUB_TOKEN: ${{ github.token }}
+          CANARY_REF: ${{ needs.static-pre-effect-gate.outputs.canary_ref }}
+          TARGET_SHA: ${{ needs.static-pre-effect-gate.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$TARGET_SHA" = "$F4B_CANONICAL_MAIN_SHA"
+          case "$CANARY_REF" in
+            refs/heads/vone-canary/f4b-pr120-*) ;;
+            *) exit 1 ;;
+          esac
+          PROVIDER_INSTANCE_ID="gha-f4b-writer:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_F4B_WRITE_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$F4B_GITHUB_TOKEN" \
+            -e "VONE_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_RUNTIME_ROOTFS_DIGEST=$VONE_RUNTIME_ROOTFS_DIGEST" \
+            -e "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_NETWORK_POLICY_DIGEST=$VONE_NETWORK_POLICY_DIGEST" \
+            -e "VONE_TARGET_REPOSITORY=$GITHUB_REPOSITORY" \
+            -e "VONE_TARGET_REF=$CANARY_REF" \
+            -e "VONE_TARGET_SHA=$TARGET_SHA" \
+            "$VONE_F4B_WRITE_CONTAINER" \
+            python -m voodoo_product.f4b_live_write_pilot \
+            | tee "$RUNNER_TEMP/f4b-live-write.log"
+          grep -Fx "F4B_LIVE_CANARY_CREATE_REF=EFFECT_RECORDED_NOT_VERIFIED" \
+            "$RUNNER_TEMP/f4b-live-write.log"
+
+      - name: Capture and validate sanitized write evidence
+        id: capture-write
+        shell: bash
+        env:
+          CANARY_REF: ${{ needs.static-pre-effect-gate.outputs.canary_ref }}
+          TARGET_SHA: ${{ needs.static-pre-effect-gate.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          WRITE_JSON="$(tail -n1 "$RUNNER_TEMP/f4b-live-write.log")"
+          python - "$WRITE_JSON" "$CANARY_REF" "$TARGET_SHA" <<'PY'
+          import json
+          import sys
+          value = json.loads(sys.argv[1])
+          expected_ref = sys.argv[2]
+          expected_sha = sys.argv[3]
+          assert value["pilot"] == "f4b-first-live-canary-create-ref/v1"
+          assert value["status"] == "EFFECT_RECORDED_NOT_VERIFIED"
+          assert value["provider_operation"] == "CREATE_REF"
+          assert value["provider_mutation_performed"] is True
+          assert value["provider_mutation_count"] == 1
+          assert value["automatic_retry_performed"] is False
+          assert value["rollback_performed"] is False
+          assert value["credential_secret_material_serialized"] is False
+          assert value["provider_response"]["status_code"] == 201
+          assert value["provider_response"]["ref"] == expected_ref
+          assert value["provider_response"]["object_sha"] == expected_sha
+          assert "verification_result" not in value
+          assert "verdict" not in value
+          PY
+          WRITE_B64="$(printf '%s' "$WRITE_JSON" | base64 -w0)"
+          echo "canary_ref=$CANARY_REF" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "write_result_b64=$WRITE_B64" >> "$GITHUB_OUTPUT"
+          echo "F4B_PROVIDER_CREATE_REF=EFFECT_RECORDED_NOT_VERIFIED"
+
+      - name: Cleanup write runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_F4B_WRITE_CONTAINER_IP:-}" ] && [ -n "${VONE_F4B_WRITE_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_F4B_WRITE_CONTAINER_IP" \
+              -d "$VONE_F4B_WRITE_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER -s "$VONE_F4B_WRITE_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_F4B_WRITE_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_F4B_WRITE_CONTAINER"
+          fi
+          if [ -n "${VONE_F4B_WRITE_NETWORK:-}" ]; then
+            docker network rm "$VONE_F4B_WRITE_NETWORK"
+          fi
+
+  runner-observation:
+    needs: write-canary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      runner_result_b64: ${{ steps.capture-runner.outputs.runner_result_b64 }}
+
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Build content-addressed readback Runner image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-f4b-readback:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_F4B_READ_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_RUNTIME_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded readback runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_F4B_READ_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated read-only Runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-f4b-read-${GITHUB_RUN_ID}"
+          CONTAINER="vone-f4b-read-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_F4B_READ_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_F4B_READ_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_F4B_READ_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_F4B_READ_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_F4B_READ_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_F4B_READ_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce Runner default-deny egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -I DOCKER-USER 1 -s "$VONE_F4B_READ_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_F4B_READ_CONTAINER_IP" \
+            -d "$VONE_F4B_READ_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_F4B_READ_CONTAINER_IP" \
+            -d "$VONE_F4B_READ_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER -s "$VONE_F4B_READ_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary Runner egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_F4B_READ_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "F4B_READ_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "F4B_READ_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute D4b READ of exact created canary
+        shell: bash
+        env:
+          READBACK_GITHUB_TOKEN: ${{ github.token }}
+          CANARY_REF: ${{ needs.write-canary.outputs.canary_ref }}
+          TARGET_SHA: ${{ needs.write-canary.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          PROVIDER_INSTANCE_ID="gha-f4b-readback:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_F4B_READ_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$READBACK_GITHUB_TOKEN" \
+            -e "VONE_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_RUNTIME_ROOTFS_DIGEST=$VONE_RUNTIME_ROOTFS_DIGEST" \
+            -e "VONE_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_NETWORK_POLICY_DIGEST=$VONE_NETWORK_POLICY_DIGEST" \
+            -e "VONE_TARGET_REPOSITORY=$GITHUB_REPOSITORY" \
+            -e "VONE_TARGET_REF=$CANARY_REF" \
+            "$VONE_F4B_READ_CONTAINER" \
+            python -m voodoo_product.d4b_live_pilot \
+            | tee "$RUNNER_TEMP/f4b-d4b-readback.log"
+          grep -Fx "D4B_LIVE_GOVERNED_READ=PASS" "$RUNNER_TEMP/f4b-d4b-readback.log"
+
+      - name: Capture exact D4b canary observation
+        id: capture-runner
+        shell: bash
+        env:
+          CANARY_REF: ${{ needs.write-canary.outputs.canary_ref }}
+          TARGET_SHA: ${{ needs.write-canary.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          RUNNER_JSON="$(tail -n1 "$RUNNER_TEMP/f4b-d4b-readback.log")"
+          python - "$RUNNER_JSON" "$CANARY_REF" "$TARGET_SHA" <<'PY'
+          import json
+          import sys
+          value = json.loads(sys.argv[1])
+          assert value["pilot"] == "d4b-live-governed-read/v1"
+          assert value["status"] == "PASS"
+          assert value["phase_d_effect_ceiling"] == "READ_ONLY"
+          assert value["provider_mutation_allowed"] is False
+          assert value["observation"]["ref"] == sys.argv[2]
+          assert value["observation"]["commit_sha"] == sys.argv[3]
+          PY
+          RUNNER_B64="$(printf '%s' "$RUNNER_JSON" | base64 -w0)"
+          echo "runner_result_b64=$RUNNER_B64" >> "$GITHUB_OUTPUT"
+          echo "F4B_D4B_CANARY_READBACK=PASS"
+
+      - name: Cleanup Runner runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_F4B_READ_CONTAINER_IP:-}" ] && [ -n "${VONE_F4B_READ_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_F4B_READ_CONTAINER_IP" \
+              -d "$VONE_F4B_READ_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER -s "$VONE_F4B_READ_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_F4B_READ_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_F4B_READ_CONTAINER"
+          fi
+          if [ -n "${VONE_F4B_READ_NETWORK:-}" ]; then
+            docker network rm "$VONE_F4B_READ_NETWORK"
+          fi
+
+  verifier-and-result:
+    needs: [write-canary, runner-observation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      e3_result_b64: ${{ steps.capture-evidence.outputs.e3_result_b64 }}
+      e4_result_b64: ${{ steps.capture-evidence.outputs.e4_result_b64 }}
+
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Build content-addressed independent Verifier image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="vone-f4b-verifier:${GITHUB_SHA}"
+          docker build --file Dockerfile.product --tag "$IMAGE" .
+          IMAGE_ID="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          ROOTFS_DIGEST="${IMAGE_ID#sha256:}"
+          test "${#ROOTFS_DIGEST}" -eq 64
+          echo "VONE_F4B_VERIFIER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_ROOTFS_DIGEST=$ROOTFS_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Derive bounded Verifier runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_IP="$(getent ahostsv4 api.github.com | awk '{print $1}' | sort -u | head -n1)"
+          test -n "$API_IP"
+          RESOURCE_PROFILE='cpu=1;memory=512m;pids=256;capabilities=DROP_ALL;no_new_privileges=true'
+          NETWORK_PROFILE="default=DENY_ALL;allow=tcp:api.github.com:${API_IP}:443"
+          RESOURCE_DIGEST="$(printf '%s' "$RESOURCE_PROFILE" | sha256sum | awk '{print $1}')"
+          NETWORK_DIGEST="$(printf '%s' "$NETWORK_PROFILE" | sha256sum | awk '{print $1}')"
+          echo "VONE_F4B_VERIFIER_API_IP=$API_IP" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST=$RESOURCE_DIGEST" >> "$GITHUB_ENV"
+          echo "VONE_VERIFIER_NETWORK_POLICY_DIGEST=$NETWORK_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Start isolated read-only Verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="vone-f4b-verifier-${GITHUB_RUN_ID}"
+          CONTAINER="vone-f4b-verifier-${GITHUB_RUN_ID}"
+          docker network create "$NETWORK"
+          CONTAINER_ID="$(docker create \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/storage/product:rw,noexec,nosuid,size=64m \
+            --memory=512m \
+            --cpus=1 \
+            --pids-limit=256 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --add-host "api.github.com:${VONE_F4B_VERIFIER_API_IP}" \
+            --entrypoint /bin/sh \
+            "$VONE_F4B_VERIFIER_IMAGE" \
+            -c 'sleep 600')"
+          docker start "$CONTAINER"
+          CONTAINER_IP="$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+          test -n "$CONTAINER_IP"
+          echo "VONE_F4B_VERIFIER_NETWORK=$NETWORK" >> "$GITHUB_ENV"
+          echo "VONE_F4B_VERIFIER_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+          echo "VONE_F4B_VERIFIER_CONTAINER_ID=$CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "VONE_F4B_VERIFIER_CONTAINER_IP=$CONTAINER_IP" >> "$GITHUB_ENV"
+
+      - name: Enforce Verifier default-deny egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo iptables -I DOCKER-USER 1 -s "$VONE_F4B_VERIFIER_CONTAINER_IP" -j DROP
+          sudo iptables -I DOCKER-USER 1 \
+            -s "$VONE_F4B_VERIFIER_CONTAINER_IP" \
+            -d "$VONE_F4B_VERIFIER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER \
+            -s "$VONE_F4B_VERIFIER_CONTAINER_IP" \
+            -d "$VONE_F4B_VERIFIER_API_IP" \
+            -p tcp --dport 443 -j ACCEPT
+          sudo iptables -C DOCKER-USER -s "$VONE_F4B_VERIFIER_CONTAINER_IP" -j DROP
+
+      - name: Prove arbitrary Verifier egress is denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker exec "$VONE_F4B_VERIFIER_CONTAINER" python -c \
+            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"; then
+            echo "F4B_VERIFIER_NETWORK_NEGATIVE_CHECK=FAIL"
+            exit 1
+          fi
+          echo "F4B_VERIFIER_NETWORK_NEGATIVE_CHECK=PASS"
+
+      - name: Execute independent E3 Verifier observation
+        shell: bash
+        env:
+          VERIFIER_GITHUB_TOKEN: ${{ github.token }}
+          RUNNER_RESULT_B64: ${{ needs.runner-observation.outputs.runner_result_b64 }}
+        run: |
+          set -euo pipefail
+          PROVIDER_INSTANCE_ID="gha-f4b-verifier:${GITHUB_RUN_ID}:${GITHUB_JOB}:${GITHUB_RUN_ATTEMPT}:${VONE_F4B_VERIFIER_CONTAINER_ID:0:12}"
+          docker exec \
+            -e "GITHUB_TOKEN=$VERIFIER_GITHUB_TOKEN" \
+            -e "VONE_VERIFIER_PROVIDER_INSTANCE_ID=$PROVIDER_INSTANCE_ID" \
+            -e "VONE_VERIFIER_ROOTFS_DIGEST=$VONE_VERIFIER_ROOTFS_DIGEST" \
+            -e "VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST=$VONE_VERIFIER_RESOURCE_LIMIT_PROFILE_DIGEST" \
+            -e "VONE_VERIFIER_NETWORK_POLICY_DIGEST=$VONE_VERIFIER_NETWORK_POLICY_DIGEST" \
+            -e "VONE_RUNNER_RESULT_B64=$RUNNER_RESULT_B64" \
+            "$VONE_F4B_VERIFIER_CONTAINER" \
+            python -m voodoo_product.e3_live_verifier_pilot \
+            | tee "$RUNNER_TEMP/f4b-e3-verifier.log"
+          grep -Fx "E3_LIVE_INDEPENDENT_VERIFIER_OBSERVATION=PASS" \
+            "$RUNNER_TEMP/f4b-e3-verifier.log"
+
+      - name: Produce E4 VerificationResult without provider credential
+        shell: bash
+        env:
+          RUNNER_RESULT_B64: ${{ needs.runner-observation.outputs.runner_result_b64 }}
+        run: |
+          set -euo pipefail
+          E3_JSON="$(tail -n1 "$RUNNER_TEMP/f4b-e3-verifier.log")"
+          E3_B64="$(printf '%s' "$E3_JSON" | base64 -w0)"
+          docker exec \
+            -e "VONE_RUNNER_RESULT_B64=$RUNNER_RESULT_B64" \
+            -e "VONE_E3_RESULT_B64=$E3_B64" \
+            "$VONE_F4B_VERIFIER_CONTAINER" \
+            python -m voodoo_product.e4b_live_verification_pilot \
+            | tee "$RUNNER_TEMP/f4b-e4-verification.log"
+          grep -Fx "E4B_LIVE_VERIFICATION_RESULT=VERIFIED" \
+            "$RUNNER_TEMP/f4b-e4-verification.log"
+
+      - name: Bind write evidence to independently verified post-state
+        id: capture-evidence
+        shell: bash
+        env:
+          WRITE_RESULT_B64: ${{ needs.write-canary.outputs.write_result_b64 }}
+          RUNNER_RESULT_B64: ${{ needs.runner-observation.outputs.runner_result_b64 }}
+          CANARY_REF: ${{ needs.write-canary.outputs.canary_ref }}
+          TARGET_SHA: ${{ needs.write-canary.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          E3_JSON="$(tail -n1 "$RUNNER_TEMP/f4b-e3-verifier.log")"
+          E4_JSON="$(tail -n1 "$RUNNER_TEMP/f4b-e4-verification.log")"
+          python - "$WRITE_RESULT_B64" "$RUNNER_RESULT_B64" "$E3_JSON" "$E4_JSON" "$CANARY_REF" "$TARGET_SHA" <<'PY'
+          import base64
+          import json
+          import sys
+
+          write = json.loads(base64.b64decode(sys.argv[1], validate=True))
+          runner = json.loads(base64.b64decode(sys.argv[2], validate=True))
+          e3 = json.loads(sys.argv[3])
+          e4 = json.loads(sys.argv[4])
+          ref = sys.argv[5]
+          sha = sys.argv[6]
+          assert write["provider_response"]["ref"] == ref
+          assert write["provider_response"]["object_sha"] == sha
+          assert runner["observation"]["ref"] == ref
+          assert runner["observation"]["commit_sha"] == sha
+          assert e3["verifier_observation"]["ref"] == ref
+          assert e3["verifier_observation"]["commit_sha"] == sha
+          assert e4["verification_result"]["verdict"] == "VERIFIED"
+          assert e4["observed_post_state"]["state_claims"]["ref"] == ref
+          assert e4["observed_post_state"]["state_claims"]["commit_sha"] == sha
+          assert e4["provider_mutation_allowed"] is False
+          print("F4B_WRITE_TO_VERIFIED_POST_STATE_BINDING=PASS")
+          print(f"F4B_CANARY_REF={ref}")
+          print(f"F4B_TARGET_SHA={sha}")
+          print(f"F4B_WRITE_RESPONSE_DIGEST={write['provider_response']['response_digest']}")
+          print(f"F4B_RUNNER_OBSERVATION_DIGEST={runner['observation']['observation_digest']}")
+          print(f"F4B_VERIFIER_OBSERVATION_DIGEST={e3['verifier_observation']['observation_digest']}")
+          print(f"F4B_VERIFICATION_RESULT_DIGEST={e4['verification_result']['result_digest']}")
+          print("F4B_VERIFICATION_VERDICT=VERIFIED")
+          PY
+          E3_B64="$(printf '%s' "$E3_JSON" | base64 -w0)"
+          E4_B64="$(printf '%s' "$E4_JSON" | base64 -w0)"
+          echo "e3_result_b64=$E3_B64" >> "$GITHUB_OUTPUT"
+          echo "e4_result_b64=$E4_B64" >> "$GITHUB_OUTPUT"
+
+      - name: Cleanup Verifier runtime and firewall
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${VONE_F4B_VERIFIER_CONTAINER_IP:-}" ] && [ -n "${VONE_F4B_VERIFIER_API_IP:-}" ]; then
+            sudo iptables -D DOCKER-USER \
+              -s "$VONE_F4B_VERIFIER_CONTAINER_IP" \
+              -d "$VONE_F4B_VERIFIER_API_IP" \
+              -p tcp --dport 443 -j ACCEPT
+            sudo iptables -D DOCKER-USER -s "$VONE_F4B_VERIFIER_CONTAINER_IP" -j DROP
+          fi
+          if [ -n "${VONE_F4B_VERIFIER_CONTAINER:-}" ]; then
+            docker rm -f "$VONE_F4B_VERIFIER_CONTAINER"
+          fi
+          if [ -n "${VONE_F4B_VERIFIER_NETWORK:-}" ]; then
+            docker network rm "$VONE_F4B_VERIFIER_NETWORK"
+          fi
