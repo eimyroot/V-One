@@ -5,7 +5,6 @@ from pathlib import Path
 
 from voodoo_product.vop_vocabulary import SCHEMA_REGISTRY_IDS
 
-
 F6_IDS = {
     "rollback-write-requirement/v1",
     "github-delete-exact-created-ref-condition/v1",
