@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from .api import create_product_router
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService
 from .bootstrap import BootstrapService
+from .canonical_operation_runtime import CanonicalOperationRuntime
 from .change_request import ChangeRequestService
 from .config import ProductConfig
 from .credential_authentication import CredentialAuthenticationService
@@ -29,12 +31,18 @@ from .observability import (
     configure_product_logging,
 )
 from .operational_safety import OperationalSafetyService
+from .permission_authority import DatabasePermissionAuthority
 from .platform_status import PlatformStatusService
 from .receipt import ReceiptLedger
 from .service import ProductService
 from .session_lifecycle import SessionLifecycleService
 from .user_account import UserAccountService
 from .workspace import WorkspaceService
+
+CanonicalRuntimeFactory = Callable[
+    [ProductService, DatabasePermissionAuthority],
+    CanonicalOperationRuntime,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +61,30 @@ class ProductComposition:
     execution_service: ExecutionService
     platform_status_service: PlatformStatusService
     external_identity_service: GovernedExternalIdentityService
+    database_permission_authority: DatabasePermissionAuthority
+    canonical_operation_runtime: CanonicalOperationRuntime | None
+
+
+def _validate_canonical_runtime(
+    *,
+    runtime: CanonicalOperationRuntime,
+    service: ProductService,
+    permission_authority: DatabasePermissionAuthority,
+) -> None:
+    if not isinstance(runtime, CanonicalOperationRuntime):
+        raise ValueError("canonical runtime factory returned an invalid runtime")
+    pipeline = runtime.pipeline
+    snapshot_creator = pipeline.snapshot_creator
+    if getattr(snapshot_creator, "db", None) is not service.db:
+        raise ValueError("canonical runtime snapshot creator must use product database")
+    if getattr(pipeline.grant_service, "db", None) is not service.db:
+        raise ValueError("canonical runtime grant service must use product database")
+    if getattr(pipeline.outbox_service, "db", None) is not service.db:
+        raise ValueError("canonical runtime outbox service must use product database")
+    if getattr(snapshot_creator, "permission_authority", None) is not permission_authority:
+        raise ValueError(
+            "canonical runtime snapshot creator must use product database permission authority"
+        )
 
 
 def install_composed_product_platform(
@@ -61,8 +93,14 @@ def install_composed_product_platform(
     config: ProductConfig | None = None,
     repository_root: Path | None = None,
     identity_provider: IdentityProvider | None = None,
+    canonical_runtime_factory: CanonicalRuntimeFactory | None = None,
 ) -> ProductComposition:
-    """Install the production platform with shared evidence ledgers."""
+    """Install one product composition over shared durable/evidence/authority boundaries.
+
+    Provider-capable canonical runtime components are installed only through an explicit runtime
+    factory after ProductService and its database-backed permission authority exist. No GitHub token,
+    provider target or mutation-capable runtime is synthesized from default configuration.
+    """
 
     resolved_config = config or ProductConfig.from_env()
     validate_identity_provider_startup(resolved_config)
@@ -84,6 +122,22 @@ def install_composed_product_platform(
     operational_safety_service = service.operational_safety_service
     execution_service = service.execution_service
     platform_status_service = service.platform_status_service
+    database_permission_authority = DatabasePermissionAuthority(
+        database=service.db,
+        authority_revision="database-permission/product-composition-r1",
+    )
+    canonical_operation_runtime: CanonicalOperationRuntime | None = None
+    if canonical_runtime_factory is not None:
+        canonical_operation_runtime = canonical_runtime_factory(
+            service,
+            database_permission_authority,
+        )
+        _validate_canonical_runtime(
+            runtime=canonical_operation_runtime,
+            service=service,
+            permission_authority=database_permission_authority,
+        )
+
     resolved_identity_provider = identity_provider or create_identity_provider(
         config=resolved_config,
         credential_authenticator=credential_authentication_service,
@@ -109,6 +163,8 @@ def install_composed_product_platform(
         execution_service=execution_service,
         platform_status_service=platform_status_service,
         external_identity_service=external_identity_service,
+        database_permission_authority=database_permission_authority,
+        canonical_operation_runtime=canonical_operation_runtime,
     )
 
     app.state.voodoo_product_service = service
@@ -126,6 +182,8 @@ def install_composed_product_platform(
     app.state.voodoo_execution_service = execution_service
     app.state.voodoo_platform_status_service = platform_status_service
     app.state.voodoo_external_identity_service = external_identity_service
+    app.state.voodoo_database_permission_authority = database_permission_authority
+    app.state.voodoo_canonical_operation_runtime = canonical_operation_runtime
     app.state.voodoo_product_composition = composition
     app.include_router(
         create_product_router(
