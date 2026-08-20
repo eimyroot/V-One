@@ -20,7 +20,8 @@
 - **UNKNOWN** — required evidence unavailable;
 - **BLOCKED** — intentionally unavailable until a named gate passes.
 
-Implementation does not prove live provider effect, independent verification, release or deployment.
+Roadmap status does not prove implementation. Implementation does not prove live provider effect,
+independent verification, release or deployment.
 
 ## Architectural invariant
 
@@ -71,6 +72,11 @@ terminates at `VerificationResult/v1`. No diagram or compatibility path may wide
 | Security Intelligence R-SI1.1 | IMPLEMENTED | intelligence-only metadata/tests |
 
 These rows do not authorize new provider mutation or release.
+
+The organization-scoped approval/profile design remains separately **PROPOSED** in
+[ADR-0003](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md). Its presence does
+not activate Solo, Team or Regulated behavior and does not weaken current human-authorization safety
+requirements.
 
 ## Gate R1 — Truth + semantic reconciliation
 
