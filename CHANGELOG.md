@@ -13,9 +13,18 @@
   control plane before Dispatch; Runner authority is bounded execution only.
 - Registered `operation-proof/v2` and `operation-cell/v1` in the canonical VOP schema registry,
   added the canonical `OperationCell` noun/stage, and recorded the historical proof v1→v2 lineage.
+- Added the canonical ProductComposition runtime seam with one shared ProductService database and
+  `DatabasePermissionAuthority`; the explicit provider runtime pack remains absent/fail-closed by
+  default and no canonical public operation endpoint is inferred.
+- Added SQLite schema 14 workspace memberships so global role defines what an actor may do while exact
+  current membership defines in which workspace that permission may be considered. Historical
+  schema-13 workspaces are not silently backfilled.
+- Revalidated current actor/global-role/workspace/environment/membership state inside the durable
+  Grant store/one-time-consume serialization boundary so membership removal before consumption fails
+  closed instead of surviving through a stale AuthorizationSnapshot.
 - Extended the named VOP CI gate with reconciliation truth invariants and expanded product readiness
   to require the current authority/dispatch/Runner/verification/proof/cell contract set plus SQLite
-  migrations through schema 13.
+  migrations through schema 14.
 - Reconciled `CURRENT_PRODUCT_STATE.md`, `CURRENT_CAPABILITIES.md`, `ROADMAP.md`, `ARCHITECTURE.md`,
   `TRUST_BOUNDARIES.md`, VOP canonical vocabulary and this security overview around the distinction
   between component implementation, ProductComposition, live evidence, public truth surface and
