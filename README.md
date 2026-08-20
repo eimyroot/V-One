@@ -2,10 +2,12 @@
 
 > **Governed Change Authorization, Execution & Evidence Trust Plane**
 
-V-One governs consequential human- and AI-initiated operations so authority, execution and evidence
-remain explicit, bounded and independently verifiable.
+V-One keeps consequential human- and AI-initiated operations explicit, bounded and independently
+verifiable. It owns authority semantics; provider/runtime details remain behind governed boundaries.
 
-Canonical lifecycle target/current component lineage:
+## Canonical model
+
+All current operations share the authority/execution prefix:
 
 ```text
 ReviewedOperation
@@ -16,98 +18,92 @@ ReviewedOperation
 → durable Dispatch
 → ExecutionEpoch / Lease / Fence
 → isolated bounded Runner
-→ ExecutionReceipt/v2
+→ provider effect / observation
+```
+
+The evidence tail is **profile-specific**, not universal:
+
+```text
+READ_ONLY_VERIFIED
+→ independent Verifier
+→ VerificationResult/v1
+
+BOUNDED_MUTATION_VERIFIED
+→ ExecutionReceipt/v2                 [effect claim, NOT verification]
 → independent Verifier
 → VerificationResult/v1
 → OperationProof/v2
 → OperationCell/v1
 ```
 
-`ExecutionReceipt != VerificationResult`, and execution success alone never implies `VERIFIED`.
+`ExecutionReceipt/v2` and `OperationProof/v2` are bounded-mutation contracts. READ-only verification
+currently terminates at `VerificationResult/v1`.
+
+```text
+ExecutionReceipt != VerificationResult
+execution succeeded != VERIFIED
+VerificationResult != OperationProof
+OperationProof != OperationCell
+```
 
 ## Current state
 
 | Area | Status |
 |---|---|
-| Root engineering/governance standard | ADOPTED exact-content standard; live technical state still verified directly |
+| Root engineering/governance standard | ADOPTED exact-content standard |
 | Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
-| Current source/runtime evidence | See `CURRENT_PRODUCT_STATE.md`, `docs/product/CURRENT_CAPABILITIES.md`, live Git/CI and retained CASER evidence |
-| Local identity, approval and legacy product lifecycle | VERIFIED for current test scope |
-| AuthorizationSnapshot + AuthoritativeSnapshotCreator | IMPLEMENTED / tested component layer |
-| ExecutionGrant/v2 + durable grant persistence | IMPLEMENTED / tested component layer |
-| Control-plane one-time Grant consumption + durable Outbox | IMPLEMENTED / tested component layer |
-| Dispatch Inbox/dedup + ExecutionEpoch/Lease | IMPLEMENTED / tested component layer |
-| Isolated bounded READ Runner | LIVE VERIFIED in D4b pilot scope |
-| Independent Verifier | LIVE VERIFIED in E3 pilot scope |
-| VerificationResult/v1 | LIVE VERIFIED in E4b/F6b scopes |
-| Bounded GitHub CREATE_REF / DELETE_REF | HISTORICALLY VERIFIED staging pilot scopes |
-| ExecutionReceipt/v2 | IMPLEMENTED; historical F6b real receipt evidence |
-| OperationProof/v2 | IMPLEMENTED; historical F6b proof VERIFIED |
-| OperationCell/v1 | IMPLEMENTED; historical F6b cell VERIFIED |
-| Security Intelligence R-SI1.1 | IMPLEMENTED descriptive metadata/test layer; intelligence-only |
-| Unified authority→OperationCell FastAPI ProductComposition | PARTIAL / NOT YET COMPOSED |
-| GitHub main required-check/ruleset enforcement | UNKNOWN / release-blocking until live settings prove the baseline |
-| Production effects | BLOCKED and disabled by default |
+| Current source/runtime evidence | See current-state/capabilities plus live Git/CI/CASER evidence |
+| Local identity, approval and legacy product lifecycle | VERIFIED current test scope |
+| AuthoritativeSnapshotCreator | IMPLEMENTED / tested |
+| ExecutionGrant/v2 + durable grant service | IMPLEMENTED / tested |
+| Control-plane grant consumption + Outbox | IMPLEMENTED / tested |
+| Inbox/dedup + Epoch/Lease/Coordinator | IMPLEMENTED / tested |
+| Isolated bounded READ Runner | LIVE VERIFIED D4b scope |
+| Independent Verifier + VerificationResult/v1 | LIVE VERIFIED E3/E4b/F6b scope |
+| Bounded GitHub CREATE_REF / DELETE_REF | HISTORICALLY VERIFIED staging scopes |
+| ExecutionReceipt/v2 | IMPLEMENTED bounded-mutation contract; F6b evidence |
+| OperationProof/v2 | IMPLEMENTED bounded-mutation proof; F6b VERIFIED |
+| OperationCell/v1 | IMPLEMENTED bounded-mutation atom; F6b VERIFIED |
+| Security Intelligence R-SI1.1 | IMPLEMENTED intelligence-only metadata/test layer |
+| VOP semantic revision R2 | RECONCILIATION CANDIDATE in PR #128 |
+| Unified canonical FastAPI ProductComposition | PARTIAL / NOT YET COMPOSED |
+| GitHub main ruleset enforcement | UNKNOWN / release-blocking until live evidence |
+| Production effects | BLOCKED / disabled by default |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED |
-| CyberCore integration | BLOCKED until reconciliation and canonical product-pipeline gates pass |
+| CyberCore integration | BLOCKED until reconciliation gates pass |
 
-The current product version remains `0.9.0-rc2-dev`; this reconciliation is not a release.
+Product version remains `0.9.0-rc2-dev`; reconciliation is not release/deploy.
 
 ### Historical runtime checkpoint
 
-The latest retained full local runtime-attested development checkpoint remains
-`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`. Its archive SHA-256 is
-`80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2` and recorded product image ID is
-`sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc`.
-It does **not** attest later source changes; later trees rely on their own commit-bound CI/pilot
-evidence.
-
-The current evidence snapshot is [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md), and the
-capability-by-capability view is
-[`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md).
-
-## Product model
+Latest retained full local runtime-attested development checkpoint:
 
 ```text
-CyberCore / AI agents / operators
-        observations, context, proposals
-                     |
-                     v
-               V-One authority
- ReviewedOperation → Approval → AuthorizationSnapshot
-                     |
-              ExecutionGrant/v2
-                     |
-      CONTROL PLANE one-time consumption
-                     |
-              durable Dispatch
-                     |
-         Epoch / Lease / current Fence
-                     |
-          isolated bounded Runner
-                     |
-          ExecutionReceipt/v2
-                     |
-                     +----------------------+
-                                            v
-                              independent Verifier READ
-                                            |
-                                  VerificationResult/v1
-                                            |
-                                  OperationProof/v2
-                                            |
-                                   OperationCell/v1
+main@d57d37111b8bc9471a136b6c618aad8e920f1aff
+archive SHA-256: 80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
+image ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
 ```
 
-V-One owns authority semantics. CyberCore and Security Intelligence may supply context and proposals,
-but cannot issue authorization, consume grants, become Runner authority or manufacture verification.
+It does not attest later source changes.
+
+Current product truth:
+[`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) and
+[`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md).
 
 ## One canonical language
 
-The canonical machine vocabulary is in `voodoo_product/vop_vocabulary.py` with registry identity in
-`schemas/vop/registry.v1.json`; the human projection is
+Machine authority:
+
+- `voodoo_product/vop_vocabulary.py`;
+- `schemas/vop/registry.v1.json`.
+
+Human projection:
 [`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md).
+
+Current semantic revision candidate is `vop-terminology-freeze-r2` (ADR-0018). R2 makes the lifecycle
+stage list an ordered superset and registers explicit terminal profiles/compatibility. It deliberately
+does **not** call Receipt/v2 or Proof/v2 universal supersessions of the older v1 families.
 
 Important boundaries:
 
@@ -117,107 +113,86 @@ AuthorizationSnapshot != ExecutionGrant
 ExecutionGrant != ExecutionCapsule
 Runner != Verifier
 ExecutionReceipt != VerificationResult
+Observation != VerificationResult
 VerificationResult != OperationProof
 OperationProof != OperationCell
 Evidence-chain integrity != independent verification
 Release != Deploy
 ```
 
-Grant consumption belongs to the control plane **before Dispatch**. The Runner executes only an
-already-authorized dispatch under current lease/fence state.
+Grant consumption belongs to the control plane **before Dispatch**. Runner authority is
+`bounded_execution_only`.
 
 ## ProductComposition reality
 
-The repository contains the individual authority, durable dispatch, coordination, Runner,
-verification, proof and cell components. The current FastAPI `ProductComposition` still preserves the
-legacy `ExecutionService` product surface and does not yet orchestrate the full chain as one canonical
-runtime/API path.
-
-Therefore:
+The repository contains the accepted authority, durable dispatch, coordination, Runner, verifier and
+bounded-mutation proof/cell components. Current FastAPI `ProductComposition` still preserves legacy
+`ExecutionService`; it does not yet orchestrate the current VOP components as one canonical product
+runtime.
 
 ```text
-COMPONENT CHAIN = IMPLEMENTED DEEPLY
-HISTORICAL COMPLETE OPERATION ATOM = VERIFIED
-ONE CANONICAL PRODUCT RUNTIME PATH = NOT YET IMPLEMENTED
+COMPONENT COVERAGE = STRONG
+HISTORICAL BOUNDED-MUTATION ATOM = VERIFIED
+ONE CURRENT PRODUCT ORCHESTRATION = NOT YET IMPLEMENTED
 ```
 
-The next architecture track is composition/convergence, not reimplementation of the accepted
-contracts.
+The next functional reconciliation slice composes the shared prefix and selects the terminal profile
+explicitly. It must not copy pilot fixture seeding into product runtime or widen existing contracts to
+make a diagram look uniform.
 
-## Historical verified operation atom
+## Historical verified bounded-mutation atom
 
-Historical F6b run `32213563750` records one bounded staging rollback operation with:
+F6b run `32213563750` proved one staging rollback operation:
 
-- exact `DELETE_REF` target;
-- provider mutation count `1`;
-- no automatic retry;
-- rollback true;
+- `DELETE_REF` exactly once;
+- mutation count `1`;
+- automatic retry `false`;
+- rollback `true`;
 - Runner and independent Verifier observed `ABSENT`;
 - `VerificationResult/v1 = VERIFIED / OBSERVED_STATE_MATCH`;
 - `OperationProof/v2 = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718`;
 - `OperationCell/v1 = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5`.
 
-This is real historical evidence, not a claim that every current API execution automatically produces
-a cell.
+This is real bounded-mutation evidence, not evidence that every READ produces Proof/v2/Cell/v1.
 
-## Common system members
-
-`voodoo_product/operation_semantics.py` defines one common-language membership model:
-
-- owner;
-- operator;
-- AI agent;
-- CyberCore;
-- policy engine;
-- approval quorum;
-- Runner;
-- Verifier;
-- evidence fabric.
-
-The Runner authority is bounded execution only. CyberCore is intelligence only. The Verifier owns
-independent verification evidence, not execution authority.
-
-## Current security posture
+## Security posture
 
 - production effects default disabled;
-- exact authority/target/capsule/dispatch/epoch/fence bindings in current trust-plane contracts;
-- immutable/checksum-governed SQLite migrations through schema 13;
-- one-time grant-consumption evidence in the control plane;
-- bounded isolated pilot runtimes with default-deny network policy demonstrated in scoped workflows;
+- one-time grant consumption in control plane;
+- exact target/capsule/dispatch/epoch/fence bindings in current contracts;
+- SQLite migrations through schema 13;
+- bounded isolated pilot runtimes;
 - separate independent verifier path;
-- receipt and verification semantics separated;
+- receipt/verification semantics separate;
 - no release/deployment inferred from CI, merge, Proof or Cell;
-- live GitHub main enforcement remains UNKNOWN until settings/ruleset evidence proves the repository
-  baseline.
+- live GitHub enforcement remains UNKNOWN until settings/ruleset evidence proves it.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
 | [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) | Current evidence-scoped product snapshot |
-| [`CHANGELOG.md`](CHANGELOG.md) | Human-readable product-history changes |
-| [`VISION.md`](VISION.md) | Product purpose and long-term direction |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current architecture and convergence target |
+| [`CHANGELOG.md`](CHANGELOG.md) | Product/history changes |
+| [`VISION.md`](VISION.md) | Product purpose and direction |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current architecture and composition target |
 | [`ROADMAP.md`](ROADMAP.md) | Ordered delivery/gate plan |
-| [`SECURITY.md`](SECURITY.md) | Security policy and supported-state boundaries |
-| [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md) | Stable product/engineering foundations |
-| [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md) | Shared vocabulary and status taxonomy |
-| [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) | Evidence-backed current capability inventory |
+| [`SECURITY.md`](SECURITY.md) | Security policy/supported-state boundary |
+| [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md) | Stable engineering foundations |
+| [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md) | Shared terminology/status language |
+| [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) | Current capability inventory |
 | [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md) | Target capability contracts |
-| [`docs/product/SECURITY_OVERVIEW.md`](docs/product/SECURITY_OVERVIEW.md) | Current security-control summary |
-| [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md) | Historical/product MVP delivery map |
-| [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md) | Current trust-boundary topology |
+| [`docs/product/SECURITY_OVERVIEW.md`](docs/product/SECURITY_OVERVIEW.md) | Security-control summary |
+| [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md) | MVP/product delivery map |
+| [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md) | Trust-boundary topology |
 | [`docs/governance/DOCUMENTATION_POLICY.md`](docs/governance/DOCUMENTATION_POLICY.md) | Documentation truth rules |
-| [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md) | Immutable historical R3 evidence index |
+| [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md) | Historical R3 evidence index |
 | [`docs/README.md`](docs/README.md) | Documentation index |
 
 Normative governance remains in
 [`WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`](WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md),
-[`PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md), and effective adopted governance records/ADRs.
+[`PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md), and effective adopted records/ADRs.
 
 ## Local verification
-
-From repository root:
 
 ```bash
 python3.12 -m venv .venv
@@ -231,7 +206,7 @@ python scripts/product_readiness_gate.py
 
 No command above enables production effects.
 
-## Local checkpoint evidence verification
+## Local checkpoint verification
 
 ```bash
 export PATH="$PWD/scripts:$PATH"
@@ -245,13 +220,12 @@ python -m voodoo_product evidence verify /absolute/path/to/checkpoint
 ```
 
 Checkpoint verification does not independently attest provider state, publish artifacts, authorize a
-release or enable production effects.
-
-See [`ADR-0002`](docs/adr/ADR-0002-local-checkpoint-proofgraph-verification.md).
+release or enable production effects. See
+[`ADR-0002`](docs/adr/ADR-0002-local-checkpoint-proofgraph-verification.md).
 
 ## Local start
 
-Create `.env.product.local` from `.env.product.example`, replace secret placeholders, set exact
+Create `.env.product.local` from `.env.product.example`, replace secret placeholders, configure exact
 `VOODOO_TRUSTED_HOSTS`, and keep:
 
 ```text
@@ -274,10 +248,9 @@ Console: `http://127.0.0.1:8000/console`
 - focused reviewable commits;
 - behavior changes include tests;
 - CI is not release/deploy authority;
-- production effects remain disabled unless separately authorized/released;
-- authentication, authorization, persistence, evidence, write, release and production changes use
-  governed review;
-- automation may propose/verify but cannot create stronger authority by inference.
+- production effects remain separately authorized/released;
+- authentication/authority/persistence/evidence/write/release changes use governed review;
+- automation cannot create stronger authority by inference.
 
 See [`SECURITY.md`](SECURITY.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), and
 [`COMMERCIAL_READINESS.md`](docs/product/COMMERCIAL_READINESS.md).
