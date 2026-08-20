@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "vop-schema-registry/v1",
   "vocabulary_type": "vop-canonical-vocabulary/v1",
-  "vocabulary_revision": "vop-terminology-freeze-r1",
+  "vocabulary_revision": "vop-terminology-freeze-r2",
   "status": "RESERVED_IDS",
   "canonical_schema_ids": [
     "operation-request/v1",
@@ -68,9 +68,31 @@
     "operation-cell/v1"
   ],
   "schema_supersessions": {
-    "execution-grant/v1": "execution-grant/v2",
-    "execution-receipt/v1": "execution-receipt/v2",
-    "operation-proof/v1": "operation-proof/v2"
+    "execution-grant/v1": "execution-grant/v2"
+  },
+  "schema_compatibility": {
+    "execution-grant/v1": "HISTORICAL_VALUE_CONTRACT_SUPERSEDED_BY_EXECUTION_GRANT_V2",
+    "execution-grant/v2": "CURRENT_AUTHORITATIVE_RUNTIME_AUTHORITY",
+    "execution-receipt/v1": "LEGACY_GENERIC_V1_RECEIPT_LINEAGE",
+    "execution-receipt/v2": "CURRENT_BOUNDED_MUTATION_EFFECT_RECEIPT_NOT_UNIVERSAL_REPLACEMENT",
+    "operation-proof/v1": "LEGACY_GENERIC_V1_PROOF_LINEAGE",
+    "operation-proof/v2": "CURRENT_BOUNDED_MUTATION_PROOF_NOT_UNIVERSAL_REPLACEMENT",
+    "operation-cell/v1": "CURRENT_BOUNDED_MUTATION_STABLE_ATOM_REQUIRES_OPERATION_PROOF_V2",
+    "verification-result/v1": "CURRENT_INDEPENDENT_VERIFICATION_TERMINAL_FOR_READ_ONLY_PROFILE"
+  },
+  "operation_stage_rule": "OPERATION_STAGES is an ordered semantic superset; a concrete operation traverses only the stages required by its registered terminal profile.",
+  "operation_terminal_profiles": {
+    "BOUNDED_MUTATION_VERIFIED": [
+      "execution_receipt",
+      "independent_verification",
+      "verification_result",
+      "operation_proof",
+      "operation_cell"
+    ],
+    "READ_ONLY_VERIFIED": [
+      "independent_verification",
+      "verification_result"
+    ]
   },
   "identity_grammar": [
     "logical_identity",
