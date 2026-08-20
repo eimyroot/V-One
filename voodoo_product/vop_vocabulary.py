@@ -8,7 +8,7 @@ from .evidence_primitives import canonical_json
 
 SCHEMA_VERSION: Final = 1
 VOCABULARY_TYPE: Final = "vop-canonical-vocabulary/v1"
-VOCABULARY_REVISION: Final = "vop-terminology-freeze-r1"
+VOCABULARY_REVISION: Final = "vop-terminology-freeze-r2"
 
 # Canonical invariant: one semantic meaning has one canonical term and one authoritative definition.
 SURFACE_CONSISTENCY_RULE: Final = (
@@ -151,8 +151,12 @@ ARTIFACT_STATES: Final = (
     "DEPLOYED",
 )
 
-# Existing runtime lifecycle stages remain semantically narrower than the full noun vocabulary.
-# Runtime code must import these values instead of defining another operation-stage taxonomy.
+# This is the ordered superset of canonical lifecycle stages, not a claim that every capability
+# traverses every stage. The terminal profile determines which tail is valid for a concrete lineage.
+OPERATION_STAGE_RULE: Final = (
+    "OPERATION_STAGES is an ordered semantic superset; a concrete operation traverses only the "
+    "stages required by its registered terminal profile."
+)
 OPERATION_STAGES: Final = (
     "intent",
     "reviewed_operation",
@@ -160,11 +164,34 @@ OPERATION_STAGES: Final = (
     "approval_quorum_certificate",
     "authorization_snapshot",
     "execution_grant",
+    "grant_consumption",
+    "dispatch",
+    "execution_lease",
     "runner_execution",
     "execution_receipt",
     "independent_verification",
+    "verification_result",
     "operation_proof",
     "operation_cell",
+)
+
+# Terminal profiles prevent a current bounded-write evidence contract from being presented as a
+# universal terminal for every capability. READ-only verification currently terminates at the
+# independent VerificationResult. The accepted proof/cell v2/v1 tail is bounded-mutation-specific.
+OPERATION_TERMINAL_PROFILES: Final = MappingProxyType(
+    {
+        "READ_ONLY_VERIFIED": (
+            "independent_verification",
+            "verification_result",
+        ),
+        "BOUNDED_MUTATION_VERIFIED": (
+            "execution_receipt",
+            "independent_verification",
+            "verification_result",
+            "operation_proof",
+            "operation_cell",
+        ),
+    }
 )
 
 # Registry presence reserves semantic identity. It never implies implementation, verification,
@@ -233,17 +260,26 @@ SCHEMA_REGISTRY_IDS: Final = (
     "operation-cell/v1",
 )
 
+# Only semantic replacements belong here. execution-grant/v2 is the current authoritative runtime
+# authority contract replacing the historical deterministic execution-grant/v1 value contract.
+# Receipt/proof v2 are intentionally NOT listed as universal supersessions: they are the current
+# bounded-mutation lineage and are semantically narrower than the older v1 families.
 SCHEMA_SUPERSESSIONS: Final = MappingProxyType(
     {
-        # v1 remains a historical deterministic value contract. v2 is the current authoritative
-        # execution-authority contract and must not be silently described as v1.
         "execution-grant/v1": "execution-grant/v2",
-        # v1 remains reserved for the historical receipt model. v2 carries the current effect
-        # lineage while preserving receipt/verification separation.
-        "execution-receipt/v1": "execution-receipt/v2",
-        # v1 remains reserved for the historical proof lineage. v2 is the current proof contract
-        # over ExecutionReceipt/v2 + independent VerificationResult/v1 evidence.
-        "operation-proof/v1": "operation-proof/v2",
+    }
+)
+
+SCHEMA_COMPATIBILITY: Final = MappingProxyType(
+    {
+        "execution-grant/v1": "HISTORICAL_VALUE_CONTRACT_SUPERSEDED_BY_EXECUTION_GRANT_V2",
+        "execution-grant/v2": "CURRENT_AUTHORITATIVE_RUNTIME_AUTHORITY",
+        "execution-receipt/v1": "LEGACY_GENERIC_V1_RECEIPT_LINEAGE",
+        "execution-receipt/v2": "CURRENT_BOUNDED_MUTATION_EFFECT_RECEIPT_NOT_UNIVERSAL_REPLACEMENT",
+        "operation-proof/v1": "LEGACY_GENERIC_V1_PROOF_LINEAGE",
+        "operation-proof/v2": "CURRENT_BOUNDED_MUTATION_PROOF_NOT_UNIVERSAL_REPLACEMENT",
+        "operation-cell/v1": "CURRENT_BOUNDED_MUTATION_STABLE_ATOM_REQUIRES_OPERATION_PROOF_V2",
+        "verification-result/v1": "CURRENT_INDEPENDENT_VERIFICATION_TERMINAL_FOR_READ_ONLY_PROFILE",
     }
 )
 
@@ -317,19 +353,28 @@ NOUN_DEFINITIONS: Final = MappingProxyType(
         ),
         "RuntimeActivation": "Evidence that an eligible isolated runtime boundary was activated for use.",
         "Observation": "A bounded provider or target-state observation; observation alone is not verification.",
-        "ExecutionReceipt": "The execution subsystem's claim about what it performed.",
+        "ExecutionReceipt": (
+            "Execution-side evidence. Version-specific semantics matter: execution-receipt/v2 is the "
+            "current bounded-mutation effect receipt and does not manufacture verification."
+        ),
         "VerifierIdentity": "Content-addressed identity evidence for a verifier independent from the Runner.",
         "IndependentVerificationBoundary": (
             "Fail-closed binding that proves the required identity, instance and credential separation "
             "between Runner evidence and the Verifier path."
         ),
         "VerificationStrength": "A classification of how strongly an independent VerificationResult is supported.",
-        "VerificationResult": "An independent determination of observed real post-state.",
+        "VerificationResult": (
+            "An independent determination of observed real post-state; it is the current verified "
+            "terminal for the READ_ONLY_VERIFIED profile."
+        ),
         "Evidence": "An auditable evidence artifact.",
-        "OperationProof": "Portable proof binding the governed operation chain.",
+        "OperationProof": (
+            "Portable proof for a registered lineage. operation-proof/v2 is currently the bounded-"
+            "mutation proof over ExecutionReceipt/v2 plus independent VerificationResult/v1 evidence."
+        ),
         "OperationCell": (
-            "Stable content-addressed product atom over one canonically revalidated OperationProof/v2; "
-            "it does not widen authority or duplicate nested evidence."
+            "Stable content-addressed product atom for the registered bounded-mutation profile over "
+            "one canonically revalidated OperationProof/v2; it does not widen authority or duplicate nested evidence."
         ),
         "Module": "A provider or domain translation and implementation package.",
         "Candidate": "A proposed definition or implementation that is not active authority.",
@@ -359,9 +404,14 @@ def canonical_vocabulary() -> dict[str, Any]:
         "gate_statuses": list(GATE_STATUSES),
         "task_outcomes": list(TASK_OUTCOMES),
         "artifact_states": list(ARTIFACT_STATES),
+        "operation_stage_rule": OPERATION_STAGE_RULE,
         "operation_stages": list(OPERATION_STAGES),
+        "operation_terminal_profiles": {
+            key: list(value) for key, value in sorted(OPERATION_TERMINAL_PROFILES.items())
+        },
         "schema_registry_ids": list(SCHEMA_REGISTRY_IDS),
         "schema_supersessions": dict(sorted(SCHEMA_SUPERSESSIONS.items())),
+        "schema_compatibility": dict(sorted(SCHEMA_COMPATIBILITY.items())),
         "boundary_definitions": dict(sorted(BOUNDARY_DEFINITIONS.items())),
         "forbidden_shorthands": dict(sorted(FORBIDDEN_SHORTHANDS.items())),
     }
