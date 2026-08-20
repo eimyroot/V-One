@@ -49,12 +49,16 @@ Normative document authority is separate and follows governance/adoption records
 
 ```text
 TRUST-PLANE COMPONENT CHAIN = deeply implemented/tested
-HISTORICAL COMPLETE F6b OPERATION ATOM = VERIFIED
-ONE CANONICAL FastAPI ProductComposition THROUGH OperationCell = NOT YET IMPLEMENTED
+HISTORICAL COMPLETE F6b BOUNDED-MUTATION ATOM = VERIFIED
+CANONICAL FastAPI ProductComposition RUNTIME SEAM = IMPLEMENTED CANDIDATE
+DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
+READ_ONLY_VERIFIED TERMINAL = VerificationResult/v1
+BOUNDED_MUTATION_VERIFIED TERMINAL = OperationCell/v1 after effect + independent verification
+CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
 ```
 
-Do not collapse component presence, product composition, live verification and release into one
-status.
+Do not collapse component presence, product composition, terminal-profile semantics, live verification
+and release into one status.
 
 ## Structure
 
