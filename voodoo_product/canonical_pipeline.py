@@ -5,7 +5,6 @@ from typing import Protocol
 
 from .dispatch_envelope import DispatchEnvelope
 from .monotonic_authority import AuthorityConstraint, AuthorityScope
-from .terminal_profile import ImmutableCapabilityTerminalProfileRegistry
 from .vop_vocabulary import OPERATION_TERMINAL_PROFILES
 
 
@@ -275,7 +274,11 @@ class CanonicalOperationPipeline:
                 _attribute(snapshot, "snapshot_digest"),
                 _attribute(grant, "authorization_snapshot_digest"),
             ),
-            ("execution_id", _attribute(snapshot, "execution_id"), _attribute(grant, "execution_id")),
+            (
+                "execution_id",
+                _attribute(snapshot, "execution_id"),
+                _attribute(grant, "execution_id"),
+            ),
             ("capability", capability, _attribute(grant, "capability")),
             (
                 "capability_definition_identity",
@@ -289,20 +292,36 @@ class CanonicalOperationPipeline:
             jti=_require_text(_attribute(grant, "jti"), field="grant.jti")
         )
         for field_name, expected, actual in (
-            ("grant_digest", _attribute(grant, "grant_digest"), _attribute(outbox, "grant_digest")),
-            ("execution_id", _attribute(grant, "execution_id"), _attribute(outbox, "execution_id")),
+            (
+                "grant_digest",
+                _attribute(grant, "grant_digest"),
+                _attribute(outbox, "grant_digest"),
+            ),
+            (
+                "execution_id",
+                _attribute(grant, "execution_id"),
+                _attribute(outbox, "execution_id"),
+            ),
             (
                 "snapshot_digest",
                 _attribute(grant, "authorization_snapshot_digest"),
                 _attribute(outbox, "authorization_snapshot_digest"),
             ),
-            ("capability", _attribute(grant, "capability"), _attribute(outbox, "capability")),
+            (
+                "capability",
+                _attribute(grant, "capability"),
+                _attribute(outbox, "capability"),
+            ),
             (
                 "capability_definition_identity",
                 _attribute(grant, "capability_definition_identity"),
                 _attribute(outbox, "capability_definition_identity"),
             ),
-            ("target_digest", _attribute(grant, "target_digest"), _attribute(outbox, "target_digest")),
+            (
+                "target_digest",
+                _attribute(grant, "target_digest"),
+                _attribute(outbox, "target_digest"),
+            ),
         ):
             _require_equal(field=field_name, expected=expected, actual=actual)
 
@@ -332,7 +351,11 @@ class CanonicalOperationPipeline:
         )
         lease = _attribute(lease_result, "lease")
         for field_name, expected, actual in (
-            ("admission_id", _attribute(admission, "admission_id"), _attribute(lease, "admission_id")),
+            (
+                "admission_id",
+                _attribute(admission, "admission_id"),
+                _attribute(lease, "admission_id"),
+            ),
             ("execution_id", envelope.execution_id, _attribute(lease, "execution_id")),
             (
                 "capsule_digest",
