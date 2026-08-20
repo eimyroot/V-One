@@ -6,6 +6,8 @@ from voodoo_product.operation_semantics import common_language
 from voodoo_product.vop_vocabulary import (
     CANONICAL_NOUNS,
     OPERATION_STAGES,
+    OPERATION_TERMINAL_PROFILES,
+    SCHEMA_COMPATIBILITY,
     SCHEMA_REGISTRY_IDS,
     SCHEMA_SUPERSESSIONS,
 )
@@ -30,10 +32,33 @@ def test_runner_common_language_never_owns_grant_consumption() -> None:
     assert "Consumes a scoped grant" not in runner["purpose"]
 
 
-def test_current_proof_and_operation_cell_are_canonical_vop_identities() -> None:
+def test_current_proof_and_operation_cell_are_registered_without_false_universal_supersession() -> None:
     assert "OperationCell" in CANONICAL_NOUNS
     assert OPERATION_STAGES[-1] == "operation_cell"
+    assert "verification_result" in OPERATION_STAGES
     assert "operation-proof/v1" in SCHEMA_REGISTRY_IDS
     assert "operation-proof/v2" in SCHEMA_REGISTRY_IDS
     assert "operation-cell/v1" in SCHEMA_REGISTRY_IDS
-    assert SCHEMA_SUPERSESSIONS["operation-proof/v1"] == "operation-proof/v2"
+    assert "operation-proof/v1" not in SCHEMA_SUPERSESSIONS
+    assert SCHEMA_COMPATIBILITY["operation-proof/v2"] == (
+        "CURRENT_BOUNDED_MUTATION_PROOF_NOT_UNIVERSAL_REPLACEMENT"
+    )
+
+
+def test_read_only_verified_terminal_does_not_require_mutation_receipt_proof_or_cell() -> None:
+    read_only = OPERATION_TERMINAL_PROFILES["READ_ONLY_VERIFIED"]
+    assert read_only == ("independent_verification", "verification_result")
+    assert "execution_receipt" not in read_only
+    assert "operation_proof" not in read_only
+    assert "operation_cell" not in read_only
+
+
+def test_bounded_mutation_verified_terminal_requires_receipt_verification_proof_and_cell() -> None:
+    mutation = OPERATION_TERMINAL_PROFILES["BOUNDED_MUTATION_VERIFIED"]
+    assert mutation == (
+        "execution_receipt",
+        "independent_verification",
+        "verification_result",
+        "operation_proof",
+        "operation_cell",
+    )
