@@ -45,6 +45,9 @@ by the canonical V-One authority path and do not create an alternative capabilit
 
 ## Canonical VOP mapping
 
+Security Intelligence is upstream context. After explicit semantic mapping it enters the normal V-One
+shared authority/execution prefix; the terminal tail remains capability/profile-specific.
+
 ```text
 Security Intelligence observation/classification
         ↓
@@ -52,13 +55,26 @@ explicit semantic mapping / policy-review input
         ↓
 ReviewedOperation
         ↓
-normal V-One authority lifecycle
-        ↓
 AuthorizationSnapshot
 → ExecutionGrant/v2
-→ control-plane consumption
+→ control-plane Grant consumption
 → Dispatch
-→ Runner
+→ ExecutionEpoch / Lease / Fence
+→ bounded Runner
+        ↓
+profile-specific terminal
+```
+
+For current profiles:
+
+```text
+READ_ONLY_VERIFIED
+→ independent Verifier
+→ VerificationResult/v1
+→ STOP
+
+BOUNDED_MUTATION_VERIFIED
+→ provider mutation
 → ExecutionReceipt/v2
 → independent Verifier
 → VerificationResult/v1
@@ -66,7 +82,8 @@ AuthorizationSnapshot
 → OperationCell/v1
 ```
 
-The metadata layer is upstream context. It does not skip any lifecycle stage.
+The metadata layer does not skip any required lifecycle stage and cannot select or strengthen the
+terminal profile.
 
 ## CyberCore relationship
 
@@ -109,9 +126,9 @@ CyberCore/Security Intelligence runtime binding remains blocked until:
 
 - reconciliation P0/P1 truth gates pass;
 - canonical vocabulary/registry are current;
-- one canonical ProductComposition lifecycle exists;
+- the canonical ProductComposition runtime seam is reconciliation-closed and governed;
 - Security Intelligence input/output contracts are explicitly bound to that lifecycle;
-- tests prove no parallel authority path;
+- tests prove no parallel authority path or terminal-profile strengthening;
 - any provider effect remains separately authorized.
 
 ## Release boundary
