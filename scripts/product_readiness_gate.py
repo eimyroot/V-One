@@ -163,6 +163,7 @@ REQUIRED = [
     "docs/adr/ADR-0002-local-checkpoint-proofgraph-verification.md",
     "docs/adr/ADR-0015-operation-proof-v2-current-lineage-r1.md",
     "docs/adr/ADR-0017-operation-cell-v1-r1.md",
+    "docs/adr/ADR-0018-vop-terminal-profiles-and-lineage-r2.md",
     "docs/product/AUDIT_LEDGER_COMPOSITION_BOUNDARY.md",
     "docs/product/AUTHENTICATION_RATE_LIMIT_SERVICE_COMPOSITION_BOUNDARY.md",
     "docs/product/CHANGE_REQUEST_SERVICE_COMPOSITION_BOUNDARY.md",
@@ -254,27 +255,78 @@ def is_forbidden_repository_artifact(path: str) -> bool:
 
 
 def current_vop_registry_check() -> dict[str, object]:
+    from voodoo_product.authoritative_grant import EXECUTION_GRANT_V2_TYPE
     from voodoo_product.operation_cell_v1 import OPERATION_CELL_V1_TYPE
     from voodoo_product.operation_proof_v2 import OPERATION_PROOF_V2_TYPE
-    from voodoo_product.vop_vocabulary import SCHEMA_REGISTRY_IDS, SCHEMA_SUPERSESSIONS
+    from voodoo_product.verification_result import VERIFICATION_RESULT_TYPE
+    from voodoo_product.vop_vocabulary import (
+        OPERATION_STAGE_RULE,
+        OPERATION_TERMINAL_PROFILES,
+        SCHEMA_COMPATIBILITY,
+        SCHEMA_REGISTRY_IDS,
+        SCHEMA_SUPERSESSIONS,
+        VOCABULARY_REVISION,
+    )
 
     registry = json.loads((ROOT / "schemas" / "vop" / "registry.v1.json").read_text(encoding="utf-8"))
     machine_ids = list(SCHEMA_REGISTRY_IDS)
     manifest_ids = registry.get("canonical_schema_ids")
     manifest_supersessions = registry.get("schema_supersessions")
-    required_current = {OPERATION_PROOF_V2_TYPE, OPERATION_CELL_V1_TYPE}
+    manifest_compatibility = registry.get("schema_compatibility")
+    manifest_profiles = registry.get("operation_terminal_profiles")
+    expected_profiles = {
+        key: list(value) for key, value in sorted(OPERATION_TERMINAL_PROFILES.items())
+    }
+    required_current = {
+        EXECUTION_GRANT_V2_TYPE,
+        VERIFICATION_RESULT_TYPE,
+        OPERATION_PROOF_V2_TYPE,
+        OPERATION_CELL_V1_TYPE,
+    }
     missing_current = sorted(required_current - set(machine_ids))
-    return {
-        "ok": (
-            not missing_current
-            and manifest_ids == machine_ids
-            and manifest_supersessions == dict(SCHEMA_SUPERSESSIONS)
-            and SCHEMA_SUPERSESSIONS.get("operation-proof/v1") == OPERATION_PROOF_V2_TYPE
+    semantic_invariants = {
+        "grant_v1_superseded_by_v2": (
+            SCHEMA_SUPERSESSIONS.get("execution-grant/v1") == EXECUTION_GRANT_V2_TYPE
         ),
-        "required_current_contracts": sorted(required_current),
-        "missing_current_contracts": missing_current,
+        "receipt_v2_not_universal_supersession": "execution-receipt/v1" not in SCHEMA_SUPERSESSIONS,
+        "proof_v2_not_universal_supersession": "operation-proof/v1" not in SCHEMA_SUPERSESSIONS,
+        "read_only_terminal_is_verification_result": (
+            OPERATION_TERMINAL_PROFILES.get("READ_ONLY_VERIFIED")
+            == ("independent_verification", "verification_result")
+        ),
+        "bounded_mutation_terminal_has_proof_cell": (
+            OPERATION_TERMINAL_PROFILES.get("BOUNDED_MUTATION_VERIFIED")
+            == (
+                "execution_receipt",
+                "independent_verification",
+                "verification_result",
+                "operation_proof",
+                "operation_cell",
+            )
+        ),
+        "receipt_v2_compatibility_is_narrow": (
+            SCHEMA_COMPATIBILITY.get("execution-receipt/v2")
+            == "CURRENT_BOUNDED_MUTATION_EFFECT_RECEIPT_NOT_UNIVERSAL_REPLACEMENT"
+        ),
+        "proof_v2_compatibility_is_narrow": (
+            SCHEMA_COMPATIBILITY.get("operation-proof/v2")
+            == "CURRENT_BOUNDED_MUTATION_PROOF_NOT_UNIVERSAL_REPLACEMENT"
+        ),
+    }
+    matches = {
         "manifest_matches_machine_registry": manifest_ids == machine_ids,
         "supersessions_match": manifest_supersessions == dict(SCHEMA_SUPERSESSIONS),
+        "compatibility_matches": manifest_compatibility == dict(SCHEMA_COMPATIBILITY),
+        "terminal_profiles_match": manifest_profiles == expected_profiles,
+        "stage_rule_matches": registry.get("operation_stage_rule") == OPERATION_STAGE_RULE,
+        "vocabulary_revision_matches": registry.get("vocabulary_revision") == VOCABULARY_REVISION,
+    }
+    return {
+        "ok": not missing_current and all(matches.values()) and all(semantic_invariants.values()),
+        "required_current_contracts": sorted(required_current),
+        "missing_current_contracts": missing_current,
+        **matches,
+        "semantic_invariants": semantic_invariants,
     }
 
 
