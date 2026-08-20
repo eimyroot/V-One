@@ -248,6 +248,16 @@ def seed_snapshot(database: SQLiteProductDatabase) -> None:
         )
         connection.execute(
             """
+            INSERT INTO workspace_memberships(
+                workspace_id, user_id, membership_role, created_by, created_at
+            ) VALUES (
+                'wrk_main', 'usr_admin', 'owner', 'usr_admin',
+                '2026-08-17T01:00:00.000+00:00'
+            )
+            """
+        )
+        connection.execute(
+            """
             INSERT INTO change_requests(
                 id, workspace_id, title, description, risk, environment, adapter,
                 payload_json, status, requested_by, created_at, updated_at
@@ -413,6 +423,31 @@ def test_issue_store_consume_round_trip_and_replay_denial(tmp_path: Path) -> Non
         ).fetchone()
     assert grant_count["count"] == 1
     assert consumption_count["count"] == 1
+
+
+def test_membership_missing_before_store_denies_durable_grant(tmp_path: Path) -> None:
+    service, database, _, _, _, _ = build_service(tmp_path)
+    with database.transaction() as connection:
+        connection.execute(
+            "DELETE FROM workspace_memberships WHERE workspace_id = 'wrk_main' AND user_id = 'usr_admin'"
+        )
+
+    with pytest.raises(GrantConsumptionDenied) as denied:
+        store(service)
+    assert denied.value.reason == "EXECUTION_PERMISSION_DENIED"
+
+
+def test_membership_revoked_after_store_denies_one_time_consumption(tmp_path: Path) -> None:
+    service, database, _, _, _, grant = build_service(tmp_path)
+    store(service)
+    with database.transaction() as connection:
+        connection.execute(
+            "DELETE FROM workspace_memberships WHERE workspace_id = 'wrk_main' AND user_id = 'usr_admin'"
+        )
+
+    with pytest.raises(GrantConsumptionDenied) as denied:
+        service.consume(jti=grant.jti)
+    assert denied.value.reason == "EXECUTION_PERMISSION_DENIED"
 
 
 def test_two_concurrent_consumers_have_exactly_one_winner(tmp_path: Path) -> None:
