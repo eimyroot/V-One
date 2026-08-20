@@ -1,8 +1,7 @@
 # VOODOO One — CURRENT PRODUCT STATE
 
 > Living evidence-scoped snapshot. Live Git/GitHub, executed tests and runtime evidence outrank this
-> document for technical state. Historical claims remain available in Git history and CASER; they are
-> superseded here rather than rewritten retroactively.
+> document. Historical claims stay in Git/CASER and are never upgraded by later success.
 
 ## Snapshot identity
 
@@ -13,19 +12,19 @@ RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_TREE: 423e234757686f720de20decd762270c43e0a8bb
 AUDIT: VONE_RECONCILIATION_AUDIT_20260819T2209Z
-AUDIT_STATUS: RECONCILIATION_REQUIRED_TECHNICAL_CORE_STRONG_PRODUCT_TRUTH_DRIFT_FOUND
 RECONCILIATION_CANDIDATE: PR #128 / feat/reconciliation-p0-p1-r1
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
+VOP_SEMANTIC_REVISION_CANDIDATE: vop-terminology-freeze-r2
 PRODUCT_VERSION: 0.9.0-rc2-dev
 PRODUCTION_EFFECTS: DISABLED
 RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-Exact live Git identity must still be queried directly. The reconciliation SHA is an immutable input
-baseline, not a self-updating claim about future `main`.
+The exact live Git identity must be queried directly; none of these retained SHAs is a self-updating
+claim about future `main`.
 
-## Historical runtime checkpoint boundary
+## Historical checkpoint boundary
 
 The latest retained full local runtime-attested checkpoint remains historical development evidence for
 `main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
@@ -35,58 +34,51 @@ EVIDENCE_ARCHIVE: POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
 PRODUCT_IMAGE_ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
 ```
 
-It does **not** attest the later reconciliation baseline or later source changes. Those later trees
-require their own commit-bound CI/pilot evidence.
+It does not attest later source changes. Historical documentation-review merge
+`57c7bf2277616c4445039865ac7cf81c5fada858` remains only ADR-0008 evidence-index provenance; it is not
+the current Git baseline.
 
-Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains retained
-only as ADR-0008 evidence-index provenance. It is **not** the current Git baseline and does not attest
-this reconciliation candidate.
+## Truth dimensions
 
-## How status is represented
-
-A V-One capability has separate dimensions. They MUST NOT be collapsed into one overloaded status:
+Do not collapse these dimensions:
 
 ```text
 CONTRACT / COMPONENT      = source implementation exists
 PRODUCT_COMPOSED          = canonical ProductComposition/API uses it
-LIVE_VERIFIED             = real provider/runtime evidence exists for the stated scope
+LIVE_VERIFIED             = real runtime/provider evidence exists for the named scope
 PRODUCT_SURFACED          = API/UI exposes the same semantics truthfully
-RELEASED / DEPLOYED       = separately governed release/deployment state
+RELEASED / DEPLOYED       = separately governed states
 ```
-
-`IMPLEMENTED` therefore never means automatically `PRODUCT_COMPOSED`, `VERIFIED`, `RELEASED` or
-`DEPLOYED`.
 
 ## Overall state
 
 | Dimension | Current state |
 |---|---|
-| Technical trust-plane component depth | **STRONG / IMPLEMENTED** |
-| Historical complete governed operation atom | **VERIFIED** in staging F6b scope |
-| Unified canonical product/API lifecycle | **PARTIAL / NOT YET COMPOSED** |
-| Canonical VOP language | **RECONCILIATION IN PROGRESS** in PR #128 |
-| Product UI verification truth | **RECONCILIATION IN PROGRESS** in PR #128 |
-| SQLite persistence | **IMPLEMENTED / TESTED through schema 13** |
-| Read-only isolated Runner pilot | **LIVE VERIFIED for bounded GitHub READ scope** |
-| Independent verifier pilot | **LIVE VERIFIED for bounded GitHub READ scope** |
-| Governed write/rollback | **HISTORICALLY VERIFIED pilot scope; not reusable current product entrypoint** |
-| OperationProof/v2 | **IMPLEMENTED; historical F6b instance VERIFIED** |
-| OperationCell/v1 | **IMPLEMENTED; historical F6b instance VERIFIED** |
-| Security Intelligence R-SI1.1 | **IMPLEMENTED metadata/test layer; intelligence-only, not runtime authority** |
-| GitHub main enforcement | **UNKNOWN / BLOCKED until live ruleset evidence proves baseline** |
+| Technical trust-plane components | **STRONG / IMPLEMENTED** |
+| Historical bounded-mutation operation atom | **VERIFIED** in F6b staging scope |
+| Unified canonical ProductComposition/API | **PARTIAL / NOT YET COMPOSED** |
+| Canonical VOP language | **R2 RECONCILIATION CANDIDATE** in PR #128 |
+| UI receipt/verification truth | **FIXED IN PR #128; exact-head verification pending** |
+| SQLite persistence | **IMPLEMENTED through schema 13** |
+| READ-only isolated Runner + verifier | **LIVE VERIFIED pilot scope** |
+| Governed write/rollback | **HISTORICALLY VERIFIED pilot; not reusable current entrypoint** |
+| OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; F6b instance VERIFIED** |
+| OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; F6b instance VERIFIED** |
+| Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
+| GitHub main ruleset enforcement | **UNKNOWN / BLOCKED until live evidence** |
 | Production release/effects | **BLOCKED** |
-| CyberCore integration | **BLOCKED until reconciliation and canonical product composition gates pass** |
+| CyberCore | **BLOCKED until reconciliation closure** |
 
-## Canonical lifecycle reality
+## Canonical shared authority/execution prefix
 
-Current component/evidence architecture is:
+The current accepted component model shares this prefix:
 
 ```text
 ReviewedOperation
-→ Approval
+→ Approval / ApprovalCertificate
 → AuthorizationSnapshot
 → ExecutionGrant/v2
-→ GrantConsumptionWitness/v1       [CONTROL PLANE ONLY]
+→ GrantConsumptionWitness/v1          [CONTROL PLANE ONLY]
 → DispatchOutboxEntry/v1
 → DispatchEnvelope/v1
 → DispatchInboxAdmission/v1
@@ -95,85 +87,90 @@ ReviewedOperation
 → RunnerIdentity + RunnerBoundary
 → CredentialAccessDecision
 → RuntimeActivation
-→ Provider Effect / Observation
-→ ExecutionReceipt/v2              [EXECUTION CLAIM, NOT VERIFICATION]
-→ independent Verifier
+→ Provider effect / Observation
+```
+
+Grant consumption belongs to the control plane before Dispatch. Runner authority is
+`bounded_execution_only`; Runner never issues or consumes ExecutionGrant.
+
+## Canonical terminal profiles — R2
+
+The lifecycle is **not** one mandatory universal tail.
+
+### READ-only verified
+
+```text
+READ_ONLY_VERIFIED
+Runner Observation
+→ independent Verifier Observation
 → ObservedPostState/v1
 → VerificationStrength/v1
-→ VerificationResult/v1
+→ VerificationResult/v1 = VERIFIED
+```
+
+Current READ-only verified operations terminate at `VerificationResult/v1`.
+
+```text
+ExecutionReceipt/v2 = NOT_APPLICABLE
+OperationProof/v2   = NOT_APPLICABLE
+OperationCell/v1    = NOT_APPLICABLE
+```
+
+### Bounded mutation verified
+
+```text
+BOUNDED_MUTATION_VERIFIED
+bounded provider mutation
+→ ExecutionReceipt/v2                  [verification_status=NOT_EVALUATED]
+→ independent readback
+→ VerificationResult/v1 = VERIFIED
 → OperationProof/v2
 → OperationCell/v1
 ```
 
-Mandatory semantic boundaries:
+`ExecutionReceipt/v2` and `OperationProof/v2` both require exactly one bounded provider mutation and
+forbid automatic mutation retry. They are current specialized mutation-lineage contracts, **not**
+universal replacements for every v1 receipt/proof lineage.
+
+Mandatory non-conflation:
 
 ```text
 Approval != Authorization
 ExecutionGrant != ExecutionCapsule
 ExecutionReceipt != VerificationResult
-Execution succeeded != VERIFIED
+execution succeeded != VERIFIED
 VerificationResult != OperationProof
 OperationProof != OperationCell
 Evidence-chain integrity != independent verification
 Release != Deploy
 ```
 
-Grant consumption belongs to the control plane before Dispatch. The Runner does not issue or consume
-ExecutionGrants and does not create a parallel authorization lineage.
-
 ## Component inventory
 
-| Layer | Contract/component | Tests | Product composed | Live evidence |
-|---|---|---|---|---|
-| Review/approval | IMPLEMENTED | YES | legacy product path | YES, local/system |
-| AuthorizationSnapshot + AuthoritativeSnapshotCreator | IMPLEMENTED | YES | NO | component evidence |
-| ExecutionGrant/v2 + durable grant persistence | IMPLEMENTED | YES | NO | component evidence |
-| GrantConsumptionWitness + transactional Outbox | IMPLEMENTED | YES | NO | component/pilot evidence |
-| Dispatch Envelope + durable Inbox/dedup | IMPLEMENTED | YES | NO | component/pilot evidence |
-| ExecutionEpoch/Lease + DurableCoordinator | IMPLEMENTED | YES | NO | component/pilot evidence |
-| ExecutionCapsule / RunnerIdentity / RunnerBoundary | IMPLEMENTED | YES | NO | pilot evidence |
-| Credential decision / RuntimeActivation | IMPLEMENTED | YES | NO | pilot evidence |
-| GitHub READ observation | IMPLEMENTED | YES | NO | D4b LIVE |
-| Independent Verifier | IMPLEMENTED | YES | NO | E3 LIVE |
-| VerificationResult/v1 | IMPLEMENTED | YES | NO | E4b + F6b LIVE |
-| GitHub CREATE_REF path | IMPLEMENTED | YES | NO | historical F4b LIVE |
-| GitHub DELETE_REF rollback path | IMPLEMENTED | YES | NO | historical F6b LIVE |
-| ExecutionReceipt/v2 | IMPLEMENTED | YES | NO | F6b real receipt |
-| OperationProof/v2 | IMPLEMENTED | YES | NO | F6b VERIFIED proof |
-| OperationCell/v1 | IMPLEMENTED | YES | NO | F6b VERIFIED cell |
-| Security Intelligence R-SI1.1 | IMPLEMENTED | YES | NO | metadata/test only |
-| Unified lifecycle ProductComposition/API | NOT IMPLEMENTED | PARTIAL | N/A | NO |
+| Layer | Component | Product composed | Live evidence |
+|---|---|---|---|
+| Review/approval | IMPLEMENTED | legacy product path | local/system |
+| AuthoritativeSnapshotCreator | IMPLEMENTED | NO | component tests |
+| ExecutionGrant/v2 + durable store | IMPLEMENTED | NO | component tests |
+| Grant consumption + transactional outbox | IMPLEMENTED | NO | component/pilot |
+| Dispatch envelope + durable inbox/dedup | IMPLEMENTED | NO | component/pilot |
+| ExecutionEpoch/Lease + DurableCoordinator | IMPLEMENTED | NO | component/pilot |
+| Capsule / Runner identity/boundary | IMPLEMENTED | NO | pilot |
+| READ runtime activation | IMPLEMENTED | NO | D4b |
+| Independent verifier / VerificationResult | IMPLEMENTED | NO | E3/E4b/F6b |
+| Bounded CREATE_REF | IMPLEMENTED | NO | historical F4b |
+| Bounded DELETE_REF rollback | IMPLEMENTED | NO | historical F6b |
+| ExecutionReceipt/v2 | IMPLEMENTED | NO | historical F6b |
+| OperationProof/v2 | IMPLEMENTED | NO | historical F6b |
+| OperationCell/v1 | IMPLEMENTED | NO | historical F6b |
+| Unified current lifecycle orchestration | NOT IMPLEMENTED | N/A | NO |
 
-The central remaining architecture task is therefore composition, not reimplementation of the already
-accepted component contracts.
+The remaining core task is composition of accepted components, not reimplementation of their
+contracts.
 
-## Persistence reality
+## Historical F6b mutation evidence
 
-SQLite is the only released backend. Ordered immutable migrations are implemented through schema 13:
-
-```text
-0009 authorization_snapshots
-0010 durable_execution_grants
-0011 dispatch_outbox
-0012 dispatch_inbox
-0013 execution_epoch_leases
-```
-
-PostgreSQL remains fail-closed/unreleased. Forward migration history must not be rewritten.
-
-## Live evidence reality
-
-### Reusable read/verification pilots on current main
-
-- D4b — isolated governed READ;
-- E3 — separate independent verifier observation;
-- E4b — canonical VerificationResult.
-
-These workflows are useful verification gates, not the ProductComposition runtime itself.
-
-### Historical write/rollback proof
-
-F4b and F6b proved a bounded staging lifecycle. Historical F6b run `32213563750` records:
+Historical F6b run `32213563750` records:
 
 ```text
 provider operation = DELETE_REF
@@ -184,80 +181,72 @@ Runner readback = ABSENT
 independent verifier readback = ABSENT
 VerificationResult = VERIFIED / OBSERVED_STATE_MATCH
 verification strength = INDEPENDENT_PROVIDER_READBACK
+OperationProof/v2 = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718
+OperationCell/v1  = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
 ```
 
-The retained proof was composed into:
+This proves one complete bounded-mutation atom. It does not prove that every READ requires or produces
+a Proof/v2/Cell/v1, and it does not make historical PR-specific workflows reusable product runtime.
+
+## ProductComposition reality
+
+Current FastAPI composition still centers on legacy `ExecutionService`. The accepted A/B/C/D/E/F/H
+components are not yet wired through one canonical runtime/API orchestration.
 
 ```text
-OperationProof/v2 digest = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718
-OperationCell/v1 digest  = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
+COMPONENT COVERAGE = STRONG
+ONE CANONICAL PRODUCT ORCHESTRATION = NO
 ```
 
-This proves one complete historical operation atom. It does not make the old PR-specific WRITE
-workflow a reusable product entrypoint.
+The new ProductComposition must:
 
-## ProductComposition / API reality
+1. reuse the authoritative Snapshot/Grant/consumption/dispatch/lease contracts;
+2. create no second authority path;
+3. select the terminal profile explicitly;
+4. terminate READ at VerificationResult/v1;
+5. allow Proof/v2→Cell/v1 only for the accepted bounded-mutation profile;
+6. preserve weaker states truthfully at API/UI surfaces.
 
-The current FastAPI product composition still centers on the legacy `ExecutionService` surface. The
-new authority → dispatch → Runner → verification → proof → cell components are not yet wired as one
-canonical runtime/API transaction/lifecycle.
+## UI truth
 
-Therefore:
-
-```text
-FULL COMPONENT CHAIN EXISTS = YES
-ONE CANONICAL PRODUCT RUNTIME PATH = NO
-```
-
-A later governed reconciliation slice must compose the chain without creating a second authority path
-or promoting historical pilot orchestration into product runtime by copy/paste.
-
-## UI truth boundary
-
-Before reconciliation PR #128, the Evidence UI incorrectly rendered receipt rows as `VERIFIED`
-without an independent VerificationResult. PR #128 changes that surface to fail closed: chain
-integrity is `PASS/FAIL`, while independent verification for a receipt is `UNKNOWN` unless the product
-actually exposes the independent verification binding.
-
-No UI surface may derive `VERIFIED` from Receipt existence or hash-chain integrity alone.
+PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
+verification is `UNKNOWN` unless an actual VerificationResult binding is exposed. Receipt existence
+must never render `VERIFIED` by itself.
 
 ## GitHub governance
 
-Repository policy requires PR-only `main`, required `ci / verify`, latest-head checks, no force push,
-no branch deletion and conversation resolution. Available live metadata does not prove the complete
-modern ruleset configuration; classic required-status enforcement is observed `off`.
-
-Until independent live Settings/API evidence proves every required control:
+Repository policy requires PR-only `main`, required `ci / verify`, current-head checks, no force push,
+no branch deletion and conversation resolution. Available connector evidence does not prove the full
+modern ruleset; classic required-status enforcement was observed off.
 
 ```text
 GITHUB_SETTINGS_ENFORCED = UNKNOWN
 P0_GITHUB_GOVERNANCE = BLOCKED
 ```
 
-Repository documents and successful CI are not enforcement evidence.
+Successful CI is not Settings enforcement evidence.
 
-## ADR / governance truth
+## Governance history
 
-- The adopted engineering operating standard remains bound to SHA-256
+- Engineering operating standard remains hash-bound to
   `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`.
-- OperationProof/v2 and OperationCell/v1 contracts are technically merged/implemented; their ADR
-  metadata is reconciled separately from normative document-adoption semantics.
-- Historical PR #125 technical merge/post-state is VERIFIED, while separate pre-merge
-  merge-authorization provenance remains **NOT VERIFIED**. This metadata must not be rewritten.
+- Historical PR #125 technical merge/post-state is VERIFIED; separate pre-merge merge-authorization
+  provenance remains **NOT VERIFIED** and is not rewritten.
+- ADR-0018 records the R2 terminal-profile correction instead of silently rewriting ADR-0014 history.
 
-## Security Intelligence / CyberCore boundary
+## CyberCore boundary
 
-R-SI1.1 is descriptive Security Intelligence metadata with tests. It does not issue authority, bypass
-VOP policy, execute provider effects or automatically become OperationProof evidence.
+R-SI1.1 and future CyberCore inputs remain intelligence/context/proposal only. They cannot issue
+ExecutionGrant, consume grants, become Runner/Verifier, execute provider effects or automatically
+become proof evidence.
 
-CyberCore remains an intelligence/context/proposal participant only. Integration starts only after:
+CyberCore remains blocked until:
 
-1. P0 product truth and Runner authority reconciliation;
-2. canonical vocabulary/registry reconciliation;
-3. top-level source-of-truth + CI/readiness reconciliation;
-4. one canonical ProductComposition/API lifecycle design and implementation;
-5. current governed WRITE/rollback orchestration design;
-6. live GitHub enforcement is either VERIFIED or explicitly retained as a blocking boundary.
+1. P0/P1 reconciliation exact-head gates pass;
+2. canonical ProductComposition is functional;
+3. reusable governed WRITE/rollback orchestration exists without auto-activation;
+4. final reconciliation audit passes;
+5. GitHub governance is VERIFIED or retained as an explicit release blocker.
 
 ## Release boundary
 
@@ -268,18 +257,13 @@ DEPLOYED=NO
 UNRESTRICTED_PRODUCTION=BLOCKED
 ```
 
-Successful CI, a merged contract, a verified historical pilot, OperationProof or OperationCell does
-not independently change release/deployment state.
-
 ## Next governed sequence
 
 ```text
-P0 truth + Runner authority
-→ canonical vocabulary/registry
-→ source-of-truth + CI/readiness convergence
-→ canonical ProductComposition/API lifecycle
-→ reusable governed WRITE/rollback orchestration
-→ live GitHub governance verification/enforcement
+VOP R2 truth convergence
+→ canonical ProductComposition
+→ reusable WRITE/rollback orchestration
+→ exact-head CI + R3 review
 → final reconciliation audit
-→ only then CyberCore integration
+→ CyberCore only after PASS
 ```
