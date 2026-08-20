@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Status | CANONICAL / FROZEN R1 with additive reconciled identities |
+| Status | CANONICAL / RECONCILED R2 |
 | Machine authority | `voodoo_product/vop_vocabulary.py` |
 | Schema identity authority | `schemas/vop/registry.v1.json` |
-| Decision | ADR-0014 |
-| Revision | `vop-terminology-freeze-r1` |
+| Original freeze | ADR-0014 |
+| R2 reconciliation | ADR-0018 |
+| Revision | `vop-terminology-freeze-r2` |
 | Reconciled | `2026-08-20` |
 
 > **Jeden význam → jeden termín → jeden kontrakt → jedna autoritativní definice.**
@@ -16,11 +17,10 @@ Normative cross-surface invariant:
 > **Stejný VOP termín musí mít napříč kódem, docs, receipts, API a UI jeden význam. Změna významu vyžaduje nový termín nebo novou verzi.**
 
 This document is the human projection of the machine vocabulary. It is not a second semantic
-dictionary. Additive new identities may be registered without reinterpreting historical identities.
+dictionary. Historical identities remain reserved; current specialized contracts must not be
+presented as universal replacements when their source invariants are narrower.
 
 ## 1. One operation language
-
-External transports remain provider-specific, but authority/evidence semantics are VOP-specific:
 
 ```text
 GitHub / AWS / Kubernetes / MCP / A2A / REST / GraphQL / gRPC
@@ -30,20 +30,22 @@ GitHub / AWS / Kubernetes / MCP / A2A / REST / GraphQL / gRPC
                 CANONICAL VOP LANGUAGE
 ```
 
-Transport vocabulary MUST NOT leak into authority semantics.
+Provider vocabulary may implement a Capability, but it does not redefine V-One authority or evidence
+semantics.
 
-## 2. Canonical lifecycle language
+## 2. Canonical lifecycle is a stage superset
+
+The machine `OPERATION_STAGES` sequence is an **ordered semantic superset**, not a requirement that
+every capability visits every tail stage:
 
 ```text
-ACTOR
-↓
 INTENT
 ↓
 REVIEWED OPERATION
 ↓
-CAPABILITY + TARGET + EXPECTED POST-STATE
+POLICY DECISION
 ↓
-POLICY + APPROVAL
+APPROVAL QUORUM CERTIFICATE
 ↓
 AUTHORIZATION SNAPSHOT
 ↓
@@ -53,28 +55,75 @@ CONTROL-PLANE GRANT CONSUMPTION
 ↓
 DISPATCH
 ↓
-EXECUTION EPOCH / LEASE
+EXECUTION LEASE / EPOCH
 ↓
 RUNNER EXECUTION
 ↓
-EXECUTION RECEIPT
+[EXECUTION-SIDE EVIDENCE AS REQUIRED BY THE PROFILE]
 ↓
 INDEPENDENT VERIFICATION
 ↓
 VERIFICATION RESULT
 ↓
-OPERATION PROOF
-↓
-OPERATION CELL
+[PROFILE-SPECIFIC TERMINAL TAIL]
 ```
 
-The compact `OPERATION_STAGES` machine sequence remains a semantic lifecycle projection; lower-level
-durable dispatch/lease contracts remain explicitly registered nouns/schema identities and must not be
-collapsed into Runner authority.
+A concrete operation traverses only the stages required by its registered terminal profile.
 
-## 3. Canonical nouns
+## 3. Registered terminal profiles
 
-The machine-readable definitions live in `voodoo_product/vop_vocabulary.py`. Important current nouns:
+### `READ_ONLY_VERIFIED`
+
+Current independently verified READ operations terminate at the independent verification result:
+
+```text
+Runner Observation
+↓
+Independent Verifier Observation
+↓
+ObservedPostState/v1
+↓
+VerificationStrength/v1
+↓
+VerificationResult/v1 = VERIFIED
+```
+
+For this profile:
+
+```text
+ExecutionReceipt/v2 = NOT_APPLICABLE
+OperationProof/v2   = NOT_APPLICABLE
+OperationCell/v1    = NOT_APPLICABLE
+```
+
+This does **not** mean a future read-proof contract is forbidden. It means no current contract may be
+silently stretched beyond its accepted invariants.
+
+### `BOUNDED_MUTATION_VERIFIED`
+
+The accepted current write/rollback lineage is:
+
+```text
+bounded provider mutation
+↓
+ExecutionReceipt/v2                 [effect claim; verification_status=NOT_EVALUATED]
+↓
+independent readback
+↓
+VerificationResult/v1 = VERIFIED
+↓
+OperationProof/v2
+↓
+OperationCell/v1
+```
+
+`OperationProof/v2` and `OperationCell/v1` are current bounded-mutation evidence contracts. They are
+**NOT a universal replacement** for every historical v1 proof/receipt lineage and are not mandatory
+for READ-only verification.
+
+## 4. Canonical nouns
+
+Machine-readable definitions live in `voodoo_product/vop_vocabulary.py`.
 
 | Term | Canonical meaning |
 |---|---|
@@ -87,36 +136,21 @@ The machine-readable definitions live in `voodoo_product/vop_vocabulary.py`. Imp
 | ExpectedPostState | expected state after successful execution |
 | ObservedPostState | state independently observed by verification |
 | Approval | approval of exact reviewed content |
-| AuthorizationSnapshot | immutable evidence of an authorization decision |
-| ExecutionGrant | narrow execution permission; current authority contract is `execution-grant/v2` |
+| AuthorizationSnapshot | immutable evidence of authorization |
+| ExecutionGrant | narrow execution permission; current runtime authority is `execution-grant/v2` |
+| GrantConsumptionWitness | durable evidence of ONE_TIME consumption by the control plane |
+| Dispatch | durable handoff of already-authorized intent |
+| ExecutionEpoch | monotonic coordination generation, not authority |
+| ExecutionLease | time-bounded current-execution coordination lease |
 | ExecutionCapsule | exact executable/runtime input identity |
-| GrantConsumptionWitness | durable evidence of ONE_TIME Grant consumption by the control plane |
-| DispatchOutboxEntry | immutable durable outbound dispatch intent |
-| DispatchInboxAdmission | durable delivery admission/dedup result |
-| ExecutionEpoch | monotonic coordination generation for fencing obsolete attempts |
-| ExecutionLease | time-bounded lease for one current ExecutionEpoch |
-| Runner | isolated execution principal; does not issue or consume Grants |
-| RunnerIdentity | descriptive content-addressed identity of one Runner instance |
-| RunnerBoundary | fail-closed ceiling binding Runner to lease/capsule/capability |
-| CredentialAccessDecision | narrowed credential-delivery decision metadata; not a credential |
-| RuntimeActivation | evidence that an eligible isolated runtime was activated |
-| Observation | bounded provider/target observation; not VerificationResult |
-| ExecutionReceipt | execution subsystem claim about what it performed |
-| VerifierIdentity | identity evidence for the independent verifier |
-| IndependentVerificationBoundary | required Runner/Verifier separation/binding |
-| VerificationStrength | strength classification for VerificationResult |
+| Runner | bounded execution principal; never Grant issuer/consumer |
+| ExecutionReceipt | execution-side claim; version-specific semantics are mandatory |
 | VerificationResult | independent determination of actual observed post-state |
-| Evidence | auditable evidence artifact |
-| OperationProof | portable proof binding the governed operation chain |
-| OperationCell | stable content-addressed product atom over canonically revalidated `OperationProof/v2` |
-| Module | provider/domain translation and implementation package |
-| Candidate | proposed but non-active definition/implementation |
-| Activation | explicit adoption of a concrete definition/implementation |
+| OperationProof | portable proof for a registered lineage, not a universal wrapper |
+| OperationCell | stable content-addressed atom for the accepted `OperationProof/v2` lineage |
+| Module | provider/domain translation implementation package |
 
-`OperationCell` is not a second proof format and does not copy/widen nested authority. Its first
-accepted contract is `operation-cell/v1`.
-
-## 4. Canonical verbs
+## 5. Canonical verbs
 
 ```text
 PROPOSE
@@ -138,7 +172,7 @@ REVOKE
 SUPERSEDE
 ```
 
-These verbs are not synonyms:
+They are not synonyms:
 
 ```text
 APPROVE
@@ -163,9 +197,7 @@ RELEASE
 != DEPLOY
 ```
 
-A stronger downstream verb MUST NOT be inferred from an earlier verb.
-
-## 5. Mandatory non-conflation
+## 6. Mandatory non-conflation
 
 ```text
 Approval
@@ -208,84 +240,113 @@ Release
 != Deploy
 ```
 
-The execution/verification language is intentionally asymmetric:
+Therefore this state is valid:
 
 ```text
 execution succeeded
 verification pending
 ```
 
-is valid. `successful operation` MUST NOT imply fully verified success from an ExecutionReceipt alone.
-
-## 6. Current authority-to-cell lineage
+and this inference is forbidden:
 
 ```text
+Receipt exists
+⇒ VERIFIED
+```
+
+## 7. Authority/execution prefix
+
+The current component-level authority and execution prefix is:
+
+```text
+ReviewedOperation
+↓
+Approval / ApprovalCertificate
+↓
 AuthorizationSnapshot
-  ↓
+↓
 ExecutionGrant/v2
-  ↓
+↓
 GrantConsumptionWitness/v1          [CONTROL PLANE]
-  ↓
+↓
 DispatchOutboxEntry/v1
-  ↓
+↓
 DispatchEnvelope/v1
-  ↓
+↓
 DispatchInboxAdmission/v1
-  ↓
+↓
 ExecutionEpoch + ExecutionLease/v1
-  ↓
+↓
 ExecutionCapsule/v1
-  ↓
+↓
 RunnerIdentity + RunnerBoundary
-  ↓
+↓
 CredentialAccessDecision
-  ↓
+↓
 RuntimeActivation
-  ↓
+↓
 Provider effect / Observation
-  ↓
-ExecutionReceipt/v2                 [verification_status remains separate]
-  ↓
-VerifierIdentity + IndependentVerificationBoundary
-  ↓
-VerifierCredentialDecision
-  ↓
-ObservedPostState/v1
-  ↓
-VerificationStrength/v1 + VerificationResult/v1
-  ↓
-OperationProof/v2
-  ↓
-OperationCell/v1
 ```
 
 Grant consumption occurs in the **control plane before Dispatch**. The Runner MUST NOT re-consume a
-Grant, issue authority, allocate its own authority epoch or create a second authorization lineage.
+Grant, issue authority, allocate an authority epoch or create a parallel authorization lineage.
 
-## 7. Version lineage
+## 8. Version and compatibility lineage
 
-Historical schema IDs remain reserved for auditability and must not be silently reinterpreted.
+Historical schema IDs remain reserved for auditability.
+
+### True supersession
 
 ```text
 execution-grant/v1
 SUPERSEDED_BY
 execution-grant/v2
-
-execution-receipt/v1
-SUPERSEDED_BY
-execution-receipt/v2
-
-operation-proof/v1
-SUPERSEDED_BY
-operation-proof/v2
 ```
 
-`operation-proof/v1` remains valid historical lineage. `operation-proof/v2` is the current proof
-contract over `ExecutionReceipt/v2` and independent `VerificationResult/v1` evidence.
+`execution-grant/v2` is the current authoritative runtime authority contract.
 
-`operation-cell/v1` is additive and has no historical predecessor.
+### Parallel/specialized lineage — not universal supersession
 
-## 8. SandCloud / CASTER-MINAL / Runner boundary
+```text
+execution-receipt/v1
+= legacy generic v1 receipt lineage
+
+execution-receipt/v2
+= current bounded-mutation effect receipt
+  provider_mutation_count == 1
+  automatic_retry_performed == false
+  verification_status == NOT_EVALUATED
+```
+
+Therefore:
+
+```text
+execution-receipt/v2
+!= universal supersession of execution-receipt/v1
+```
+
+Likewise:
+
+```text
+operation-proof/v1
+= legacy generic v1 proof lineage
+
+operation-proof/v2
+= current bounded-mutation proof over ExecutionReceipt/v2
+  + canonical independent VerificationResult/v1 evidence
+```
+
+Therefore:
+
+```text
+operation-proof/v2
+!= universal supersession of operation-proof/v1
+```
+
+`operation-cell/v1` is additive and currently requires canonically revalidated
+`operation-proof/v2`; it has no historical predecessor.
+
+## 9. SandCloud / CASTER-MINAL / Runner boundary
 
 ```text
 SandCloud
@@ -301,35 +362,13 @@ V-One
 = authority and governance semantics
 ```
 
-Therefore:
+So:
 
 ```text
 SandCloud != Runner
 SandCloud != CASTER-MINAL
 CASTER-MINAL != Authorization authority
 Runner != Verifier
-```
-
-## 9. Canonical relation language
-
-```text
-REQUESTED_BY
-PARENT_OF
-CHILD_OF
-DEPENDS_ON
-DERIVED_FROM
-BOUND_TO
-AUTHORIZED_BY
-ISSUED_FROM
-DISPATCHED_TO
-EXECUTED_BY
-VERIFIED_BY
-PRODUCED
-PROVES
-SUPERSEDES
-ACTIVATES
-CAUSES
-CORRELATES_WITH
 ```
 
 ## 10. Identity grammar
@@ -345,12 +384,7 @@ causation_id
 correlation_id
 ```
 
-`logical_identity` says what semantic thing this is; `content_identity` binds exact content/version;
-`instance_id` identifies a concrete occurrence.
-
 ## 11. Shared CORE status language
-
-Do not create parallel status taxonomies.
 
 ### RunState
 
@@ -396,72 +430,27 @@ PUBLISHED
 DEPLOYED
 ```
 
-Hash-chain integrity should use a gate/integrity result such as `PASS/FAIL`; it must not manufacture
-an operation-level `VERIFIED` state.
+Hash-chain integrity uses a gate/integrity state such as `PASS/FAIL`; it never creates independent
+`VERIFIED` operation state.
 
-## 12. VOP Schema Registry
+## 12. Registry rule
 
-The registry currently includes, among the broader set:
+Registry presence reserves semantic identity. It does not by itself create implementation,
+verification, release, deployment or authority.
 
-```text
-authorization-snapshot/v1
-execution-grant/v1
-execution-grant/v2
-execution-capsule/v1
-grant-consumption-witness/v1
-dispatch-outbox-entry/v1
-dispatch-envelope/v1
-dispatch-inbox-admission/v1
-execution-lease/v1
-runner-identity/v1
-runner-boundary/v1
-runner-boundary/v2
-runner-boundary/v3
-credential-access-decision/v1
-credential-access-decision/v2
-credential-access-decision/v3
-execution-receipt/v1
-execution-receipt/v2
-verifier-identity/v1
-independent-verification-boundary/v1
-independent-verification-boundary/v2
-observed-post-state/v1
-verification-strength/v1
-verification-result/v1
-operation-proof/v1
-operation-proof/v2
-operation-cell/v1
-```
+The registry machine projection includes:
 
-Registry presence reserves semantic identity. It never by itself creates implementation,
-verification, release, deployment or runtime authority.
+- `schema_supersessions` only for true semantic replacement;
+- `schema_compatibility` for historical/specialized lineage relationships;
+- `operation_terminal_profiles` for valid terminal tails;
+- `operation_stage_rule` explaining that the stage sequence is a superset.
 
-## 13. One dictionary for human, API, UI, audit and AI
+## 13. Cross-surface rule
 
-The semantic identity exposed by code, docs, receipts, API, UI, database concepts, audit events, CLI,
-AI tools, OperationProof and OperationCell must resolve to the same meaning.
+Code, docs, receipts, API, UI, database concepts, audit events, CLI and AI tooling must resolve each
+VOP term to the same meaning. Localized UX labels may change presentation, never semantic identity.
 
-Localized UX labels are allowed only as presentation mappings. They cannot change semantic identity.
-
-## 14. Compatibility and terminology drift gate
-
-A public VOP change requires compatibility review.
-
-Allowed additively:
-
-- genuinely new canonical term;
-- new schema identity;
-- wording clarification without changing existing meaning.
-
-Requires new term/version or explicit supersession:
-
-- moving authority ownership between components;
-- making an evidence object imply a stronger state;
-- broadening/narrowing an existing semantic meaning;
-- merging previously distinct concepts.
-
-CI must check machine vocabulary/registry parity **and** current implemented contract coverage plus the
-cross-surface truth invariants that prevent Receipt⇒VERIFIED and Runner⇒Grant-consumer drift.
+A public semantic change requires a new term/version/revision and compatibility review.
 
 ```text
 ONE SYSTEM
