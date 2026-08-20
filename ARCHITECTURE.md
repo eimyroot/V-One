@@ -2,259 +2,304 @@
 
 | Field | Value |
 |---|---|
-| Document status | Accepted descriptive architecture |
-| Current implementation | Modular monolith |
-| Target evolution | Governed control plane plus isolated execution plane |
-| Normative authority | Subordinate to the engineering constitution and accepted ADRs |
+| Document status | Accepted descriptive architecture / reconciliation candidate |
+| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` plus PR #128 candidate |
+| VOP semantic candidate | `vop-terminology-freeze-r2` / ADR-0018 |
+| Current packaging | Modular monolith + explicit profile-specific runtime packs |
+| Current composition | Canonical trust-plane runtime is ProductComposition-capable; default provider runtime remains fail-closed |
+| Production effects | BLOCKED / disabled by default |
 
-## Architectural purpose
+## Purpose
 
-VOODOO One owns identity, policy enforcement, approvals, execution lifecycle, operational safety,
-audit, receipts, and checkpoint evidence verification.
+V-One owns governance and trust semantics for consequential operations:
 
-It deliberately does not own broad infrastructure discovery, vendor-specific intelligence, or an
-unrestricted execution runtime.
+- exact reviewed intent;
+- policy/approval evidence;
+- immutable AuthorizationSnapshot;
+- narrow one-time ExecutionGrant;
+- durable control-plane grant consumption;
+- dispatch/coordination/fencing;
+- capability-bound terminal selection;
+- bounded Runner execution;
+- independent post-state verification;
+- profile-correct portable evidence.
+
+It does not turn intelligence, transport, execution success, preflight readiness or evidence integrity
+into stronger authority/verification by inference.
 
 ## Current system context
 
 ```text
-Authenticated operator / reviewer / auditor
+Operator / AI proposal / CyberCore intelligence
                     |
                     v
-            FastAPI HTTP boundary
+             FastAPI product boundary
                     |
-                    v
-        VOODOO One modular monolith
-  identity | workspaces | requests | approvals
-  execution | safety | audit | receipts | status
-                    |
-          +---------+---------+
-          |                   |
-          v                   v
-     SQLite state        local bounded adapters
-                              |
-                              v
-                       governed sandbox
-
-Local operator
-     |
-     v
-voodoo evidence verify
-     |
-     v
-read-only checkpoint verifier -> deterministic ProofGraph JSON
-
-Caller-supplied immutable snapshot
-     |
-     v
-read-only PDG v1 library -> deterministic policy-decision graph + digest
-     X
-     +-- not wired into runtime authorization or execution
+        +-----------+-------------------+
+        |                               |
+        v                               v
+legacy API compatibility         ProductComposition
+ExecutionService                        |
+                                ProductService database
+                                        |
+                                current user/role/active
+                                + workspace membership
+                                        |
+                                DatabasePermissionAuthority
+                                        |
+                                CanonicalOperationPipeline
+                                        |
+                                CapabilityTerminalProfileRegistry
+                                        |
+                                CanonicalOperationRuntime
+                                  /                \
+                                 v                  v
+                       READ verified terminal    A09 WRITE/rollback
+                                                pre-effect only
 ```
 
-## Current components
+The canonical trust-plane runtime is now a ProductComposition seam. The default application does not
+silently instantiate a provider runtime pack; without explicit runtime dependencies it remains
+fail-closed.
 
-### HTTP and console boundary
-
-- FastAPI application with versioned `/api/v1` routes;
-- trusted-host and browser security controls;
-- static command-center console;
-- health and evidence verification exposed as separate concerns.
-
-### Identity and authorization
-
-- local bootstrap and credential authentication;
-- context-bound bearer tokens;
-- database-backed active-session allowlist;
-- role and permission enforcement;
-- administrator-controlled session revocation;
-- unreleased OIDC configuration fails closed.
-
-### Governance services
-
-- workspaces with authoritative environments;
-- change requests and immutable submission semantics;
-- independent approval rules;
-- execution eligibility checks;
-- emergency stop and recovery controls.
-
-### Read-only policy decision projection
-
-- accepted `policy-decision-graph/v1` pure library;
-- immutable caller-supplied current-fact and `execution.run` permission observations;
-- deterministic canonical nodes, edges, reason codes, limitations, and graph digest;
-- deny-by-default informational projection for missing or failed current gates;
-- no database, persistence, API, CLI, service composition, authorization lookup, execution gate, or
-  adapter invocation;
-- an `ALLOW` projection is not an execution grant and has no runtime authorization authority.
-
-PDG v1 is owner-accepted and locally source/test VERIFIED for this read-only projection scope. The
-latest runtime checkpoint attests the repository and development product image at
-`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`. It includes the PDG v1 source and tests but does
-not upgrade the read-only projection into runtime authorization authority or integration.
-
-### Pure execution-contract value objects
-
-- accepted `execution-target/v1`, `approval-evidence-set/v1`, `execution-grant/v1`, and
-  `execution-receipt/v1` deterministic value contracts from ADR-0007;
-- canonical serialization, digest calculation, strict parsing, and cross-contract binding checks;
-- no I/O, no persistence, no API wiring, no service composition, no signing, and no Runner runtime;
-- representation only, not authorization authority.
-
-ADR-0007 closes the deterministic contract shape between V-One authorization and a future isolated
-Runner. It does not implement issuance, authenticity envelopes, durable one-time consumption, or
-runtime execution.
-
-### Persistence
-
-- SQLite with ordered checksum-verified migrations;
-- immutable classified SQL statement catalog;
-- receipt and audit ledgers;
-- execution leases, fencing, and recovery state;
-- unreleased PostgreSQL support fails closed.
-
-### Execution boundary
-
-Current adapters are intentionally narrow:
-
-- inert echo;
-- bounded sandbox file output;
-- allowlisted validation presets.
-
-Production effects are disabled by default. Execution still shares the control-plane host identity;
-that is an explicit limitation, not the target architecture.
-
-### Evidence
-
-- audit ledger;
-- receipt ledger;
-- independent integrity checks;
-- local checkpoint verifier;
-- deterministic ProofGraph v1 projection covering checkpoint, Git commit, source tree, and container
-  image identity.
-
-## Current data flow
+## Canonical authority/execution prefix
 
 ```text
-bootstrap or login
-  -> authenticated principal
-  -> workspace
-  -> draft change request
-  -> submitted request
-  -> approval decision
-  -> execution eligibility
-  -> adapter execution
-  -> receipt and audit event
-  -> evidence verification
+ReviewedOperation
+→ Approval / ApprovalCertificate
+→ AuthorizationSnapshot
+→ ExecutionGrant/v2
+→ GrantConsumptionWitness/v1          [CONTROL PLANE]
+→ DispatchOutboxEntry/v1
+→ DispatchEnvelope/v1
+→ DispatchInboxAdmission/v1
+→ ExecutionEpoch + ExecutionLease/v1
+→ ExecutionCapsule/v1
+→ capability-bound terminal profile
 ```
+
+One-time grant consumption occurs **before Dispatch in the control plane**. Runner authority is
+`bounded_execution_only`; Runner never issues or consumes grants.
+
+`CanonicalOperationPipeline.prepare()` stops before any provider effect and returns exact bound runtime
+objects for the selected terminal.
+
+## Terminal profile authority
+
+Terminal strength is not caller-controlled. The pipeline resolves an immutable binding from the exact
+`capability_definition_identity` plus capability name to one allowed profile.
+
+```text
+CapabilityDefinition identity
+        ↓
+immutable terminal allowlist
+        ↓
+READ_ONLY_VERIFIED | BOUNDED_MUTATION_VERIFIED
+```
+
+The caller cannot pass a stronger `terminal_profile` argument to `prepare()`.
+
+## Product permission authority
+
+Canonical product composition uses `DatabasePermissionAuthority`, sharing the exact ProductService
+database. Every decision rereads the current active user, global role permission set, exact workspace,
+workspace environment and exact current user↔workspace membership. Stale in-memory principals,
+role downgrades, deactivation and membership revocation therefore cannot preserve stronger canonical
+authority.
+
+Global role defines **what** permission is available. Membership defines **where** that permission may
+be considered. Membership role (`owner`/`member`) is only a workspace-scope management primitive and
+does not activate the separately PROPOSED Solo/Team/Regulated organization-policy model.
+
+Migration `0014_workspace_memberships.sql` deliberately does not infer membership for historical
+schema-13 workspaces. Upgraded legacy workspaces remain fail-closed for canonical permission decisions
+until membership is explicitly recorded by an authorized administrator/owner.
+
+A canonical runtime factory is rejected if it uses another database or another permission-authority
+instance. This prevents a compatibility/runtime authority fork.
+
+## READ-only terminal
+
+```text
+READ_ONLY_VERIFIED
+CanonicalPreparedExecution
+→ isolated READ Runner
+→ Runner GitHub observation
+→ durable completion
+→ independent verification boundary
+→ separate verifier credential decision
+→ independent GitHub observation
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1
+```
+
+`CanonicalGitHubReadTerminal` reuses accepted D4b/E3/E4b contracts. READ currently terminates at
+`VerificationResult/v1`.
+
+```text
+ExecutionReceipt/v2 = NOT_APPLICABLE
+OperationProof/v2   = NOT_APPLICABLE
+OperationCell/v1    = NOT_APPLICABLE
+```
+
+## Bounded mutation terminal
+
+The semantic completed terminal remains:
+
+```text
+BOUNDED_MUTATION_VERIFIED
+bounded provider mutation
+→ ExecutionReceipt/v2                 [verification_status=NOT_EVALUATED]
+→ independent Verifier readback
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1
+→ OperationProof/v2
+→ OperationCell/v1
+```
+
+`ExecutionReceipt/v2` and `OperationProof/v2` require exactly one bounded provider mutation and no
+automatic mutation retry. They are specialized mutation-lineage contracts, not universal READ
+contracts.
+
+PR #128 does not execute a new mutation. It adds reusable A09 preparation seams.
+
+## A09 CREATE_REF pre-effect orchestration
+
+```text
+CanonicalPreparedExecution
+→ exact definition/capsule/handler evidence
+→ ControlledWriteRequirement
+→ write Runner identity/boundary
+→ scoped credential decision metadata
+→ runtime activation metadata
+→ exact target binding/request
+→ current-fence checked WriteEffectPreflight/v1
+→ STOP
+```
+
+Properties:
+
+- no provider mutation transport in A09;
+- no credential secret input/serialization;
+- no `create_ref()` call;
+- no historical PR120/ref/SHA hard-bind;
+- one exact current authority/lease/target chain;
+- a future provider effect remains a separate authorization boundary.
+
+## A09 rollback pre-effect orchestration
+
+```text
+CanonicalPreparedExecution
+→ exact rollback definition/capsule/handler evidence
+→ rollback provenance/condition
+→ rollback Runner identity/boundary
+→ scoped rollback credential decision metadata
+→ current pre-delete observation
+→ current-fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
+```
+
+Rollback preparation contains no GitHub DELETE transport and performs no provider mutation. Rollback
+execution remains separately authorized.
+
+## ProductComposition
+
+`ProductComposition` owns:
+
+- ProductService and its shared evidence/persistence services;
+- `DatabasePermissionAuthority`;
+- optional `CanonicalOperationRuntime` produced by an explicit runtime factory.
+
+The canonical runtime factory must use the exact ProductService database and permission authority.
+Without a runtime factory, `canonical_operation_runtime=None` is intentional fail-closed behavior.
+Legacy `ExecutionService` remains an explicit API compatibility surface until canonical public
+operation endpoints are separately introduced and proven.
+
+## VOP machine language
+
+Authorities:
+
+- `voodoo_product/vop_vocabulary.py`;
+- `schemas/vop/registry.v1.json`;
+- `voodoo_product/terminal_profile.py` for exact capability→profile bindings;
+- human projection `docs/architecture/VOP_CANONICAL_VOCABULARY.md`.
+
+R2 carries explicit `operation_terminal_profiles` and narrow compatibility rules. Only true semantic
+replacement belongs in `schema_supersessions`.
+
+## Persistence
+
+Released backend remains SQLite schema 14 with immutable/checksum-verified migrations, central
+statements, audit/receipt ledgers, snapshots, grants, outbox/inbox, execution epoch/lease state and
+explicit workspace membership scope. PostgreSQL remains fail-closed/unreleased.
+
+## Historical verified mutation atom
+
+Historical F6b produced one complete bounded staging atom:
+
+```text
+OperationProof/v2
+40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718
+
+OperationCell/v1
+2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
+```
+
+That historical evidence does not prove or authorize a new A09 provider effect.
 
 ## Architectural invariants
 
-1. Request environment must match the authoritative workspace environment.
-2. A requester cannot approve their own request.
-3. Production requests require independent approval and remain blocked while production effects are
-   disabled.
-4. Unreleased persistence and identity backends fail closed.
-5. Application SQL comes from the reviewed statement catalog.
-6. Execution idempotency keys bind to one request.
-7. Expired executions recover only under emergency stop and late completion is fenced.
-8. Liveness does not imply evidence integrity.
-9. Checkpoint verification never executes checkpoint-provided code.
-10. Documentation may describe target architecture only when marked PROPOSED.
+1. Approval != Authorization.
+2. AuthorizationSnapshot != ExecutionGrant.
+3. Grant consumption is durable control-plane state before Dispatch.
+4. Dispatch/Epoch/Lease coordinate but never widen authority.
+5. Runner never issues/consumes grants or self-authorizes.
+6. Terminal profile strength is derived from immutable capability identity, not caller choice.
+7. Current database role + active state + exact workspace membership, not stale Principal memory, are canonical permission authority inputs.
+8. Global role permission never implies membership in an arbitrary workspace.
+9. Historical workspace activity never fabricates schema-14 membership.
+10. Current fence prevents stale completion/effect authority.
+11. ExecutionReceipt != VerificationResult.
+12. Runner and Verifier remain separated as required by the profile.
+13. READ_ONLY_VERIFIED terminates at VerificationResult/v1 today.
+14. Receipt/v2 and Proof/v2 remain bounded-mutation-specific.
+15. Cell/v1 requires canonical Proof/v2 provenance.
+16. Preflight != provider effect.
+17. Prepared rollback != rollback execution.
+18. Evidence-chain integrity != provider verification.
+19. Unreleased backends/provider packs fail closed.
+20. Production effects remain disabled until separate authorization/release.
+21. Documentation cannot upgrade capability state.
 
-## Trust boundaries
+## GitHub governance boundary
 
-The detailed trust-boundary inventory is maintained in
-[`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md).
-
-The most important current boundary is:
-
-```text
-trusted governance state
-        |
-        | approved capability request
-        v
-control-plane process and local adapter
-```
-
-The principal target change is to replace that shared-process boundary with:
-
-```text
-VOODOO One
-  -> durable queue or outbox
-  -> short-lived execution-grant envelope (authenticity mechanism OPEN)
-  -> isolated rootless runner
-  -> structured receipt envelope (authenticity mechanism OPEN)
-```
-
-The reviewed ADR-0008 boundary and its threat model describe that target architecture only. They are
-not implemented in the current runtime.
-
-## Target architecture
-
-```text
-Users, AI proposal sources, CyberCore
-                 |
-                 v
-        VOODOO One API and policy
- identity -> decision graph -> approvals
-                 |
-       execution-grant envelope
-                 |
-                 v
-      Durable execution transport
-                 |
-                 v
-         Isolated Runner Capsule
- capability allowlist | read-only root
- resource limits | network deny by default
- heartbeat | lease | fence | postconditions
-                 |
-           receipt envelope
-                 |
-       +---------+---------+
-       |                   |
-       v                   v
- VOODOO ledgers        CyberCore outcome
- and ProofGraph        observation/reference
-```
+Policy requires PR-only main, latest-head checks, no force push/delete and conversation resolution.
+Available connector evidence cannot prove the complete modern ruleset. Successful Actions runs are not
+ruleset-enforcement evidence, therefore GitHub settings enforcement remains `UNKNOWN / RELEASE
+BLOCKER`.
 
 ## CyberCore boundary
 
-CyberCore may provide observations, knowledge references, risk context, and immutable proposal
-artifacts. VOODOO One remains authoritative for human identity, policy, approvals, grants, execution
-lifecycle, and compliance evidence.
+```text
+CyberCore = intelligence_only
+CyberCore != Authorization
+CyberCore != ExecutionGrant issuer
+CyberCore != Runner
+CyberCore != Verifier
+```
 
-Initial integration must be:
-
-- read-only;
-- versioned;
-- feature-flagged;
-- audit-recorded;
-- without shared persistence;
-- without importing package-provided shell execution.
-
-## Evolution rules
-
-- preserve the modular monolith until a demonstrated operational boundary requires separation;
-- separate execution before replacing SQLite for scale;
-- add policy explanation before enabling more production capabilities;
-- introduce signed grants and receipts before external mutation;
-- extend ProofGraph through ADRs rather than parallel verifiers;
-- avoid provider-specific behavior in the governance core.
+CyberCore remains blocked until final exact-head gates and the new reconciliation audit pass.
 
 ## Related documents
 
 - [`VISION.md`](VISION.md)
 - [`ROADMAP.md`](ROADMAP.md)
-- [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md)
+- [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md)
+- [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md)
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
-- [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
-- [`docs/governance/ADR0008_R3_EVIDENCE_INDEX.md`](docs/governance/ADR0008_R3_EVIDENCE_INDEX.md)
-- [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md)
-- [`docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md`](docs/adr/ADR-0006-read-only-policy-decision-graph-v1.md)
-- [`docs/adr/ADR-0007-execution-grant-receipt-contract-v1.md`](docs/adr/ADR-0007-execution-grant-receipt-contract-v1.md)
-- [`docs/adr/ADR-0008-isolated-runner-boundary-v1.md`](docs/adr/ADR-0008-isolated-runner-boundary-v1.md)
-- [`docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md)
-- [`docs/adr/`](docs/adr/)
+- [`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md)
+- [`docs/adr/ADR-0018-vop-terminal-profiles-and-lineage-r2.md`](docs/adr/ADR-0018-vop-terminal-profiles-and-lineage-r2.md)

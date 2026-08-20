@@ -1,224 +1,355 @@
-# VOODOO — CURRENT PRODUCT STATE
+# VOODOO One — CURRENT PRODUCT STATE
 
-> Toto je proměnlivý důkazní snapshot. Není náhradou živého Git stavu, provedených testů ani
-> commit-bound runtime evidence. Historické baseline a immutable ADR labels se zachovávají jako
-> provenance; efektivní současný stav se určuje z live Git/CI a authority/adoption registru.
+> Living evidence-scoped snapshot. Live Git/GitHub, executed tests and runtime evidence outrank this
+> document. Historical claims stay historical and are never upgraded by later success.
 
-## Identita a hranice tvrzení
+## Snapshot identity
 
 ```text
-AS_OF: 2026-08-16
+AS_OF: 2026-08-20
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
-RECONCILIATION_INPUT_BRANCH: main
-RECONCILIATION_INPUT_HEAD: b4d4aab7393251ffc113a3f5bf654523bdb27865
-RECONCILIATION_INPUT_TREE: 61021278068a7d64b66325190c94dde6f4593b16
-HISTORICAL_REVIEW_MERGE_PR54: 57c7bf2277616c4445039865ac7cf81c5fada858
-PR71_MERGE_COMMIT: d8d375c61264ddad39eb53240dce9ff0c8e59818
-PR71_PR_HEAD_CI: run #282 SUCCESS at 93605972bfb3f35f324183a00c7ad2f88c5f9ab2
-PR71_POST_MERGE_CI: run #283 SUCCESS at d8d375c61264ddad39eb53240dce9ff0c8e59818
-PR73_SOT_FIX_MERGE: b8e3b0f8d6f0ffb401138e44abe5a7d80e35a69a
-PR73_PR_HEAD_CI: run #288 SUCCESS at 64da1a91d77cbd93b54580b607cbcbbe18b6ad24
-PR73_POST_MERGE_CI: run #289 SUCCESS at b8e3b0f8d6f0ffb401138e44abe5a7d80e35a69a
-PR74_VOP_MERGE: a9a57df270b85907ee5012895c1523ade461f06f
-PR74_PR_HEAD_CI: run #292 SUCCESS at 1be3721db70433a4dc4a45c353a5d748dd4bf113
-PR74_IMMEDIATE_POST_MERGE_CI: run #297 CANCELLED by subsequent main activity; not failure evidence
-PR75_P0_REPO_CONTRACT_MERGE: b4d4aab7393251ffc113a3f5bf654523bdb27865
-PR75_PR_HEAD_CI: run #291 SUCCESS at 329cde854a34a713ccd10ad272fbd9554d88a602
-CURRENT_MAIN_CI: run #298 SUCCESS at b4d4aab7393251ffc113a3f5bf654523bdb27865
+RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
+RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
+RECONCILIATION_CANDIDATE: PR #128 / feat/reconciliation-p0-p1-r1
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
-RUNTIME_EVIDENCE_CLASS: IMPLEMENTED_VERIFIED_LOCAL_POST_MERGE_CHECKPOINT
-ADR_0008_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
-ADR_0009_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
-ADR_0010_EFFECTIVE_STATUS: ADOPTED via docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md
-VOP_CANONICAL_VOCABULARY: VERIFIED source/test scope on current main
-VOP_SEMANTIC_TRANSLATION: VERIFIED source/test scope on current main
-VOP_SEMANTIC_EQUIVALENCE: VERIFIED source/test scope on current main
-VOP_ARCHITECTURE_OWNER_ADOPTION: UNKNOWN; no explicit VOP adoption record in authority/adoption register
-AUTHORIZATION_SNAPSHOT_CONTRACT: IMPLEMENTED
-AUTHORIZATION_SNAPSHOT_PERSISTENCE: VERIFIED by PR #71 CI and post-merge CI
-AUTHORIZATION_SNAPSHOT_SCHEMA: sqlite schema version 9
-AUTHORITATIVE_SNAPSHOT_CREATOR: NOT IMPLEMENTED
-AUTHORITATIVE_GRANT_ISSUER: NOT IMPLEMENTED
-ISOLATED_RUNNER_RUNTIME: NOT IMPLEMENTED
-P0_REPO_ENFORCEMENT_CONTRACT: MERGED
-BRANCH_PROTECTION_MAIN_LIVE: DISABLED
-REQUIRED_STATUS_CHECKS_MAIN_LIVE: OFF
-P0_GITHUB_GOVERNANCE: BLOCKED
-RELEASE_STATE: BLOCKED
-PRODUCTION_EFFECTS: DISABLED / NO PRODUCTION EFFECT EVIDENCE
-```
-
-Exact live Git commit je záměrně **neuložený jako statická current-value autorita**. `RECONCILIATION_INPUT_*`
-zachycuje přesnou baseline použitou pro tento snapshot; skutečná současná identita se vždy dotazuje z
-live Git/GitHub.
-
-## Post-VOP / P0 reconciliation
-
-PR #74 zavedl do současného source tree kanonický VOP slovník a jeho machine-readable/runtime
-kontrakty. Současný `main` obsahuje zejména:
-
-- `docs/architecture/VOP_CANONICAL_VOCABULARY.md`;
-- `schemas/vop/registry.v1.json` se stavem `RESERVED_IDS` pro dosud neimplementovaná konkrétní schémata;
-- `voodoo_product/vop_vocabulary.py` s kanonickými nouns/verbs/relations/statusy, deterministic digestem
-  a fail-closed validací termínů;
-- `voodoo_product/vop_translation.py` s immutable provider semantic mapping a deterministic
-  semantic-equivalence assessment;
-- conformance testy pro vocabulary, translation a compatibility s operation semantics.
-
-PR-head CI #292 skončil `SUCCESS`. Bezprostřední push CI #297 na merge commit #74 byl `CANCELLED`
-protože následoval další push na `main`; současný `main` po PR #75 prošel kompletním CI #298, takže
-aktuální strom včetně PR #74 změn má fresh commit-bound `SUCCESS` evidence.
-
-Toto je source/test implementační a verification evidence. **Není to samo o sobě owner adoption.**
-`AUTHORITY_AND_ADOPTION_REGISTER.md` nemá explicitní VOP owner-adoption record, proto efektivní
-architektonická adoption autorita zůstává `UNKNOWN` do samostatného, exact-content-bound rozhodnutí.
-
-## GitHub governance reality
-
-PR #75 mergnul repository-side kontrakt
-`docs/governance/GITHUB_MAIN_GOVERNANCE_BASELINE_V1.md` a odpovídající machine-readable baseline.
-Kontrakt požaduje PR-only `main`, required `ci / verify`, latest-head checks, zákaz force-push/delete a
-conversation resolution.
-
-Live GitHub branch metadata po merge PR #75 ale stále hlásí:
-
-```text
-main.protected = false
-protection.enabled = false
-required_status_checks.enforcement_level = off
-required_status_checks.contexts = []
-```
-
-Proto:
-
-```text
-REPO_ENFORCEMENT_CONTRACT = MERGED
-GITHUB_SETTINGS_ENFORCED = FAIL / NOT CONFIGURED
-P0_GITHUB_GOVERNANCE = BLOCKED
-```
-
-Dokument, merge ani úspěšné CI nesmí být zaměněny za GitHub-side enforcement.
-
-## Authorization Snapshot boundary
-
-Aktuální source tree obsahuje immutable `AuthorizationSnapshot` contract a persistence-only
-`AuthorizationSnapshotStore`.
-
-Store je záměrně pouze persistence boundary pro prevalidated snapshoty. Nevyhodnocuje:
-
-- approval policy authority;
-- capability eligibility/activation;
-- deterministic target binding;
-- `execution.run` permission;
-- authoritative Snapshot Creator transaction.
-
-Současný `persist_prevalidated(...)` si otevírá vlastní database transaction. Pro budoucí
-`AuthoritativeSnapshotCreator` je proto stále potřeba transaction-aware persistence/read API, aby
-všechny authority reads, snapshot construction, persistence a audit proběhly v jedné coherent outer
-authorization transaction.
-
-## Authority reality — preliminary
-
-```text
-P1 immutable/versioned policy authority: PARTIAL
-P2 authoritative server-side execution.run permission authority: UNKNOWN / audit required
-P3 capability definition + activation authority: UNKNOWN / audit required
-P3 deterministic target binder authority: UNKNOWN / audit required
-approval evidence authority: PARTIAL / audit required
-trusted clock identity: contract exists; authoritative runtime composition audit required
-transaction-aware AuthorizationSnapshotStore API: MISSING
-```
-
-Toto je preliminary audit classification, nikoli implementační claim. Dedicated Authority Reality
-Audit smí začít až jako samostatný bounded audit slice; vyšší-impact implementation nesmí spoléhat na
-GitHub governance, dokud P0 live enforcement neprojde.
-
-## Latest runtime-attested checkpoint
-
-Latest runtime-attested committed baseline zůstává historický development checkpoint
-`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
-
-```text
-EVIDENCE_ARCHIVE: POST_MERGE_CHECKPOINT_20260802T152505Z_d57d37111b8b.zip
-EVIDENCE_ARCHIVE_SHA256: 80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
-EVIDENCE_MANIFEST_SHA256: f2851d70523122134bef007bd589872b810326a924f9fc187e2bec1da0aed0a2
-FULL_TEST_SUITE: 433 passed
-PRODUCT_READINESS: PASSED
-DEPENDENCY_AUDIT: no known vulnerabilities reported
-PRODUCT_IMAGE_BUILD: PASSED
-PRODUCT_IMAGE_SMOKE: PASSED according to checkpoint result
-PRODUCT_IMAGE_ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
+VOP_SEMANTIC_REVISION_CANDIDATE: vop-terminology-freeze-r2
+PRODUCT_VERSION: 0.9.0-rc2-dev
 PRODUCTION_EFFECTS: DISABLED
 RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-Tento checkpoint neattestuje pozdější source změny ani GitHub CI. Pro pozdější commity je
-verification evidence GitHub Actions, nikoli tento starší runtime archive. Ani successful CI není
-release, deployment nebo production verification.
+The exact candidate and live `main` identities must be queried directly. A retained SHA in this file is
+never a self-updating claim about future repository state.
 
-## Efektivní ADR stav
+## Historical checkpoint boundary
 
-Autoritativní adoption evidence je
-[`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`](docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md).
-
-- ADR-0008: effective `ADOPTED`; isolated Runner design/safety scope only; implementation authorization
-  is not implied.
-- ADR-0009: effective `ADOPTED`; grant issuance/authenticity design scope only; Runner/release/deploy
-  remain unauthorized by adoption alone.
-- ADR-0010: effective `ADOPTED`; immutable authorization-snapshot facts boundary only; separately
-  authorized PR #71 persistence slice is merged and verified; authoritative Snapshot Creator remains
-  unimplemented.
-- VOP canonical vocabulary / semantic translation: source/test implementation is present and verified,
-  but no explicit owner-adoption record is currently present in this register; architectural adoption
-  therefore remains `UNKNOWN`, not inferred from merge.
-
-## Co zůstává NOT IMPLEMENTED / BLOCKED
-
-- live GitHub `main` protection and required-check enforcement;
-- authoritative `AuthorizationSnapshotCreator`;
-- immutable/versioned runtime policy authority sufficient for snapshot creation;
-- fully audited server-side `execution.run` authority;
-- capability definition/activation authority and deterministic target binder required by snapshot
-  creation;
-- authoritative `ExecutionGrantIssuer` and authenticity envelope implementation;
-- transactional outbox/dispatch;
-- credential broker;
-- isolated READ-ONLY Runner runtime;
-- Runner-side durable one-time grant consumption;
-- independent provider post-state verification;
-- composed portable `OperationProof` runtime flow;
-- unrestricted production release and production effects;
-- public commercial distribution before licensing/EULA/privacy/support decisions.
-
-## Next safe development sequence
+The latest retained full runtime-attested checkpoint remains historical evidence for exactly
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
 
 ```text
-P0      Enforce and independently verify GitHub main protection
-STEP 0R Post-VOP/P0 Source-of-Truth reconciliation
-STEP 1  Authority Reality Audit
-STEP 2  Implement only proven missing authority prerequisites
-STEP 3  AuthoritativeSnapshotCreator in one atomic authorization transaction
-STEP 4  ExecutionGrant contract/issuer + exact handler/runner authority
-STEP 5  Transactional outbox/dispatch
-STEP 5.5 Credential broker boundary
-STEP 6  READ-ONLY isolated Runner
-STEP 7  ExecutionReceipt
-STEP 8  Independent Verification
-STEP 9  OperationProof
+POST_MERGE_CHECKPOINT_ZIP_SHA256=80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
+POST_MERGE_CHECKPOINT_IMAGE_ID=sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
 ```
 
-Do not jump to Runner implementation before GitHub governance, authority foundation and Snapshot
-Creator are proven.
+Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains ADR-0008
+evidence-index provenance only; it is not the current Git baseline.
 
-## Historical evidence boundary
+## Truth dimensions
 
-Historical review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains valid provenance in
-the immutable ADR evidence index. Historical Git identities remain valid provenance; they are **not
-current Git identity fields**. Effective owner adoption is read from
-`AUTHORITY_AND_ADOPTION_REGISTER.md`, not inferred from repository presence, merge, CI or historical
-embedded status labels.
+Do not collapse these dimensions:
 
-Capability detail: [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+```text
+CONTRACT / COMPONENT      = source implementation exists
+PRODUCT_COMPOSED          = ProductComposition can own/use the component through the canonical path
+DEFAULT_RUNTIME_ACTIVE    = the default application actually instantiates a provider runtime pack
+LIVE_VERIFIED             = real runtime/provider evidence exists for the named scope
+PRODUCT_SURFACED          = API/UI exposes the same semantics truthfully
+RELEASED / DEPLOYED       = separately governed states
+```
 
-Delivery order: [`ROADMAP.md`](ROADMAP.md)
+## Overall state
+
+| Dimension | Current state |
+|---|---|
+| Technical trust-plane components | **STRONG / IMPLEMENTED** |
+| Historical bounded-mutation operation atom | **VERIFIED** in F6b staging scope |
+| Canonical ProductComposition trust-plane seam | **IMPLEMENTED CANDIDATE in PR #128** |
+| Default provider runtime pack | **DISABLED / FAIL-CLOSED** |
+| Canonical public operation API | **NOT YET SURFACED** |
+| Capability→terminal profile authority | **IMPLEMENTED CANDIDATE; caller cannot strengthen profile** |
+| Runtime/database-backed permission authority | **IMPLEMENTED CANDIDATE; current role + active state + workspace membership** |
+| Workspace membership scope | **IMPLEMENTED CANDIDATE; schema 14, no legacy inference/backfill** |
+| READ Runner→independent Verifier terminal | **IMPLEMENTED CANDIDATE; live pilot primitives already VERIFIED** |
+| Reusable CREATE_REF WRITE orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
+| Reusable DELETE_REF rollback orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
+| Canonical VOP language | **R2 RECONCILIATION CANDIDATE** |
+| UI receipt/verification truth | **FIXED IN PR #128; final exact-head gate pending** |
+| SQLite persistence | **IMPLEMENTED through schema 14** |
+| OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; historical F6b instance VERIFIED** |
+| OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; historical F6b instance VERIFIED** |
+| Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
+| GitHub main ruleset enforcement | **UNKNOWN / RELEASE BLOCKER** |
+| Production release/effects | **BLOCKED** |
+| CyberCore | **BLOCKED until final reconciliation closure** |
+
+## Canonical shared authority/execution prefix
+
+PR #128 now contains a reusable canonical prefix:
+
+```text
+ReviewedOperation
+→ Approval / ApprovalCertificate
+→ AuthorizationSnapshot
+→ ExecutionGrant/v2
+→ GrantConsumptionWitness/v1          [CONTROL PLANE ONLY]
+→ DispatchOutboxEntry/v1
+→ DispatchEnvelope/v1
+→ DispatchInboxAdmission/v1
+→ ExecutionEpoch + ExecutionLease/v1
+→ ExecutionCapsule/v1
+→ profile-specific terminal
+```
+
+`CanonicalOperationPipeline.prepare()` stops before Runner/provider effect and retains exact bound
+runtime objects for the terminal router. Grant consumption remains control-plane-before-Dispatch;
+Runner never issues or consumes ExecutionGrant.
+
+## Capability-bound terminal selection
+
+Terminal strength is no longer a caller-selected argument. An immutable registry binds the exact
+`capability_definition_identity` and capability name to one allowed terminal profile.
+
+```text
+capability_definition_identity
+→ immutable allowlist binding
+→ terminal profile
+```
+
+A caller cannot request `BOUNDED_MUTATION_VERIFIED` for a READ capability or otherwise strengthen the
+profile by supplying a stronger string to `CanonicalOperationPipeline.prepare()`.
+
+## Runtime permission authority
+
+`DatabasePermissionAuthority` is the current candidate permission source for canonical product
+composition. Every permission decision re-reads the same ProductService database and requires the
+current active user, current global role permissions, exact workspace/environment and an exact current
+user↔workspace membership. A stale in-memory `Principal`, a later role downgrade, deactivation or
+membership revocation therefore cannot preserve stronger canonical authority.
+
+Global role still answers **what** a principal may do; current membership answers **where** that
+permission may be considered. Membership role (`owner`/`member`) controls membership management and
+does not activate the separately PROPOSED Solo/Team/Regulated organization-policy semantics.
+Migration `0014_workspace_memberships.sql` deliberately does not infer memberships for historical
+schema-13 workspaces; upgraded legacy workspaces remain fail-closed until an administrator records
+membership explicitly.
+
+`ProductComposition` owns this database-backed authority. A canonical runtime factory is rejected if
+it attempts to use another database or another permission-authority instance.
+
+## ProductComposition reality
+
+PR #128 now wires the trust-plane seam into `ProductComposition` rather than leaving it as a detached
+pre-effect helper:
+
+```text
+ProductService database
+        ↓
+DatabasePermissionAuthority
+        ↓
+CanonicalOperationPipeline
+        ↓
+CanonicalOperationRuntime
+        ├── READ_ONLY_VERIFIED → CanonicalGitHubReadTerminal
+        └── BOUNDED_MUTATION_VERIFIED
+             ├── CREATE_REF → A09CreateRefPreparer
+             └── DELETE_REF → A09RollbackPreparer
+```
+
+The canonical runtime is supplied through an explicit runtime factory and must share the exact
+ProductService database and permission authority. Without that explicit provider/runtime pack,
+`canonical_operation_runtime` remains `None`. This is intentional fail-closed behavior, not a hidden
+fallback to legacy authority or ambient GitHub credentials.
+
+Legacy `ExecutionService` remains an explicit existing API compatibility surface. The canonical VOP
+runtime is now product-composable, but a new public HTTP operation endpoint has not been claimed.
+
+## Canonical terminal profiles — R2
+
+### READ-only verified
+
+```text
+READ_ONLY_VERIFIED
+Runner Observation
+→ independent Verifier Observation
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1 = VERIFIED
+```
+
+`CanonicalGitHubReadTerminal` composes the accepted D4b Runner and E3/E4b independent-verifier
+contracts. READ terminates at `VerificationResult/v1`.
+
+```text
+ExecutionReceipt/v2 = NOT_APPLICABLE
+OperationProof/v2   = NOT_APPLICABLE
+OperationCell/v1    = NOT_APPLICABLE
+```
+
+### Bounded mutation verified
+
+The semantic completed terminal remains:
+
+```text
+BOUNDED_MUTATION_VERIFIED
+bounded provider mutation
+→ ExecutionReceipt/v2                  [verification_status=NOT_EVALUATED]
+→ independent readback
+→ VerificationResult/v1 = VERIFIED
+→ OperationProof/v2
+→ OperationCell/v1
+```
+
+PR #128 does **not** execute this terminal. It adds reusable A09 preparation that ends immediately
+before a separately authorized provider effect.
+
+### A09 CREATE_REF preparation
+
+```text
+CanonicalPreparedExecution
+→ exact capability/capsule/handler evidence
+→ ControlledWriteRequirement
+→ write Runner identity/boundary
+→ scoped credential decision metadata
+→ runtime activation metadata
+→ exact target binding/request
+→ WriteEffectPreflight/v1
+→ STOP
+```
+
+There is no provider transport, credential secret, `create_ref()` invocation or historical PR120/SHA
+hard-bind in the A09 orchestration.
+
+### A09 rollback preparation
+
+```text
+CanonicalPreparedExecution
+→ exact rollback capability/capsule/handler evidence
+→ current target provenance
+→ rollback condition/requirement
+→ rollback Runner identity/boundary
+→ scoped credential decision metadata
+→ current pre-delete observation
+→ current fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
+```
+
+There is no `DELETE_REF` provider call. Rollback remains a separately authorized future effect.
+
+Mandatory non-conflation:
+
+```text
+Approval != Authorization
+ExecutionGrant != ExecutionCapsule
+ExecutionReceipt != VerificationResult
+execution succeeded != VERIFIED
+VerificationResult != OperationProof
+OperationProof != OperationCell
+Evidence-chain integrity != independent verification
+Preflight != provider effect
+Prepared rollback != rollback execution
+Release != Deploy
+```
+
+## Component inventory
+
+| Layer | Component | Product composed | Live evidence |
+|---|---|---|---|
+| Review/approval | IMPLEMENTED | legacy product path | local/system |
+| AuthoritativeSnapshotCreator | IMPLEMENTED | canonical runtime factory seam | component tests |
+| ExecutionGrant/v2 + durable store | IMPLEMENTED | canonical runtime factory seam | component tests |
+| Grant consumption + transactional outbox | IMPLEMENTED | canonical pipeline | component/pilot |
+| Dispatch envelope + durable inbox/dedup | IMPLEMENTED | canonical pipeline | component/pilot |
+| ExecutionEpoch/Lease + DurableCoordinator | IMPLEMENTED | canonical pipeline | component/pilot |
+| Capability terminal allowlist | IMPLEMENTED | canonical pipeline | system tests |
+| Database permission authority | IMPLEMENTED | ProductComposition | system tests |
+| Workspace membership scope | IMPLEMENTED | DatabasePermissionAuthority | schema-14/membership tests; no live provider claim |
+| Capsule / Runner identity/boundary | IMPLEMENTED | profile terminals | pilot/tests |
+| READ runtime activation | IMPLEMENTED | CanonicalGitHubReadTerminal | D4b |
+| Independent verifier / VerificationResult | IMPLEMENTED | CanonicalGitHubReadTerminal | E3/E4b/F6b |
+| Bounded CREATE_REF | IMPLEMENTED | A09 pre-effect preparer | historical F4b; no new execution |
+| Bounded DELETE_REF rollback | IMPLEMENTED | A09 pre-effect preparer | historical F6b; no new execution |
+| ExecutionReceipt/v2 | IMPLEMENTED | post-effect mutation lineage only | historical F6b |
+| OperationProof/v2 | IMPLEMENTED | post-verification mutation lineage only | historical F6b |
+| OperationCell/v1 | IMPLEMENTED | post-proof mutation lineage only | historical F6b |
+| Canonical operation runtime router | IMPLEMENTED | ProductComposition optional runtime pack | tests; final exact-head gate pending |
+
+## Historical F6b mutation evidence
+
+Historical F6b run `32213563750` records one complete bounded staging operation:
+
+```text
+provider operation = DELETE_REF
+provider mutation count = 1
+automatic retry = false
+rollback = true
+Runner readback = ABSENT
+independent verifier readback = ABSENT
+VerificationResult = VERIFIED / OBSERVED_STATE_MATCH
+OperationProof/v2 = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718
+OperationCell/v1  = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
+```
+
+This historical evidence does not authorize or prove any new A09 provider mutation.
+
+## CI / readiness state
+
+The final reconciliation candidate is not considered closed until one exact head has all of:
+
+```text
+full CI = SUCCESS
+D4b = SUCCESS
+E3 = SUCCESS
+E4b = SUCCESS
+R3 adversarial review = completed
+reconciliation audit = completed
+```
+
+Intermediate green runs are useful regression evidence but do not attest later candidate commits.
+The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
+authority, workspace membership boundary and A09 modules/tests so those layers cannot silently fall
+outside future readiness checks.
+
+## UI truth
+
+PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
+verification is `UNKNOWN` unless an actual VerificationResult binding is exposed. Receipt existence
+must never render `VERIFIED` by itself.
+
+## GitHub governance
+
+Repository policy requires PR-only `main`, latest-head checks, no force push/delete and conversation
+resolution. Available evidence does not prove complete modern ruleset enforcement; successful CI is
+not Settings/ruleset evidence.
+
+```text
+GITHUB_SETTINGS_ENFORCED = UNKNOWN
+RELEASE_BLOCKER = YES
+```
+
+## Governance history
+
+- Engineering operating standard remains hash-bound to
+  `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`.
+- Historical PR #125 technical merge/post-state is VERIFIED; separate pre-merge merge-authorization
+  provenance remains **NOT VERIFIED** and is not rewritten.
+- ADR-0018 records the R2 terminal-profile correction instead of silently rewriting older history.
+
+## CyberCore boundary
+
+CyberCore remains intelligence/context/proposal only and is still blocked. It cannot issue
+ExecutionGrant, consume grants, become Runner/Verifier, execute provider effects or become proof
+evidence by inference.
+
+CyberCore may proceed only after final exact-head gates and the new reconciliation audit are closed.
+
+## Release boundary
+
+```text
+VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+RELEASED=NO
+DEPLOYED=NO
+UNRESTRICTED_PRODUCTION=BLOCKED
+```
+
+## Next governed sequence
+
+```text
+final source/docs/readiness convergence
+→ one fresh exact-head CI + D4b/E3/E4b set
+→ R3 adversarial review
+→ complete reconciliation audit
+→ separate merge authorization gate
+→ CyberCore only after reconciliation PASS
+```

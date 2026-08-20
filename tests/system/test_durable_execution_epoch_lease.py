@@ -304,7 +304,7 @@ def test_fresh_database_contains_c4b_schema(tmp_path: Path) -> None:
     database = SQLiteProductDatabase(tmp_path / "product.sqlite3")
     database.initialize()
 
-    assert database.schema_version() == 13
+    assert database.schema_version() == 14
     with database.connect() as connection:
         tables = {
             str(row["name"])

@@ -57,12 +57,25 @@ def test_bootstrap_service_uses_only_statement_catalog() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 4
+    assert len(execute_calls) == 5
+    statement_references = {
+        (call.args[0].value.id, call.args[0].attr)
+        for call in execute_calls
+        if call.args
+        and isinstance(call.args[0], ast.Attribute)
+        and isinstance(call.args[0].value, ast.Name)
+    }
+    assert statement_references == {
+        ("sql", "COUNT_USERS"),
+        ("sql", "INSERT_USER"),
+        ("sql", "INSERT_WORKSPACE"),
+        ("membership_sql", "INSERT_WORKSPACE_MEMBERSHIP"),
+    }
     assert all(
         call.args
         and isinstance(call.args[0], ast.Attribute)
         and isinstance(call.args[0].value, ast.Name)
-        and call.args[0].value.id == "sql"
+        and call.args[0].value.id in {"sql", "membership_sql"}
         for call in execute_calls
     )
 
@@ -96,7 +109,9 @@ def test_product_service_delegates_bootstrap_surface() -> None:
     assert "sql.INSERT_WORKSPACE" not in source_text
 
 
-def test_bootstrap_service_provisions_user_workspace_and_audit_atomically(tmp_path: Path) -> None:
+def test_bootstrap_service_provisions_user_workspace_membership_and_audit_atomically(
+    tmp_path: Path,
+) -> None:
     product = ProductService(product_config(tmp_path))
     service = bootstrap_service(product)
 
@@ -124,6 +139,14 @@ def test_bootstrap_service_provisions_user_workspace_and_audit_atomically(tmp_pa
             "SELECT id, name, environment FROM workspaces WHERE id = ?",
             ("wrk-fixed",),
         ).fetchone()
+        membership = connection.execute(
+            """
+            SELECT workspace_id, user_id, membership_role, created_by
+            FROM workspace_memberships
+            WHERE workspace_id = ? AND user_id = ?
+            """,
+            ("wrk-fixed", "usr-fixed"),
+        ).fetchone()
         audit = connection.execute(
             "SELECT actor_id, action, target_type, target_id FROM audit_events"
         ).fetchone()
@@ -138,6 +161,12 @@ def test_bootstrap_service_provisions_user_workspace_and_audit_atomically(tmp_pa
         "id": "wrk-fixed",
         "name": "VOODOO Local",
         "environment": "local",
+    }
+    assert dict(membership) == {
+        "workspace_id": "wrk-fixed",
+        "user_id": "usr-fixed",
+        "membership_role": "owner",
+        "created_by": "usr-fixed",
     }
     assert dict(audit) == {
         "actor_id": "usr-fixed",
@@ -157,7 +186,7 @@ def test_bootstrap_service_rejects_invalid_token_before_transaction(tmp_path: Pa
     assert service.has_users() is False
 
 
-def test_bootstrap_service_rolls_back_user_and_workspace_when_audit_fails(
+def test_bootstrap_service_rolls_back_user_workspace_and_membership_when_audit_fails(
     tmp_path: Path,
 ) -> None:
     product = ProductService(product_config(tmp_path))
@@ -178,10 +207,14 @@ def test_bootstrap_service_rolls_back_user_and_workspace_when_audit_fails(
     with product.db.connect() as connection:
         users = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
         workspaces = connection.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()
+        memberships = connection.execute(
+            "SELECT COUNT(*) AS count FROM workspace_memberships"
+        ).fetchone()
         audits = connection.execute("SELECT COUNT(*) AS count FROM audit_events").fetchone()
 
     assert users["count"] == 0
     assert workspaces["count"] == 0
+    assert memberships["count"] == 0
     assert audits["count"] == 0
 
 
@@ -207,10 +240,14 @@ def test_bootstrap_service_rolls_back_user_when_workspace_insert_fails(
     with product.db.connect() as connection:
         users = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
         workspaces = connection.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()
+        memberships = connection.execute(
+            "SELECT COUNT(*) AS count FROM workspace_memberships"
+        ).fetchone()
         audits = connection.execute("SELECT COUNT(*) AS count FROM audit_events").fetchone()
 
     assert users["count"] == 0
     assert workspaces["count"] == 1
+    assert memberships["count"] == 0
     assert audits["count"] == 0
 
 
@@ -265,9 +302,13 @@ def test_concurrent_bootstrap_attempts_create_exactly_one_administrator(
     with product.db.connect() as connection:
         users = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
         workspaces = connection.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()
+        memberships = connection.execute(
+            "SELECT COUNT(*) AS count FROM workspace_memberships"
+        ).fetchone()
         audits = connection.execute("SELECT COUNT(*) AS count FROM audit_events").fetchone()
     assert users["count"] == 1
     assert workspaces["count"] == 1
+    assert memberships["count"] == 1
     assert audits["count"] == 1
 
 

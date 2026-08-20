@@ -2,313 +2,332 @@
 
 | Field | Value |
 |---|---|
-| Document status | Current and target trust-boundary inventory |
-| Security posture | Deny by default and fail closed |
+| Document status | Current trust-boundary inventory / reconciliation candidate |
+| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` plus PR #128 |
+| Security posture | deny by default / fail closed |
 | Production effects | BLOCKED until separately released |
-| Update trigger | Any material identity, execution, persistence, evidence, or integration change |
+| Update trigger | any material identity, authority, execution, persistence, evidence or integration change |
 
-## Boundary map
+## Canonical authority and execution topology
+
+The system has one shared authority/dispatch prefix and **profile-specific terminals**. There is no
+universal mandatory Receipt→Proof→Cell tail.
 
 ```text
-[Untrusted client input]
-        |
-        v
-[HTTP security and authentication]
-        |
-        v
-[Authenticated principal]
-        |
-        v
-[Authorization and governance services]
-        |
-        +------------------+
-        |                  |
-        v                  v
-[SQLite state]      [Execution adapter boundary]
-                           |
-                           v
-                    [Sandbox / validation target]
-
-[Untrusted checkpoint]
-        |
-        v
-[Read-only local verifier]
-        |
-        v
-[Deterministic JSON claims and ProofGraph]
-
-ADR-0007 accepted contract layer:
-
-[execution-target / approval-evidence-set / execution-grant / execution-receipt]
-        |
-        v
-[Pure deterministic representation only; no runtime authority]
-
-OWNER-ADOPTED ADR-0008 target boundary (runtime not implemented):
-
-[V-One authorization and lifecycle]
-        |
-        v
-[Durable dispatch / immutable grant reference]
-        |
-        v
-[Runner admission + atomic one-time consumption]
-        |
-        v
-[Digest-bound retrieval + capability registry]
-        |
-        v
-[Rootless capsule / separate OS identity / network denied]
-        |
-        v
-[Independent postcondition verifier]
-        |
-        v
-[Bounded receipt and evidence -> V-One ingestion]
+Untrusted client / agent intent
+        ↓
+HTTP security + authenticated principal
+        ↓
+current active user + global role + exact workspace membership
+        ↓
+ReviewedOperation + Approval evidence
+        ↓
+AuthorizationSnapshot
+        ↓
+ExecutionGrant/v2
+        ↓
+CONTROL PLANE durable ONE_TIME grant consumption
+        ↓
+GrantConsumptionWitness/v1 + transactional DispatchOutboxEntry/v1
+        ↓
+DispatchEnvelope/v1
+        ↓
+DispatchInboxAdmission/v1
+        ↓
+ExecutionEpoch + ExecutionLease/v1 + CurrentExecutionFence
+        ↓
+ExecutionCapsule/v1
+        ↓
+immutable capability→terminal profile binding
+        ↓
+profile-specific runtime terminal
 ```
 
-## TB-01 — HTTP client to application
+### READ_ONLY_VERIFIED
 
-**Current status:** VERIFIED for the current test scope.
+```text
+RunnerIdentity + READ RunnerBoundary
+→ READ CredentialAccessDecision + RuntimeActivation
+→ Runner provider observation
+→ durable completion
+→ SEPARATE independent Verifier identity/credential/readback
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1
+→ STOP
+```
 
-Controls:
+### BOUNDED_MUTATION_VERIFIED
 
-- exact trusted-host enforcement;
-- browser security headers and no-store behavior;
-- structured input validation;
-- bearer authentication;
-- rate limiting;
-- permission checks.
+A completed authorized mutation may continue:
 
-Residual risks:
+```text
+write Runner/boundary/credential/runtime
+→ exact provider effect
+→ ExecutionReceipt/v2
+→ SEPARATE independent Verifier readback
+→ VerificationResult/v1
+→ OperationProof/v2
+→ OperationCell/v1
+```
 
-- current deployment is not an unrestricted internet-facing release;
-- external identity integration is not released.
+PR #128 does not execute a new bounded mutation. Its A09 runtime ends at effect preflight.
 
-## TB-02 — Credential and session material
+## Non-negotiable authority boundary
 
-**Current status:** VERIFIED for local authentication.
+```text
+Control plane consumes ExecutionGrant before Dispatch.
+Runner does NOT issue ExecutionGrant.
+Runner does NOT consume ExecutionGrant.
+Runner does NOT allocate a parallel authority epoch.
+Dispatch does NOT create authority.
+Terminal profile strength is NOT caller-selected.
+Stale in-memory Principal state is NOT canonical permission authority.
+Global role does NOT imply membership in arbitrary workspaces.
+Historical workspace activity does NOT fabricate current membership.
+Preflight does NOT equal provider effect.
+ExecutionReceipt does NOT create VerificationResult.
+OperationProof does NOT create execution authority.
+OperationCell does NOT widen authority.
+```
 
-Controls:
+## TB-01 — HTTP client to control plane
+
+**Status: VERIFIED for current product test scope.**
+
+Controls include trusted-host validation, browser security headers, input bounds, authenticated
+requests, rate limiting, permission checks and environment classification.
+
+Residual boundary: the public API does not yet expose a new canonical VOP operation endpoint and the
+product is not an unrestricted production release.
+
+## TB-02 — Credential/session material
+
+**Status: VERIFIED for released local-auth scope.**
 
 - runtime-supplied secrets;
-- purpose-derived signing and reference keys;
-- context-bound token format;
-- active-session allowlist;
-- audited logout and administrative revocation;
-- raw session nonces excluded from persistence.
+- purpose-derived session keys/references;
+- active-session allowlist and revocation;
+- raw bearer/session material excluded from persistence;
+- live account/role revalidation.
 
-Residual risks:
+Residual boundary: no released OIDC/MFA/tenant-specific enterprise key system.
 
-- no released OIDC, MFA, or enterprise key-rotation boundary;
-- local instance roles are not workspace-scoped tenancy.
+## TB-03 — Governance to persistence
 
-## TB-03 — Governance services to persistence
+**Status: VERIFIED for SQLite.**
 
-**Current status:** VERIFIED for SQLite.
+SQLite migrations are checksum-governed through schema 14. Durable state includes
+AuthorizationSnapshot, ExecutionGrant, grant consumption, Outbox, Inbox, ExecutionEpoch/Lease and the
+explicit user↔workspace membership scope required by canonical permission decisions.
+
+Migration 0014 does not infer/backfill historical memberships. A schema-13 workspace upgraded to 14
+has no canonical membership authority until an administrator explicitly records it.
+
+Residual boundary: PostgreSQL remains fail-closed until separate adapter/concurrency/operations gates.
+
+## TB-04 — Product permission and workspace-scope authority
+
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
+
+`DatabasePermissionAuthority` shares the exact ProductService database and rereads current user,
+active-state, global role permission set, exact workspace/environment and exact user↔workspace
+membership for every canonical permission decision.
 
 Controls:
 
-- checksum-verified ordered migrations;
-- central statement catalog;
-- transactionally enforced invariants;
-- bounded connections;
-- integrity verification;
-- unsupported backend fails closed.
+- stale `Principal` role does not preserve stronger permission after DB role change;
+- inactive/deleted user state fails closed;
+- workspace/environment bindings are checked against current database state;
+- an otherwise privileged global role without workspace membership is denied;
+- membership revocation is effective without rebuilding the authority/runtime;
+- schema-14 migration does not fabricate legacy memberships;
+- ProductComposition runtime factory cannot substitute another permission-authority instance.
 
-Residual risks:
+Membership role (`owner`/`member`) governs membership management only. It does not activate the
+separately PROPOSED Solo/Team/Regulated organization-policy model.
 
-- SQLite is a single-node pilot backend;
-- database administrators can rewrite complete hash chains unless evidence is externally anchored.
+Residual boundary: this is candidate source/test evidence until final exact-head gates close.
 
-## TB-04 — Governance to execution adapter
+## TB-05 — AuthorizationSnapshot / ExecutionGrant
 
-**Current status:** IMPLEMENTED and VERIFIED for narrow local capabilities; target isolation is
-PROPOSED.
+**Status: IMPLEMENTED component + canonical composition seam.**
 
-Current controls:
+Snapshot and Grant contracts are immutable/content-bound. ONE_TIME Grant consumption is a
+**control-plane transaction** before Dispatch.
 
-- allowlisted adapter names;
-- typed payload validation;
-- bounded output;
-- execution timeout;
-- idempotency, lease, and fence;
-- emergency-stop recovery;
-- production effects disabled.
+Residual boundary: component/composition readiness does not authorize provider effects.
 
-Residual risks:
+## TB-06 — Durable Dispatch / coordination
 
-- adapter process shares the control-plane operating-system identity;
-- repository validation tools may execute repository-controlled behavior;
-- no resource or network sandbox;
-- emergency stop does not yet provide distributed runner cancellation;
-- provider-side idempotency is not generalized.
-
-Target:
+**Status: IMPLEMENTED component + canonical composition seam.**
 
 ```text
-control plane
-  -> durable outbox
-  -> signed one-time grant
-  -> isolated runner
-  -> signed receipt
+GrantConsumptionWitness
++ DispatchOutboxEntry
+→ DispatchEnvelope
+→ DispatchInboxAdmission
+→ ExecutionEpoch / ExecutionLease
+→ CurrentExecutionFence
 ```
 
-## TB-05 — Sandbox filesystem
+Controls:
 
-**Current status:** VERIFIED for current tests.
+- durable exact-content admission;
+- duplicate delivery classification;
+- monotonic execution epochs;
+- stale-attempt fencing;
+- no authority creation during dispatch.
+
+## TB-07 — Capability terminal-profile authority
+
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
+
+An immutable registry binds the exact `capability_definition_identity` and capability to one terminal
+profile. `CanonicalOperationPipeline.prepare()` has no caller-supplied `terminal_profile` argument.
+
+Residual boundary: future capabilities must be explicitly registered; absence/mismatch fails closed.
+
+## TB-08 — Isolated READ Runner
+
+**Status: VERIFIED pilot primitives + IMPLEMENTED canonical terminal composition.**
+
+Runner authority remains `bounded_execution_only`.
+
+Controls include exact lease/capsule/Runner binding, current-fence checks, READ-only runtime profile,
+narrowed network/provider access and no grant issuance/re-consumption.
+
+`CanonicalGitHubReadTerminal` composes these controls from `CanonicalPreparedExecution`.
+
+## TB-09 — Independent Verifier
+
+**Status: VERIFIED bounded GitHub readback + IMPLEMENTED canonical READ terminal.**
+
+Verifier uses separate identity, provider-instance and credential boundaries. Only the independent
+verification path produces `VerificationResult/v1` and strength classification.
+
+```text
+Runner credential != Verifier credential
+Runner observation != Verifier observation
+Execution success != VerificationResult
+```
+
+READ terminates at `VerificationResult/v1`; Receipt/v2, Proof/v2 and Cell/v1 are not required.
+
+## TB-10 — Provider WRITE effect
+
+**Status: VERIFIED only for historical bounded F4b/F6b staging effects. New A09 effect = NOT EXECUTED.**
+
+PR #128 adds reusable CREATE_REF preparation:
+
+```text
+CanonicalPreparedExecution
+→ exact write bindings
+→ scoped credential decision metadata
+→ exact provider request
+→ WriteEffectPreflight/v1
+→ STOP
+```
 
 Controls:
 
-- relative path contract;
-- segment-by-segment symlink rejection;
-- opened-directory identity verification;
-- no-follow file handling;
-- atomic replacement;
-- size limits.
+- no provider transport in A09 orchestration;
+- no credential secret argument/serialization;
+- no historical PR120/ref/SHA hard-bind;
+- exact current lease/target/fence binding;
+- future mutation requires separate authorization/effect step.
 
-Residual risks:
+Historical F4b execution remains evidence only and is not current effect authority.
 
-- local process identity still owns both control plane and sandbox;
-- hostile same-user processes remain outside the current threat isolation.
+## TB-11 — Rollback effect
 
-## TB-06 — Audit and receipt evidence
+**Status: VERIFIED historical F6b effect; reusable A09 rollback preparation IMPLEMENTED / NOT EXECUTED.**
 
-**Current status:** VERIFIED for chain integrity.
+```text
+CanonicalPreparedExecution
+→ exact rollback provenance
+→ current pre-delete observation
+→ rollback Runner/boundary/credential metadata
+→ current-fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
+```
 
-Controls:
+There is no GitHub DELETE transport call inside A09. A prepared rollback does not authorize or prove
+rollback execution.
 
-- canonical evidence serialization;
-- monotonic receipt ordering;
-- independent audit and receipt verification;
-- explicit evidence endpoint.
+## TB-12 — ExecutionReceipt / evidence ledger
 
-Residual risks:
+**Status: VERIFIED contract and ledger-integrity scope.**
 
-- hash chains are not external non-repudiation;
-- no signing key identity or external anchor.
+`ExecutionReceipt/v2` is bounded mutation execution evidence. Receipt/hash-chain integrity may be
+`PASS` while provider verification is still `UNKNOWN` or `NOT_EVALUATED`.
 
-## TB-07 — Local checkpoint verification
+```text
+ExecutionReceipt != VerificationResult
+receipt chain integrity != independent verification
+```
 
-**Current status:** VERIFIED.
+## TB-13 — OperationProof / OperationCell
 
-The checkpoint is untrusted input.
+**Status: VERIFIED contract + historical F6b instance scope.**
 
-Controls:
+`OperationProof/v2` binds mutation Receipt/v2 + independent verification lineage. `OperationCell/v1`
+is a stable atom over a canonically revalidated Proof/v2.
 
-- symlink and special-file rejection;
-- strict complete manifest coverage;
-- SHA-256 recomputation;
-- Git bundle verification with isolated Git configuration;
-- source archive inspection without extraction;
-- temporary bare repository;
-- no network, Docker, registry, or checkpoint-provided code execution;
-- deterministic output.
+```text
+VerificationResult != OperationProof
+OperationProof != OperationCell
+OperationCell != new authority
+```
 
-Residual risks:
+Residual boundary: A09 preflight preparation cannot emit or claim a new Proof/Cell because no new
+provider effect/Receipt/VerificationResult exists.
 
-- same-user race against mutable local files;
-- remote Drive bytes are not independently verified;
-- signatures are not implemented;
-- nested evidence producers may have post-manifest log mutations, reported as warnings.
+## TB-14 — ProductComposition compatibility boundary
 
-## TB-08 — CI and supply chain
+**Status: IMPLEMENTED CANDIDATE with explicit compatibility surface.**
 
-**Current status:** VERIFIED for current repository CI configuration; signed provenance is PROPOSED.
+`ProductComposition` now owns the database-backed permission authority and may own an explicit
+`CanonicalOperationRuntime` created by a runtime factory sharing the exact ProductService DB/authority.
 
-Current controls:
+Without that factory, canonical runtime is absent/fail-closed. Legacy `ExecutionService` remains an
+explicit existing API compatibility surface; it is not silently treated as canonical VOP authority.
 
-- hash-locked dependencies;
-- pinned workflow actions;
-- read-only CI permissions;
-- tests, readiness, dependency audit, Docker build, and smoke;
-- manually gated release-candidate workflow.
+Residual boundary: a canonical public operation API is not yet claimed.
 
-Residual risks:
+## TB-15 — GitHub repository governance
 
-- no signed provenance or registry promotion policy;
-- base image tag is not committed by digest;
-- multi-platform verification is not established.
+**Status: UNKNOWN / RELEASE BLOCKER as an enforcement boundary.**
 
-## TB-09 — CyberCore or external intelligence input
+Repository policy requires PR-only main, latest-head checks, no force push/delete and conversation
+resolution. Current connector evidence does not independently prove the complete modern ruleset.
 
-**Current status:** PROPOSED.
+Successful Actions runs are not Settings/ruleset enforcement evidence.
 
-Initial boundary must allow only normalized read-only metadata and immutable references.
+## TB-16 — Security Intelligence / CyberCore
 
-Forbidden in the first slice:
+**Status: R-SI1.1 metadata IMPLEMENTED; CyberCore integration BLOCKED pending final reconciliation.**
 
-- direct apply;
-- package-provided shell execution;
-- shared database access;
-- provider credentials;
-- unbounded payload storage;
-- implicit trust based on transport.
+```text
+Security Intelligence = observations/classification/context/proposals
+CyberCore = intelligence_only
+neither = Authorization authority
+neither = ExecutionGrant issuer
+neither = Runner
+neither = Verifier
+```
 
-## TB-10 — AI proposal source
+Any future active effect must enter the same canonical capability-bound V-One authority/runtime path.
 
-**Current status:** PROPOSED.
+## Production gate
 
-AI output is untrusted proposal content until validated.
+```text
+VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+NEW_A09_CREATE_REF_EFFECT=NO
+NEW_A09_DELETE_REF_EFFECT=NO
+UNRESTRICTED_PRODUCTION=BLOCKED
+```
 
-AI may draft and explain. AI may not:
-
-- authenticate as an approver without a real principal;
-- change its own risk or policy result;
-- issue a grant;
-- enable production effects;
-- suppress missing evidence.
-
-## TB-11 — V-One to isolated Runner v1
-
-**Design status:** ADOPTED by explicit owner decision on 2026-08-08. **Runtime status:** PROPOSED /
-not implemented. ADR-0007 accepted the deterministic contract layer above, but that representation
-does not authorize execution by itself.
-
-Authoritative boundary:
-
-- V-One owns identity, policy, approvals, grant issuance, cancellation intent, execution lifecycle,
-  receipt ingestion, audit, and production-effect gating;
-- the Runner owns durable one-time consumption, capsule lifecycle, resource enforcement, attempt
-  observations, independent postcondition execution, and Runner receipt claims;
-- the Runner never authorizes itself, and AI or CyberCore input remains proposal-only.
-
-Target controls:
-
-- one grant authorizes one attempt; atomic durable consumption occurs before any side effect;
-- canonical versioned capability registry; arbitrary shell is not a capability and unknown
-  capabilities fail closed;
-- payload and target retrieval uses immutable digest-bound references and rehashes bytes inside the
-  Runner boundary;
-- separate Runner OS identity, fresh rootless capsule, read-only base, bounded writable workspace,
-  resource limits, and network deny by default;
-- cancellation, bounded leases, monotonic fencing, heartbeat, duplicate-delivery safety, and
-  fail-closed recovery;
-- postcondition verification is independent from the handler; uncertain post-state is
-  `INDETERMINATE`;
-- grants, receipts, dispatch records, logs, and general evidence contain no secrets;
-- production effects remain blocked.
-
-Rollout blockers and residual risks:
-
-- current persisted approvals cannot authoritatively issue ADR-0007 grants with all required
-  bindings;
-- grant/receipt authenticity, transport, trust store, key lifecycle, durable dispatch and consume
-  stores, capsule technology, target-side fencing, secret delivery, and receipt reconciliation are
-  not implemented; ADR-0007 value contracts do not replace those runtime controls;
-- a separate OS identity and rootless capsule do not eliminate kernel, runtime, provider, or
-  supply-chain compromise;
-- exactly-once external effect is unavailable without provider idempotency or target-side fencing;
-- mutating rollout requires the verification gates in
-  `docs/security/ISOLATED_RUNNER_THREAT_MODEL_V1.md` and independent R3 review;
-- production effects require a separate R4 owner decision and release evidence.
-
-## Security review priorities
-
-1. ADR-0008 child R3 decisions for durable consumption, isolation technology, and postcondition runtime enforcement;
-2. grant and receipt authenticity, trust policy, and key lifecycle;
-3. external evidence anchoring and signing;
-4. output redaction and raw-log authorization;
-5. workspace-scoped identity;
-6. CyberCore read-only intake schema;
-7. multi-platform supply-chain verification.
+No CI pass, preflight, historical live pilot, proof, cell, Security Intelligence metadata or future
+CyberCore proposal may bypass that gate.

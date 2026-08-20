@@ -25,7 +25,7 @@ def product_config(tmp_path: Path, *, name: str = "product") -> ProductConfig:
     )
 
 
-def test_workspace_service_uses_only_central_statement_catalog() -> None:
+def test_workspace_service_uses_only_statement_catalogs() -> None:
     source = ROOT / "voodoo_product" / "workspace.py"
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
     execute_calls = [
@@ -36,18 +36,30 @@ def test_workspace_service_uses_only_central_statement_catalog() -> None:
         and node.func.attr == "execute"
     ]
 
-    assert len(execute_calls) == 2
-    assert all(
-        call.args
-        and isinstance(call.args[0], ast.Attribute)
-        and isinstance(call.args[0].value, ast.Name)
-        and call.args[0].value.id == "sql"
+    assert execute_calls
+    allowed_catalogs = {"sql", "membership_sql"}
+    for call in execute_calls:
+        assert call.args
+        assert isinstance(call.args[0], ast.Attribute)
+        assert isinstance(call.args[0].value, ast.Name)
+        assert call.args[0].value.id in allowed_catalogs
+
+    attributes = {
+        call.args[0].attr
         for call in execute_calls
-    )
-    assert {call.args[0].attr for call in execute_calls} == {
+        if isinstance(call.args[0], ast.Attribute)
+    }
+    assert {
         "INSERT_WORKSPACE",
         "LIST_WORKSPACES",
-    }
+        "SELECT_ACTIVE_USER",
+        "SELECT_WORKSPACE_CONTEXT",
+        "INSERT_WORKSPACE_MEMBERSHIP",
+        "SELECT_WORKSPACE_MEMBERSHIP",
+        "LIST_WORKSPACE_MEMBERS",
+        "DELETE_WORKSPACE_MEMBERSHIP",
+        "COUNT_WORKSPACE_OWNERS",
+    } <= attributes
 
 
 def test_product_service_delegates_workspace_surface() -> None:
@@ -104,7 +116,7 @@ def test_product_service_rejects_workspace_service_from_another_composition(
         )
 
 
-def test_workspace_service_preserves_product_service_contract(tmp_path: Path) -> None:
+def test_workspace_creator_is_atomic_owner_and_membership_is_audited(tmp_path: Path) -> None:
     service = ProductService(product_config(tmp_path))
     bootstrap = service.bootstrap_admin(
         username="admin",
@@ -122,15 +134,97 @@ def test_workspace_service_preserves_product_service_contract(tmp_path: Path) ->
     listed = {item["id"]: item for item in service.list_workspaces()}
     assert listed[created["id"]]["name"] == "Operations"
     assert listed[created["id"]]["environment"] == "staging"
+
+    members = service.workspace_service.list_members(workspace_id=created["id"])
+    assert len(members) == 1
+    assert members[0]["user_id"] == bootstrap["user_id"]
+    assert members[0]["membership_role"] == "owner"
+
+    actions = [event["action"] for event in service.list_audit_events(limit=100)]
+    assert "workspace.create" in actions
+    assert "workspace.member.add" in actions
+    assert service.verify_audit_chain()["valid"] is True
+
     with pytest.raises(ValueError, match="unknown environment"):
         service.create_workspace(
             actor_id=bootstrap["user_id"],
             name="Invalid",
             environment="invalid",
         )
-    actions = [event["action"] for event in service.list_audit_events(limit=100)]
-    assert "workspace.create" in actions
-    assert service.verify_audit_chain()["valid"] is True
+
+
+def test_owner_can_add_and_remove_member_but_cannot_remove_last_owner(tmp_path: Path) -> None:
+    service = ProductService(product_config(tmp_path))
+    bootstrap = service.bootstrap_admin(
+        username="admin",
+        password="VeryStrongAdminPassword1!",
+        token="b" * 48,
+    )
+    member = service.create_user(
+        actor_id=bootstrap["user_id"],
+        username="member",
+        password="VeryStrongMemberPassword1!",
+        role="operator",
+    )
+
+    added = service.workspace_service.add_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        user_id=member["id"],
+    )
+    assert added["membership_role"] == "member"
+    assert {item["user_id"] for item in service.workspace_service.list_members(
+        workspace_id=bootstrap["workspace_id"]
+    )} == {bootstrap["user_id"], member["id"]}
+
+    service.workspace_service.remove_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        user_id=member["id"],
+    )
+    assert [item["user_id"] for item in service.workspace_service.list_members(
+        workspace_id=bootstrap["workspace_id"]
+    )] == [bootstrap["user_id"]]
+
+    with pytest.raises(PermissionError, match="last workspace owner"):
+        service.workspace_service.remove_member(
+            actor_id=bootstrap["user_id"],
+            workspace_id=bootstrap["workspace_id"],
+            user_id=bootstrap["user_id"],
+        )
+
+
+def test_non_owner_member_cannot_manage_membership(tmp_path: Path) -> None:
+    service = ProductService(product_config(tmp_path))
+    bootstrap = service.bootstrap_admin(
+        username="admin",
+        password="VeryStrongAdminPassword1!",
+        token="b" * 48,
+    )
+    operator = service.create_user(
+        actor_id=bootstrap["user_id"],
+        username="operator",
+        password="VeryStrongOperatorPassword1!",
+        role="operator",
+    )
+    target = service.create_user(
+        actor_id=bootstrap["user_id"],
+        username="target",
+        password="VeryStrongTargetPassword1!",
+        role="viewer",
+    )
+    service.workspace_service.add_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        user_id=operator["id"],
+    )
+
+    with pytest.raises(PermissionError, match="owner or administrator"):
+        service.workspace_service.add_member(
+            actor_id=operator["id"],
+            workspace_id=bootstrap["workspace_id"],
+            user_id=target["id"],
+        )
 
 
 def test_workspace_service_preserves_service_monkeypatch_bridge(

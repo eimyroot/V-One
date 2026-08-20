@@ -6,333 +6,305 @@
 | Scope | Product, architecture, evidence, and roadmap language |
 | Rule | New public terms require documentation and compatibility review |
 | VOP authority | `docs/architecture/VOP_CANONICAL_VOCABULARY.md` + `voodoo_product/vop_vocabulary.py` |
-| VOP freeze | ADR-0014 / `vop-terminology-freeze-r1` |
+| Original VOP freeze | ADR-0014 / `vop-terminology-freeze-r1` |
+| Current VOP revision | ADR-0018 / `vop-terminology-freeze-r2` |
+| Reconciled | `2026-08-20` |
 
 ## Canonical-language boundary
 
 The authoritative operation-language vocabulary is VOP Canonical Vocabulary. One semantic meaning
-must have one canonical term, one contract identity, and one authoritative definition. This file may
-explain broader product/foundation terms, but it must not redefine VOP nouns, verbs, relations,
-identity grammar, or shared CORE status language in parallel.
-
-The normative cross-surface invariant is:
+must have one canonical term, one contract identity and one authoritative definition. This file
+explains product/foundation language; it must not fork VOP nouns, verbs, relations or status semantics.
 
 > **Stejný VOP termín musí mít napříč kódem, docs, receipts, API a UI jeden význam. Změna významu vyžaduje nový termín nebo novou verzi.**
 
-Machine-readable VOP vocabulary lives in `voodoo_product/vop_vocabulary.py`. Reserved canonical
-schema identities and supersession lineage live in `schemas/vop/registry.v1.json`. Existing operation
-semantics consume the shared VOP operation-stage sequence instead of defining another copy.
+Machine vocabulary lives in `voodoo_product/vop_vocabulary.py`; canonical schema identities,
+compatibility classification and terminal profiles live in `schemas/vop/registry.v1.json`.
 
-Historical VOP identities remain reserved for auditability. Their existence must not be used to
-silently reinterpret a current contract under an older semantic version.
+Historical schema identities remain reserved for auditability. `SUPERSEDES` is used only for a true
+semantic replacement; a newer specialized contract must instead carry explicit compatibility/lineage
+classification.
 
-## Product terms
+## Capability-status vocabulary
 
-### Common language
+Documentation capability state uses:
 
-The deterministic shared semantic vocabulary that binds V-One operation language, member roles,
-operation stages, and external technique boundaries. Canonical operation-language ownership lives in
-`voodoo_product/vop_vocabulary.py`; `voodoo_product/operation_semantics.py` consumes that vocabulary
-for operation semantics. The vocabulary is a semantic contract and evidence input, not runtime
-authorization by itself.
+```text
+VERIFIED
+IMPLEMENTED
+PROPOSED
+INFERRED
+UNKNOWN
+BLOCKED
+```
 
-### Change request
+These labels describe evidence-scoped capability truth. They are not a second VOP run-state taxonomy.
 
-A structured proposal describing intended change, target workspace, environment, risk, adapter
-capability, and bounded payload.
+`COMPLETE` is not a VOODOO capability status.
 
-### Workspace
+## Core product terms
 
-The authoritative scope for a target environment and governed activity. A request cannot relabel the
-workspace environment to bypass policy.
+### ReviewedOperation
+
+Exact normalized operation content presented to governance. Downstream approvals and authority bind to
+that reviewed identity rather than mutable UI intent.
 
 ### Approval
 
-Human or system approval of exact reviewed content under the applicable approval rules. Approval is
-evidence used by authorization; it is not itself Authorization, an ExecutionGrant, publisher
-identity, artifact integrity, execution success, or verification success.
+Approval of exact reviewed content. Approval is evidence used by authorization; it is not itself
+Authorization or ExecutionGrant.
 
-### Policy decision
+### AuthorizationSnapshot
 
-A deterministic result explaining whether a request is allowed, denied, or awaiting conditions under
-a specific policy version. A policy decision is one authority input; it does not by itself create an
-ExecutionGrant.
+Immutable evidence of an authorization decision over exact reviewed operation, policy/permission,
+approval and target facts.
 
-### Operation semantics
+### ExecutionGrant
 
-A canonical `v-one-operation-semantics/v1` value describing the operation ID, versioned capability,
-required system members, the shared VOP operation stages, verified technique roles, and deterministic
-semantics digest. It prevents the product language from drifting into ambiguous agent, tool, runner,
-verifier, or proof meanings.
+`ExecutionGrant` is the canonical semantic noun. Version-specific behavior must state the schema.
 
-### Operation proof
-
-A canonical `operation-proof/v1` value binding operation semantics, authorization snapshot,
-execution grant, execution receipt, and independent verification into one deterministic proof
-digest. It is accepted only when exact cross-contract bindings hold and when the verifier is
-independent from the actor and runner. Existing proof-composition code is not evidence that the
-future Phase-G portable OperationProof gate is complete.
-
-### Skill orchestration plan
-
-A canonical `v-one-skill-orchestration-plan/v1` value that classifies one engineering task, selects
-only relevant specialist skills, assigns one primary coordinator, records exclusions, development
-purpose, development system benefit, and acceptance gates, and emits a deterministic plan digest.
-It is a workflow contract, not tool execution, approval, plugin trust, or runtime authorization.
-
-### Control-plane decision
-
-A canonical `v-one-control-plane-decision/v1` value that binds operation semantics, skill
-orchestration, optional verified operation proof, explicit boundary, evidence references,
-acceptance gates, purpose, system benefit, status, and deterministic decision digest into one system
-decision record. It is the control-plane contract, not runtime dispatch or production authority by
-itself.
-
-### Usefulness gate
-
-An explicit acceptance gate proving that a change or decision has stated purpose and system benefit.
-Current canonical gate names are `change_has_purpose_and_system_benefit` for development work and
-`decision_has_purpose_and_system_benefit` for control-plane decisions.
-
-### Execution
-
-One governed attempt to apply an authorized capability. It has an identity, idempotency binding,
-durable dispatch lineage, ExecutionEpoch, ExecutionLease, fence, state, result, receipt, and audit
-trail. Execution success is not Verification success.
-
-### Production effects
-
-External or materially consequential mutations classified as production-changing. They are disabled
-until an explicit release authorizes specific capabilities.
-
-### Emergency stop
-
-A governed runtime state that blocks new execution and is required for explicit recovery of expired
-running executions.
-
-## Evidence terms
-
-### Audit event
-
-An append-only record of a material decision or action in the control plane.
-
-### Receipt
-
-A structured record of an execution result, chained for integrity. A receipt is an executor-side
-claim and must not be treated as independent verification.
-
-### Observation
-
-A bounded provider or target-state observation. An Observation is evidence input; it is not by itself
-a VerificationResult.
-
-### Independent verification
-
-A separate verification claim for observed target state and postconditions. It is not produced by
-the runner and is required before a successful receipt can become a verified operation proof.
-
-### Verification result
-
-An independent determination of observed real post-state bound to the verifier path. It is distinct
-from Runner execution evidence, Observation and OperationProof.
-
-### Evidence verification
-
-A deliberate operation that checks evidence integrity. It is separate from liveness and readiness.
-
-### Checkpoint
-
-A preserved development-state package containing source, Git history, provenance, evidence, and
-cryptographic manifests. A checkpoint is not automatically a release.
-
-### ProofGraph
-
-A deterministic graph of demonstrated evidence relationships. ProofGraph v1 currently represents:
-
-- checkpoint;
-- Git commit;
-- source tree;
-- container image identity.
-
-### Claim
-
-A normalized statement derived from verified evidence, with explicit scope and source.
-
-### Warning
-
-A visible non-fatal limitation that does not invalidate required outer evidence. A warning must never
-mask missing or mismatched authoritative evidence.
-
-### Attestation
-
-A signed statement binding an identity to a claim. Signature support is a target capability and is not
-part of ProofGraph v1.
-
-## Execution-plane terms
-
-### Capability
-
-A typed, allowlisted semantic operation with known inputs, effects, limits, verification, and
-rollback or compensation properties. Provider-native commands or endpoints are implementations of a
-Capability, not replacements for its VOP semantic identity.
-
-### Execution grant
-
-`ExecutionGrant` is the canonical semantic noun. Its contract version must always be stated when
-version-specific behavior matters.
-
-`execution-grant/v1` is retained as a **historical deterministic value-contract identity** accepted
-by ADR-0007. It must not be described as the current authoritative runtime execution authority.
-
-The current authoritative runtime authority contract is:
+`execution-grant/v1` is historical deterministic representation. The current authoritative runtime authority contract is:
 
 ```text
 execution-grant/v2
 ```
 
-It is issued from exact immutable authorization evidence and is ONE_TIME. Durable grant consumption
-is owned by the control plane before Dispatch; possession of the contract alone does not prove
-issuance, consumption or current execution eligibility.
+It is narrow, exact-content bound and ONE_TIME. This is a true semantic supersession.
 
 ### Grant consumption witness
 
 `grant-consumption-witness/v1` is durable evidence that one ONE_TIME `ExecutionGrant/v2` was consumed
-through the released control-plane lineage before dispatch. It is not produced by the Runner.
+by the **control plane before Dispatch**.
+
+Grant consumption is not a Runner responsibility.
 
 ### Dispatch
 
-The durable handoff of already-authorized execution intent after Grant consumption. Current Phase-C
-contracts include `dispatch-outbox-entry/v1`, `dispatch-envelope/v1` and
-`dispatch-inbox-admission/v1`.
+Durable handoff of already-authorized execution intent. Current contracts include
+`dispatch-outbox-entry/v1`, `dispatch-envelope/v1` and `dispatch-inbox-admission/v1`.
 
-### Execution epoch
+Dispatch transports authority already decided upstream; it does not create new authority.
 
-The monotonic coordination generation used to fence obsolete execution attempts. ExecutionEpoch is
-coordination state, not authority.
+### ExecutionEpoch / ExecutionLease
 
-### Execution lease
+`ExecutionEpoch` is a monotonic coordination generation. `execution-lease/v1` is the bounded lease for
+one current epoch. Epoch/lease/fence coordinate current execution attempts but do not widen authority.
 
-`execution-lease/v1` is the time-bounded coordination lease for one current ExecutionEpoch. A lease
-cannot widen authorization or resurrect an expired/revoked Grant.
+### ExecutionCapsule
 
-### Authoritative grant issuance
-
-The governed operation that emits a short-lived `ExecutionGrant/v2` from an immutable authorized
-state and exact execution constraints. It is separate from Approval, AuthorizationSnapshot
-representation, Grant consumption, Dispatch and Runner execution.
+Exact identity of executable implementation/runtime inputs. It is distinct from ExecutionGrant.
 
 ### Runner
 
-An isolated execution principal that performs only the exact already-authorized capability/handler
-under current durable dispatch and lease state and emits execution evidence. The Runner **does not
-issue or consume the Grant**, does not allocate its own authority epoch, and does not independently
-verify real provider post-state. Those responsibilities belong to the V-One control plane and
-independent verifier respectively.
+An isolated execution principal that performs only the already-authorized capability/handler under
+current durable dispatch, lease and fence state.
 
-### Runner identity
+The Runner **does not
+issue or consume the Grant**, does not allocate its own authority epoch, does not authorize itself and
+does not independently verify provider post-state.
 
-`runner-identity/v1` is content-addressed descriptive identity evidence for one concrete Runner
-instance. It is not authorization, a credential or independent verification.
+Canonical common-language Runner authority is `bounded_execution_only`.
 
-### Runner boundary
+### RunnerIdentity / RunnerBoundary
 
-`runner-boundary/v1` is the fail-closed safety ceiling binding one Runner to exact lease, capsule and
-capability semantics. It cannot manufacture authority.
+`runner-identity/v1` is descriptive identity evidence for one concrete Runner instance. RunnerBoundary
+is the fail-closed execution ceiling binding Runner to exact lease/capsule/capability constraints.
+Neither creates authorization.
 
-### Handler
+### CredentialAccessDecision
 
-The exact implementation selected to perform a Capability under an eligible Runner boundary. A
-Handler translates VOP semantics into provider/runtime behavior; it does not create authority.
+Serializable narrowing metadata for out-of-band credential delivery. It contains no usable secret and
+is not authorization or provider-effect evidence.
 
-### Credential access decision
+### RuntimeActivation
 
-`credential-access-decision/v1` is serializable narrowing metadata for out-of-band READ credential
-delivery. It contains no usable secret material and is not execution authority.
+Evidence that an eligible isolated runtime boundary was activated for use. Activation is not provider
+post-state verification.
 
-### Runtime activation
+### ExecutionReceipt
 
-A versioned runtime activation is evidence that an eligible isolated execution boundary was activated
-for use. Activation evidence is not provider-effect verification.
+Execution-side claim about what the execution subsystem attempted/performed. Version semantics are
+mandatory:
 
-### Fence
+```text
+execution-receipt/v1
+= legacy generic v1 receipt lineage
 
-A monotonic token preventing an obsolete or late worker from committing a result after recovery or
-replacement.
+execution-receipt/v2
+= current bounded-mutation effect receipt
+  provider_mutation_count == 1
+  automatic_retry_performed == false
+  verification_status == NOT_EVALUATED
+```
 
-### Indeterminate
+Therefore `execution-receipt/v2` is **not** a universal replacement for every v1 receipt lineage.
 
-An execution result where effects may have occurred but trustworthy final state is unavailable. It
-must not be silently treated as verification success or blindly retried.
+```text
+ExecutionReceipt != VerificationResult
+execution succeeded != VERIFIED
+```
 
-## Verification-plane terms
+A receipt or valid receipt chain cannot manufacture independent verification.
 
-### Verifier identity
+## Verification terms
 
-`verifier-identity/v1` is content-addressed verifier identity evidence. VerifierIdentity must remain
-separate from RunnerIdentity.
+### Observation
 
-### Independent verification boundary
+Bounded provider/target-state observation. Observation is evidence input, not VerificationResult.
 
-`independent-verification-boundary/v1` binds exact Runner evidence to a separate Verifier identity,
-provider instance and credential class while preserving READ_ONLY / DENY_ALL / no-provider-mutation
-ceilings. The boundary is not itself a VerificationResult.
+### VerifierIdentity
 
-### Verifier credential decision
+Content-addressed identity evidence for a verifier that must remain separate from RunnerIdentity.
 
-`verifier-credential-decision/v1` is reserved for verifier-specific READ-only credential decision
-metadata. It must not contain secret material or reuse the Runner credential class.
+### IndependentVerificationBoundary
+
+Fail-closed binding proving required Runner/Verifier identity, instance and credential separation for
+the active verification path.
+
+### VerificationStrength
+
+Classification of how strongly a VerificationResult is supported.
+
+### VerificationResult
+
+Independent determination of actual observed provider/target post-state. It is distinct from Runner
+execution evidence, Observation, OperationProof and OperationCell.
+
+For the current `READ_ONLY_VERIFIED` terminal profile, `VerificationResult/v1` is the verified terminal:
+
+```text
+READ_ONLY_VERIFIED
+→ independent_verification
+→ verification_result
+```
+
+No current READ-only contract is silently promoted into `ExecutionReceipt/v2`, `OperationProof/v2` or
+`OperationCell/v1`.
+
+### OperationProof
+
+Portable content-addressed proof for a registered evidence lineage.
+
+```text
+operation-proof/v1
+= legacy generic v1 proof lineage
+
+operation-proof/v2
+= current bounded-mutation proof lineage
+  ExecutionReceipt/v2
+  + canonical independent VerificationResult/v1 evidence
+```
+
+`operation-proof/v2` requires exactly one bounded provider mutation, forbids automatic mutation retry
+and recomputes canonical verification provenance. It is **not a universal supersession** of
+`operation-proof/v1`.
+
+### OperationCell
+
+`operation-cell/v1` is the stable minimal provider-neutral product atom for the current
+`BOUNDED_MUTATION_VERIFIED` lineage over one canonically revalidated `OperationProof/v2`.
+
+```text
+BOUNDED_MUTATION_VERIFIED
+→ execution_receipt
+→ independent_verification
+→ verification_result
+→ operation_proof
+→ operation_cell
+```
+
+```text
+VerificationResult != OperationProof
+OperationProof != OperationCell
+OperationCell != authority
+```
+
+The cell does not duplicate nested authorization/provider evidence and cannot execute, verify, release
+or deploy anything.
+
+## Evidence terms
+
+### Audit event
+
+Append-only record of a material governance/control-plane action.
+
+### Receipt-chain / audit-chain integrity
+
+Integrity result over retained evidence structure. Use a gate result such as `PASS/FAIL`; do not
+translate chain integrity into an operation-level `VERIFIED` state.
+
+### Evidence verification
+
+A deliberate check of evidence integrity/provenance in its stated scope. It is distinct from liveness,
+readiness and provider-state verification.
+
+### Checkpoint / ProofGraph
+
+A checkpoint is a preserved development-state package. ProofGraph is a deterministic projection of
+supported evidence relationships. Neither is automatically release or deployment evidence.
+
+### Attestation
+
+Signed statement binding identity to a claim. Signature/integrity support does not by itself define
+V-One authority semantics.
 
 ## Integration terms
 
 ### SandCloud
 
-A governed **non-canonical staging, review, validation and evidence layer**. SandCloud is not project
-truth, authorization authority or the execution boundary. Historical ADR-0013 wording that used
-SandCloud as the provider-neutral name for isolated execution is superseded by ADR-0014.
+Governed non-canonical staging/review/validation/evidence layer. SandCloud is not project truth,
+authorization authority or the canonical execution principal.
 
 ### CASTER-MINAL
 
-The governed execution control surface that hands an already-authorized operation plan to an eligible
-isolated Runner. CASTER-MINAL does not manufacture Authorization or widen authority.
-
-### CyberCore
-
-A separate infrastructure context and intelligence platform. In the target model it may provide
-observations, knowledge, provenance, comparisons, and candidates. It does not replace VOODOO One
-authorization and cannot activate its own Candidate by inference alone.
-
-### V-One member
-
-A participant in the governed operation system with exactly one explicit purpose and authority
-boundary. Current common-language roles are owner, operator, AI agent, CyberCore, policy engine,
-approval quorum, runner, verifier, and evidence fabric.
-
-### Read-only intake
-
-A versioned integration that imports metadata and evidence references without allowing mutation,
-package code execution, or shared persistence.
-
-### Provider
-
-An external system reached through a Module/adapter boundary. Provider-specific language is
-translated into VOP semantic capabilities and must not leak into governance authority definitions.
+Governed execution control surface that hands an already-authorized plan to an eligible Runner. It
+does not manufacture authorization.
 
 ### Module
 
-A provider/domain translation and implementation package. Modules translate canonical VOP semantics
-to provider/runtime behavior and back into canonical evidence. Modules do not authorize, choose
-policy, invent target identity, or gain arbitrary shell authority.
+Provider/domain translation and implementation package. Modules translate VOP semantics into
+provider/runtime behavior; provider terminology must not redefine authority semantics.
 
-### Verified technique map
+### Security Intelligence
 
-The bounded mapping from external techniques to V-One technique roles. MCP is treated as tool/context
-access, A2A as agent interoperability, AgentCore-style runtime telemetry as observability input,
-SPIFFE-style identity as transport/workload identity, and Sigstore/in-toto/SLSA as attestation and
-provenance primitives. None of these techniques alone grants V-One authorization.
+Descriptive security context/classification metadata. Current R-SI1.1 is intelligence-only and cannot
+issue authority, consume Grants, become Runner/Verifier or automatically become proof evidence.
+
+### CyberCore
+
+Separate infrastructure/context/intelligence system. It may provide observations, learning signals,
+knowledge and proposals.
+
+```text
+CyberCore = intelligence_only
+CyberCore != Authorization
+CyberCore != ExecutionGrant issuer
+CyberCore != Runner
+CyberCore != Verifier
+```
+
+No shared database, tool access or proposal automatically creates V-One authority.
+
+## Canonical non-conflation
+
+```text
+Approval != Authorization
+AuthorizationSnapshot != ExecutionGrant
+ExecutionGrant != ExecutionCapsule
+ExecutionGrant != ExecutionLease
+ExecutionEpoch != Authority
+Runner != Verifier
+ExecutionReceipt != VerificationResult
+Observation != VerificationResult
+VerificationResult != OperationProof
+OperationProof != OperationCell
+Evidence-chain integrity != independent verification
+Release != Deploy
+```
 
 ## Canonical CORE status language
 
-Do not create a parallel workflow/status taxonomy for VOP operations.
+Do not create another VOP workflow/status taxonomy.
 
 ### RunState
 
@@ -378,8 +350,5 @@ PUBLISHED
 DEPLOYED
 ```
 
-Historical documents may contain older descriptive labels such as `IMPLEMENTED`, `PROPOSED`, or
-`INFERRED`. Those labels remain historical/source evidence where they occur; they are not a second
-canonical VOP workflow taxonomy and must not be silently translated into a stronger CORE state.
-
-`COMPLETE` is not a VOODOO capability status.
+Historical descriptive labels remain historical evidence where they occur. They must not be silently
+mapped into stronger current VOP states.

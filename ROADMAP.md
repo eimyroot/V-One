@@ -3,512 +3,320 @@
 | Field | Value |
 |---|---|
 | Document status | Living delivery plan |
-| Reconciled | `2026-08-16` |
-| Reconciliation input | `main@b4d4aab7393251ffc113a3f5bf654523bdb27865` |
-| Source of current capability truth | `docs/product/CURRENT_CAPABILITIES.md` |
-| Source of live current-state snapshot | `CURRENT_PRODUCT_STATE.md` |
-| Production status | BLOCKED until an explicit governed release |
-| Update rule | Update with every accepted milestone or material scope change |
+| Reconciled | `2026-08-20` |
+| Reconciliation base | `main@71a931b561faa93c8dd2e062b83559401143b1df` |
+| Reconciliation candidate | PR #128 / `feat/reconciliation-p0-p1-r1` |
+| VOP semantic candidate | `vop-terminology-freeze-r2` / ADR-0018 |
+| Capability truth | [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) |
+| Current-state truth | [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) |
+| Production status | BLOCKED until separately governed release |
 
 ## Status vocabulary
 
-- **VERIFIED** — supported by current repository evidence and executed verification;
-- **IMPLEMENTED** — exists in current source/documentation but has not met every stated verification scope;
-- **PROPOSED** — target direction or not-yet-implemented capability;
-- **INFERRED** — derived from evidence but not directly demonstrated;
-- **UNKNOWN** — evidence unavailable, adoption missing, or dedicated audit not completed;
-- **BLOCKED** — intentionally unavailable or unsafe to activate.
+- **VERIFIED** — demonstrated by the named evidence scope;
+- **IMPLEMENTED** — exists in source/configuration; not automatically live/released;
+- **PROPOSED** — target direction or prepared design;
+- **INFERRED** — reasoned from evidence but not directly demonstrated;
+- **UNKNOWN** — required evidence unavailable;
+- **BLOCKED** — intentionally unavailable until a named gate passes.
+
+Roadmap status does not prove implementation. Implementation does not prove live provider effect,
+independent verification, release or deployment.
 
 ## Architectural invariant
 
 ```text
-V-ONE
+ONE SYSTEM
 =
-CANONICAL OPERATION LANGUAGE
+ONE CANONICAL OPERATION LANGUAGE
 +
-SMALL IMMUTABLE TRUST KERNEL
+ONE AUTHORITY LINEAGE
 +
-VERSIONED OPERATION SEMANTICS
+ONE EXECUTION LINEAGE
 +
-MASSIVELY SCALABLE CAPABILITY CATALOG
+CURRENT WORKSPACE SCOPE
 +
-CONFORMANCE-TESTED MODULE ECOSYSTEM
-+
-DISTRIBUTED EXECUTION FABRIC
+CAPABILITY-BOUND TERMINAL PROFILE
 +
 INDEPENDENT VERIFICATION
 +
-PORTABLE PROOF
+PROFILE-CORRECT PORTABLE EVIDENCE
 ```
 
-Scaling rule: provider/capability count may grow massively; trusted core must not grow proportionally.
+The mutation profile supports portable `OperationProof/v2 → OperationCell/v1`; READ-only verification
+terminates at `VerificationResult/v1`. No diagram or compatibility path may widen those contracts.
 
-```text
-ONE SYSTEM = ONE SEMANTIC LANGUAGE
-FRACTAL OUTSIDE.
-ATOMIC INSIDE.
-```
+## Completed technical milestones
 
-The current source/test implementation of VOP canonical vocabulary and semantic translation does not
-by itself create normative owner adoption or runtime execution authority.
-
-## Current verified milestones
-
-### Authorization Snapshot persistence — PR #71
-
-PR #71 merged the Authorization Snapshot persistence foundation as
-`d8d375c61264ddad39eb53240dce9ff0c8e59818`.
-
-Evidence:
-
-- PR-head CI #282: `SUCCESS`;
-- post-merge CI #283: `SUCCESS`;
-- SQLite schema version 9;
-- immutable append-only Authorization Snapshot persistence;
-- idempotency/request/review bindings;
-- contract, store and migration regression coverage.
-
-### Canonical VOP semantics — PR #74
-
-PR #74 merged as `a9a57df270b85907ee5012895c1523ade461f06f` and added:
-
-- canonical VOP vocabulary and deterministic vocabulary digest;
-- reserved/versioned schema registry identities;
-- shared operation-stage ownership;
-- immutable provider semantic mapping;
-- deterministic semantic-equivalence profile/assessment;
-- conformance/translation tests.
-
-Evidence:
-
-- PR-head CI #292: `SUCCESS` at `1be3721db70433a4dc4a45c353a5d748dd4bf113`;
-- immediate post-merge CI #297 was cancelled by subsequent `main` activity, not by a failing gate;
-- current `main` CI #298: `SUCCESS` at `b4d4aab7393251ffc113a3f5bf654523bdb27865`, including PR #74 source tree.
-
-Status boundary:
-
-```text
-VOP SOURCE/TEST IMPLEMENTATION = VERIFIED
-VOP OWNER ADOPTION = UNKNOWN
-```
-
-No explicit VOP owner-adoption record is currently present in
-`docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`; merge is not treated as adoption.
-
-### P0 repository governance contract — PR #75
-
-PR #75 merged repository-side governance contract and hardened PR metadata requirements.
-
-Evidence:
-
-- PR-head CI #291: `SUCCESS` at `329cde854a34a713ccd10ad272fbd9554d88a602`;
-- merge/current-main commit: `b4d4aab7393251ffc113a3f5bf654523bdb27865`;
-- current-main CI #298: `SUCCESS`.
-
-But live GitHub metadata still reports:
-
-```text
-main.protected = false
-protection.enabled = false
-required_status_checks.enforcement_level = off
-```
-
-Therefore repository contract completion is not GitHub enforcement completion.
-
-## MVP delivery map
-
-The detailed product-delivery map remains in
-[`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md).
-
-| Phase | Status | Summary |
+| Track | Status | Evidence boundary |
 |---|---|---|
-| MVP-0 | VERIFIED | Control-plane foundation with identity, approvals, execution lifecycle, evidence, production effects disabled |
-| MVP-1 | PARTIALLY VERIFIED | Deterministic execution contracts, adopted Runner/grant/snapshot design boundaries, verified Snapshot persistence and VOP source/test semantics |
-| MVP-2 | PROPOSED | Complete authoritative authorization path through Snapshot Creator and Grant Issuer |
-| MVP-3 | PROPOSED | Isolated READ-ONLY Runner vertical slice |
-| MVP-4 | BLOCKED | Governed non-production mutation pilot until authority/Runner/verification gates pass |
-| MVP-5 | PROPOSED | Productized multi-provider pilot and portable proof layer |
+| AuthorizationSnapshot + authoritative creator | VERIFIED | source/tests + schema 0009 |
+| ExecutionGrant/v2 + durable grant service | VERIFIED | source/tests + schema 0010 |
+| Grant consumption + transactional Outbox | VERIFIED | source/tests + schema 0011 |
+| Dispatch Envelope + Inbox/dedup | VERIFIED | source/tests + schema 0012 |
+| ExecutionEpoch/Lease + DurableCoordinator | VERIFIED | source/tests + schema 0013 |
+| Workspace membership scope | IMPLEMENTED | schema 0014 + membership/revocation tests |
+| Runner identity/boundary + credential decisions | VERIFIED | source/tests/pilot scope |
+| Isolated READ Runner | VERIFIED | D4b live governed read |
+| Independent verifier | VERIFIED | E3 live verifier observation |
+| VerificationResult/v1 | VERIFIED | E4b + F6b evidence |
+| Bounded CREATE_REF | VERIFIED | historical F4b pilot |
+| Bounded DELETE_REF rollback | VERIFIED | historical F6b pilot |
+| ExecutionReceipt/v2 | VERIFIED | bounded-mutation contract + F6b |
+| OperationProof/v2 | VERIFIED | bounded-mutation contract + F6b |
+| OperationCell/v1 | VERIFIED | bounded-mutation contract + F6b |
+| Capability→terminal allowlist | IMPLEMENTED | PR #128 tests |
+| Database-backed product permission authority | IMPLEMENTED | PR #128 tests |
+| Canonical authority/dispatch/lease pipeline | IMPLEMENTED | PR #128 tests |
+| Canonical READ Runner→Verifier terminal | IMPLEMENTED | PR #128 composition tests + existing D4b/E3/E4b evidence |
+| ProductComposition canonical runtime seam | IMPLEMENTED | PR #128 composition tests |
+| Reusable CREATE_REF A09 preflight orchestration | IMPLEMENTED | PR #128 tests; no provider effect |
+| Reusable rollback A09 preflight orchestration | IMPLEMENTED | PR #128 tests; no provider effect |
+| Security Intelligence R-SI1.1 | IMPLEMENTED | intelligence-only metadata/tests |
 
-## STEP 0R — Post-VOP/P0 Source-of-Truth reconciliation
+These rows do not authorize new provider mutation or release.
 
-**Status:** IN_PROGRESS until this bounded reconciliation PR passes exact-head CI and is merged through a governed path.
+The organization-scoped approval/profile design remains separately **PROPOSED** in
+[ADR-0003](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md). Its presence does
+not activate Solo, Team or Regulated behavior and does not weaken current human-authorization safety
+requirements. Workspace membership introduced by schema 14 is only a current scope boundary; it is
+not adoption of that organization-policy design.
 
-Required:
+## Gate R1 — Truth + semantic reconciliation
 
-- PR #74 VOP implementation and CI evidence represented accurately;
-- VOP implementation distinguished from normative owner adoption;
-- PR #75 repository governance contract represented accurately;
-- live branch-protection failure kept visible;
-- `CURRENT_PRODUCT_STATE.md`, `CURRENT_CAPABILITIES.md` and this roadmap aligned;
-- historical evidence superseded, not deleted;
-- no runtime, release or production claim introduced.
+**Status: IMPLEMENTED CANDIDATE / final exact-head closure pending in PR #128.**
 
-Exit gate:
+Required closure:
 
-```text
-CURRENT STATE TRUSTWORTHY
-```
+1. receipt/hash-chain UI never manufactures `VERIFIED`;
+2. Runner never issues/consumes ExecutionGrant;
+3. VOP R2 registry carries true supersession, compatibility and terminal profiles;
+4. READ_ONLY does not require mutation-only Receipt/v2/Proof/v2/Cell/v1;
+5. top-level docs, code, tests and registry express the same model;
+6. readiness/CI fail on semantic drift;
+7. historical governance uncertainty, including PR #125 provenance, stays visible;
+8. global role authority cannot cross workspace boundaries without current membership;
+9. schema-13 history does not fabricate schema-14 membership.
 
-## P0 — GitHub Main Governance Enforcement
+## Gate G0 — GitHub main enforcement
 
-**Status:** BLOCKED.
+**Status: BLOCKED / live ruleset evidence UNKNOWN.**
 
-Repository-side contract exists, but live GitHub enforcement is not configured.
-
-Required live state on `main`:
-
-```text
-pull_request_required = true
-required_status_check = verify
-required_check_provider = GitHub Actions / workflow ci
-latest_head_required = true
-force_push = false
-branch_delete = false
-conversation_resolution = true
-ordinary_admin_bypass = false
-```
-
-Exit gate requires independent live GitHub Settings/API evidence. Documentation, PR merge or CI success
-is insufficient.
-
-```text
-P0_GITHUB_GOVERNANCE = PASS
-```
-
-Higher-impact authority/Runner implementation must not rely on GitHub as a trusted enforcement
-boundary before this gate passes.
-
-## Architecture adoption candidate
-
-PR #76 (`docs: adopt verifiable operations architecture target`) is an architecture/adoption candidate,
-not current authority merely because it exists. Its adoption semantics must be reconciled with the
-non-self-referential owner-adoption protocol and the current VOP source implementation before merge.
-It must not be used to bypass P0 or infer runtime authority.
-
-## STEP 1 — Authority Reality Audit
-
-**Status:** PROPOSED next bounded engineering step after STEP 0R, with P0 enforcement completed before
-higher-impact implementation relies on GitHub governance.
-
-Audit exact current implementation of:
-
-1. immutable/versioned policy authority;
-2. server-side `execution.run` permission authority;
-3. capability definition authority;
-4. capability activation authority;
-5. deterministic target binder;
-6. approval evidence authority;
-7. trusted clock/timestamp-source authority;
-8. transaction-aware persistence/read APIs.
-
-For each item classify:
+Required release baseline:
 
 ```text
-EXISTS / PARTIAL / MISSING / UNKNOWN
+PR-only main
+required latest-head ci / verify
+force push disabled
+branch deletion disabled
+conversation resolution required
+ordinary admin bypass disabled
 ```
 
-No implementation by assumption. The broader organization/approval target remains bounded by
-[`ADR-0003`](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md); its proposed
-organization model must not weaken current requester/approval safety invariants before explicit adoption
-and implementation evidence exist.
+Successful CI does not prove these Settings/ruleset controls.
 
-## STEP 2 — Implement only missing authority prerequisites
+## Gate G1 — Canonical ProductComposition
 
-**Status:** PROPOSED.
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
 
-Expected candidate slices, only if Step 1 proves them missing:
-
-- P1 immutable policy authority;
-- P2 authoritative `execution.run` permission authority;
-- P3 capability definition/activation authority;
-- deterministic target binder;
-- connection-aware read APIs;
-- connection-aware `AuthorizationSnapshotStore.persist_prevalidated_on_connection(...)`;
-- negative-path and transaction rollback tests.
-
-Rule: no unrelated refactor, no whole-framework implementation.
-
-## STEP 3 — AuthoritativeSnapshotCreator
-
-**Status:** PROPOSED.
-
-One coherent authorization transaction:
+Current candidate composition:
 
 ```text
-BEGIN
-load reviewed request
-revalidate reviewed-content digest
-resolve actor/workspace/environment
-check execution.run
-resolve active capability definition
-bind authoritative ExecutionTarget
-resolve immutable PolicyRevision
-load and validate ApprovalEvidence
-read TrustedClock
-construct AuthorizationSnapshot
-persist exact snapshot + child bytes
-append audit
-COMMIT
+ProductService database
+→ current active user + global role + workspace/environment + membership
+→ DatabasePermissionAuthority
+→ AuthoritativeSnapshotCreator
+→ ExecutionGrant/v2
+→ atomic consume + DispatchOutbox
+→ DispatchEnvelope + Inbox admission
+→ ExecutionEpoch/Lease/current fence
+→ immutable capability→terminal binding
+→ CanonicalOperationRuntime
 ```
 
-Invariant:
+Properties now enforced:
+
+- one product database boundary;
+- one database-backed permission authority;
+- stale Principal role/state cannot preserve stronger permission;
+- membership revocation is observed without rebuilding authority;
+- global role does not imply membership in arbitrary workspaces;
+- no legacy membership inference/backfill during schema-14 migration;
+- no caller-selected stronger terminal profile;
+- no second authority path;
+- default app remains fail-closed unless an explicit canonical runtime factory/provider pack is supplied;
+- legacy `ExecutionService` remains an explicit compatibility API surface, not hidden fallback authority.
+
+The canonical public HTTP operation endpoint is a later product-surface task and is not inferred from
+ProductComposition wiring.
+
+## Gate G2 — Profile-specific terminal composition
+
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
+
+### READ terminal
 
 ```text
-AUTHORITY READS
-+
-SNAPSHOT CREATION
-+
-SNAPSHOT PERSISTENCE
-+
-AUDIT
-=
-ONE COHERENT TRANSACTION
+READ_ONLY_VERIFIED
+→ isolated READ Runner
+→ Runner observation
+→ durable completion
+→ independent verifier boundary/credential
+→ independent observation
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1
 ```
 
-## STEP 4A — ExecutionGrant contract hardening
+The terminal reuses existing D4b/E3/E4b contracts; it does not create a parallel verifier model.
 
-**Status:** PROPOSED.
+### Bounded mutation terminal
 
-Bind exact grant/replay identity, issuer, runner audience/class, snapshot id/digest, execution id,
-capability, target digest, payload digest, handler identity and validity window. Grant must be narrow,
-short-lived, replay-safe and immutable.
-
-## STEP 4B — Authoritative Grant Issuer
-
-**Status:** PROPOSED.
-
-Issuer loads committed immutable Snapshot evidence, checks required live issuance gates, binds exact
-handler/Runner audience and persists grant state. It must not rebuild authorization from mutable UI or
-request defaults.
-
-## STEP 4C — Runner / Handler authority registry
-
-**Status:** PROPOSED.
-
-Explicit registries:
-
-- Module Registry;
-- Handler Registry;
-- Runner Registry;
-- Verifier Registry;
-- Key Registry when authenticity implementation begins.
-
-Dispatcher and Runner do not guess executable implementation identity.
-
-## STEP 5 — Transactional Outbox / Dispatch
-
-**Status:** PROPOSED.
+Completed mutation semantics remain:
 
 ```text
-snapshot/grant/outbox state
-        ↓
-      COMMIT
-        ↓
-     DISPATCH
+BOUNDED_MUTATION_VERIFIED
+→ provider mutation
+→ ExecutionReceipt/v2
+→ independent Verifier
+→ VerificationResult/v1
+→ OperationProof/v2
+→ OperationCell/v1
 ```
 
-Dispatch delivers authority already issued; it does not create authority.
+PR #128 only prepares current WRITE/rollback effects through A09 and does not execute this tail.
 
-## STEP 5.5 — Credential Broker boundary
+## Gate G3 — Reusable governed WRITE / rollback orchestration
 
-**Status:** PROPOSED.
+**Status: IMPLEMENTED PRE-EFFECT CANDIDATE / NOT EXECUTED.**
+
+CREATE_REF path:
 
 ```text
-ExecutionGrant
-+ RunnerIdentity
-+ capability credential requirement
-→ short-lived least-privilege provider credential
+CanonicalPreparedExecution
+→ write safety bindings
+→ exact request
+→ WriteEffectPreflight/v1
+→ STOP
 ```
 
-No long-lived broad provider token in operation payload or evidence.
-
-## STEP 6 — READ-ONLY Isolated Runner
-
-**Status:** PROPOSED implementation. ADR-0008 design/safety boundary is owner-adopted; runtime remains
-not implemented and production effects remain BLOCKED.
-
-First allowed classes: bounded READ/COMPUTE operations such as repository inspection, diff, tests,
-builds, static analysis and provider reads.
-
-Default deny:
+Rollback path:
 
 ```text
-workspace write
-remote write
-deploy
-production mutation
-generic shell fallback
-arbitrary network
-long-lived secrets
+CanonicalPreparedExecution
+→ exact rollback provenance
+→ current pre-delete observation
+→ current fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
 ```
 
-## STEP 7 — ExecutionReceipt
+Required properties satisfied by the candidate design/tests:
 
-**Status:** PROPOSED runtime composition; pure deterministic receipt contract already exists.
+- no PR120/old-main/ref/SHA hard binding in A09;
+- explicit current capability/target lineage;
+- no automatic provider mutation retry;
+- scoped credential decision metadata without secret serialization;
+- current fence immediately before preflight readiness;
+- rollback remains separately authorized;
+- no provider transport call inside A09;
+- no new CREATE_REF or DELETE_REF execution in this reconciliation work.
+
+A preflight is not a provider effect and cannot be presented as `VERIFIED`.
+
+## Gate G4 — Product readiness
+
+**Status: FINAL EXACT-HEAD GATE PENDING.**
+
+Readiness must inventory:
+
+- canonical pipeline/runtime/router;
+- capability terminal allowlist;
+- database permission authority;
+- workspace membership statement/migration boundary;
+- READ terminal;
+- A09 CREATE/rollback orchestration;
+- current trust-plane contracts and profile semantics;
+- canonical ProductComposition tests;
+- UI/API truth tests;
+- migrations through schema 14;
+- supply-chain/dependency/image gates;
+- production effects disabled until separate release authorization.
+
+Exit requires one exact candidate head with:
 
 ```text
-ExecutionReceipt.SUCCESS != VerificationResult.PASS
+CI = SUCCESS
+D4b = SUCCESS
+E3 = SUCCESS
+E4b = SUCCESS
 ```
 
-## STEP 8 — Independent Verification
+Intermediate runs do not attest later commits.
 
-**Status:** PROPOSED.
+## Gate G5 — R3 adversarial review
 
-Verifier reads actual provider/post-state independently and compares expected vs observed state:
+**Status: PENDING FINAL HEAD.**
+
+Review must attack at least:
+
+- terminal-profile privilege escalation;
+- stale Principal / role-change authority;
+- cross-workspace authority without membership;
+- membership revocation or historical-backfill bypass;
+- parallel ProductComposition authority/database paths;
+- Runner/Verifier identity or credential collapse;
+- A09 hidden provider transport/effect;
+- stale lease/fence bypass;
+- rollback provenance substitution;
+- receipt/verification/proof/cell semantic conflation;
+- historical evidence upgraded into current provider execution claims.
+
+Organizational independence must be reported truthfully; self-review is not independent review.
+
+## Gate G6 — Final reconciliation audit
+
+**Status: PENDING FINAL HEAD + R3.**
+
+Require:
 
 ```text
-PASS / FAIL / INDETERMINATE
+one meaning per canonical term
+code ↔ tests ↔ evidence ↔ docs aligned
+one authority/execution composition
+current role + active state + workspace membership scope
+terminal profile derived from capability identity
+profile-specific Runner + verifier terminal
+A09 WRITE/rollback reusable but inert
+UI/API no stronger than evidence
+historical uncertainty preserved
+GitHub enforcement VERIFIED or explicit release blocker
 ```
 
-Required negative demonstration:
+## Gate G7 — CyberCore
+
+**Status: BLOCKED until G6 passes.**
 
 ```text
-Runner reports success
-Verification fails
-Operation does not become VERIFIED
+CyberCore = intelligence_only
+CyberCore != Authorization
+CyberCore != ExecutionGrant issuer
+CyberCore != Runner
+CyberCore != Verifier
 ```
 
-## STEP 9 — OperationProof
+Initial integration remains descriptive/read-only and must reuse the canonical VOP language. Any later
+active effect enters the same V-One authority/execution pipeline and its capability-bound terminal.
 
-**Status:** PROPOSED runtime composition; deterministic operation-proof value contract is already
-IMPLEMENTED at source/test layer.
+## Later productization
 
-Target chain:
+- canonical public operation API/UI surface;
+- multi-provider semantic/runtime packs;
+- organization/tenant policy maturation through ADR-0003 lineage;
+- released enterprise identity;
+- PostgreSQL adapter/isolation gates;
+- artifact provenance/signing eligibility;
+- production deployment/release runbooks;
+- commercial/legal/support readiness.
 
-```text
-Intent
-→ ReviewedOperation
-→ ApprovalEvidence
-→ AuthorizationSnapshot
-→ ExecutionGrant
-→ Dispatch
-→ RunnerIdentity
-→ ExecutionReceipt
-→ VerificationResult
-→ OperationProof
-```
-
-Proof target: content-addressed, schema-versioned, tamper-evident and portable.
-
-## STEP 10 — Operation Cell hardening
-
-**Status:** PROPOSED.
-
-Before DAG/CyberCore complexity, prove one complete atomic operation cell end-to-end, including
-positive path, permission deny, approval drift, target substitution, expired/replayed grant, wrong
-runner/handler, transaction rollback, receipt-success/verification-fail and evidence completeness.
-
-## STEP 11 — Bounded Operation Graph
-
-**Status:** PROPOSED.
-
-Complex intent becomes a bounded DAG of proven Operation Cells.
-
-```text
-PARENT AUTHORITY != CHILD AUTHORITY
-```
-
-Every consequential child obtains its own bounded authority.
-
-## STEP 12 — Module SDK + conformance
-
-**Status:** PROPOSED.
-
-Provider modules own translation semantics; kernel remains provider-neutral.
-
-```text
-ADAPTERS TRANSLATE.
-ADAPTERS DO NOT AUTHORIZE.
-```
-
-The VOP semantic mapping/equivalence source introduced by PR #74 is a foundation for this later module
-boundary, not a module activation authority.
-
-## STEP 13 — Multi-provider execution
-
-**Status:** PROPOSED.
-
-Scale through versioned capabilities/modules, not provider logic inside the kernel.
-
-## STEP 14 — CyberCore observation plane
-
-**Status:** PROPOSED.
-
-CyberCore may observe, benchmark, discover and propose optimizations. It does not authorize, issue
-grants, activate modules, or grant itself production authority.
-
-```text
-LEARNING != SELF-AUTHORIZATION
-```
-
-## STEP 15 — Semantic Equivalence
-
-**Status:** PARTIAL FOUNDATION VERIFIED.
-
-PR #74 provides deterministic semantic-equivalence profile/assessment contracts at source/test level.
-Runtime candidate discovery, conformance, security review, owner adoption and activation remain future
-work.
-
-```text
-SEMANTICALLY_EQUIVALENT != ADOPTED != ACTIVATED
-```
-
-## STEP 16 — Integration Compiler / Developer SDK
-
-**Status:** PROPOSED.
-
-Generated capability/handler/verifier candidates remain untrusted until conformance, security review,
-adoption and explicit activation.
-
-```text
-GENERATE CANDIDATE != ADOPT != ACTIVATE
-```
-
-## STEP 17 — Portable attestation / Operation Passport
-
-**Status:** PROPOSED.
-
-Expose portable, independently verifiable proof of reviewed, authorized, executed and verified
-operations without conflating those lifecycle states.
-
-## STEP 18 — Graduated mutation path
-
-**Status:** BLOCKED beyond read/compute until prior gates pass.
-
-```text
-READ
-→ COMPUTE
-→ WORKSPACE WRITE
-→ PATCH
-→ LOCAL COMMIT
-→ REMOTE PUSH
-→ PR CREATE
-→ CONTROLLED STAGING MUTATION
-→ STAGING DEPLOY
-→ separately governed production-capable path
-```
-
-Production remains deny-by-default.
-
-## Explicit no-go items
-
-- generic shell execution from user input;
-- AI/CyberCore self-approval or grant issuance;
-- shared VOODOO/CyberCore authority database;
-- provider-specific policy logic in the trust kernel;
-- production effects enabled by documentation/environment drift;
-- silent fallback to unreleased identity/persistence backends;
-- full microservice rewrite without measured pressure;
-- treating merge/CI as normative owner adoption;
-- treating repository governance documentation as live GitHub enforcement;
-- public distribution before licensing is resolved.
-
-## Immediate priority order
-
-1. finish and verify this post-VOP/P0 Source-of-Truth reconciliation;
-2. configure and independently verify GitHub `main` enforcement required by P0;
-3. reconcile/decide architecture adoption candidate PR #76 without inferring authority from merge;
-4. run the Authority Reality Audit against exact current protected `main`;
-5. implement only proven missing authority prerequisites;
-6. build `AuthoritativeSnapshotCreator` as one atomic authorization transaction;
-7. only then proceed to Grant Issuer, outbox, READ-ONLY Runner, receipt, independent verification and OperationProof.
+These remain PROPOSED or BLOCKED by their individual evidence gates.

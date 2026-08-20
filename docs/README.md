@@ -1,7 +1,7 @@
 # VOODOO One Documentation
 
-This directory is the entry point for product, architecture, governance, specification, operational,
-and release documentation.
+This directory is the entry point for product, architecture, governance, specification, operational
+and release documentation. Live Git/CI/runtime evidence outranks static current-state wording.
 
 ## Start here
 
@@ -13,36 +13,68 @@ and release documentation.
 | What works now? | [`product/CURRENT_CAPABILITIES.md`](product/CURRENT_CAPABILITIES.md) |
 | What should it support later? | [`product/TARGET_CAPABILITIES.md`](product/TARGET_CAPABILITIES.md) |
 | What is the security overview? | [`product/SECURITY_OVERVIEW.md`](product/SECURITY_OVERVIEW.md) |
+| What is the Security Intelligence R-SI1.1 authority ceiling? | [`product/SECURITY_INTELLIGENCE_RSI1_BOUNDARY.md`](product/SECURITY_INTELLIGENCE_RSI1_BOUNDARY.md) |
 | What is the MVP delivery map? | [`product/MVP_DELIVERY_MAP.md`](product/MVP_DELIVERY_MAP.md) |
 | What is the delivery order? | [`../ROADMAP.md`](../ROADMAP.md) |
-| Which terms are authoritative? | [`../foundation/TERMINOLOGY.md`](../foundation/TERMINOLOGY.md) |
-| What are the main trust boundaries? | [`architecture/TRUST_BOUNDARIES.md`](architecture/TRUST_BOUNDARIES.md) |
-| What is the ADR-0008 evidence index? | [`governance/ADR0008_R3_EVIDENCE_INDEX.md`](governance/ADR0008_R3_EVIDENCE_INDEX.md) |
+| Which foundation terms are used? | [`../foundation/TERMINOLOGY.md`](../foundation/TERMINOLOGY.md) |
+| What is the canonical VOP vocabulary? | [`architecture/VOP_CANONICAL_VOCABULARY.md`](architecture/VOP_CANONICAL_VOCABULARY.md) |
+| What are the current trust boundaries? | [`architecture/TRUST_BOUNDARIES.md`](architecture/TRUST_BOUNDARIES.md) |
+| What is the ADR-0008 historical R3 evidence index? | [`governance/ADR0008_R3_EVIDENCE_INDEX.md`](governance/ADR0008_R3_EVIDENCE_INDEX.md) |
 | How must documentation stay truthful? | [`governance/DOCUMENTATION_POLICY.md`](governance/DOCUMENTATION_POLICY.md) |
-| How will organization roles and approval profiles work? | [`adr/ADR-0003-organization-roles-and-configurable-approval-policy.md`](adr/ADR-0003-organization-roles-and-configurable-approval-policy.md) |
-| What is the accepted read-only Policy Decision Graph v1 boundary? | [`adr/ADR-0006-read-only-policy-decision-graph-v1.md`](adr/ADR-0006-read-only-policy-decision-graph-v1.md) — ACCEPTED, projection-only, no runtime integration |
-| What is the accepted pure execution-contract boundary? | [`adr/ADR-0007-execution-grant-receipt-contract-v1.md`](adr/ADR-0007-execution-grant-receipt-contract-v1.md) — ACCEPTED, deterministic value contracts only |
-| What is the owner-adopted isolated Runner boundary design? | [`adr/ADR-0008-isolated-runner-boundary-v1.md`](adr/ADR-0008-isolated-runner-boundary-v1.md) — effective status ADOPTED; runtime implementation not implied |
-| What is the owner-adopted Runner threat-model design? | [`security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](security/ISOLATED_RUNNER_THREAT_MODEL_V1.md) — bound to the ADR-0008 owner decision; runtime controls not implemented |
+| How will organization roles and approval profiles work? | [`adr/ADR-0003-organization-roles-and-configurable-approval-policy.md`](adr/ADR-0003-organization-roles-and-configurable-approval-policy.md) — still PROPOSED |
+| What is the read-only Policy Decision Graph v1 boundary? | [`adr/ADR-0006-read-only-policy-decision-graph-v1.md`](adr/ADR-0006-read-only-policy-decision-graph-v1.md) |
+| What is the historical pure execution-contract v1 boundary? | [`adr/ADR-0007-execution-grant-receipt-contract-v1.md`](adr/ADR-0007-execution-grant-receipt-contract-v1.md) |
+| What is the owner-adopted isolated Runner design boundary? | [`adr/ADR-0008-isolated-runner-boundary-v1.md`](adr/ADR-0008-isolated-runner-boundary-v1.md) — historical design authority retained; later bounded pilot implementation/evidence is tracked separately |
+| What threat model is bound to ADR-0008? | [`security/ISOLATED_RUNNER_THREAT_MODEL_V1.md`](security/ISOLATED_RUNNER_THREAT_MODEL_V1.md) — exact reviewed artifact remains immutable; later implementation does not rewrite it |
+| What is the current OperationProof/v2 decision? | [`adr/ADR-0015-operation-proof-v2-current-lineage-r1.md`](adr/ADR-0015-operation-proof-v2-current-lineage-r1.md) — ACCEPTED / MERGED |
+| What is the current OperationCell/v1 decision? | [`adr/ADR-0017-operation-cell-v1-r1.md`](adr/ADR-0017-operation-cell-v1-r1.md) — ACCEPTED / MERGED |
 | How are local checkpoint candidates finalized? | [`adr/ADR-0004-repository-owned-checkpoint-finalization.md`](adr/ADR-0004-repository-owned-checkpoint-finalization.md) |
+
+## Current truth hierarchy
+
+For runtime/technical state use, in order:
+
+```text
+current repository content
+→ live Git identity
+→ executed tests / GitHub CI
+→ runtime/pilot evidence
+→ current-state docs
+→ roadmap/vision intent
+```
+
+Normative document authority is separate and follows governance/adoption records.
+
+## Current architecture distinction
+
+```text
+TRUST-PLANE COMPONENT CHAIN = deeply implemented/tested
+HISTORICAL COMPLETE F6b BOUNDED-MUTATION ATOM = VERIFIED
+CANONICAL FastAPI ProductComposition RUNTIME SEAM = IMPLEMENTED CANDIDATE
+DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
+READ_ONLY_VERIFIED TERMINAL = VerificationResult/v1
+BOUNDED_MUTATION_VERIFIED TERMINAL = OperationCell/v1 after effect + independent verification
+CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
+```
+
+Do not collapse component presence, product composition, terminal-profile semantics, live verification
+and release into one status.
 
 ## Structure
 
 ```text
 docs/
 ├── README.md
-├── adr/            Architecture decision records and proposals
-├── architecture/   Current and target component and trust-boundary models
-├── governance/     Documentation and engineering governance
-└── product/        Current product contracts, readiness, runbooks, and capability maps
+├── adr/            Architecture decisions, historical decisions and proposals
+├── architecture/   Current semantic/component/trust-boundary models
+├── governance/     Documentation, authority and engineering governance
+├── product/        Current capabilities, boundaries, readiness and runbooks
+└── security/       Security threat-model artifacts
 ```
-
-The current repository also contains product composition-boundary documents in `docs/product/`.
-They remain authoritative for their specific service boundaries.
 
 ## Status rule
 
-Documentation uses only:
+Capability documentation uses only:
 
 ```text
 VERIFIED
@@ -53,4 +85,5 @@ UNKNOWN
 BLOCKED
 ```
 
-A roadmap or vision statement is not implementation evidence.
+A roadmap, ADR presence, merge, CI pass or evidence hash must not be promoted into a stronger runtime,
+release or deployment claim without the required independent evidence.
