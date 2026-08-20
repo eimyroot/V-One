@@ -9,10 +9,11 @@ from .approval_policy import VALID_ENVIRONMENTS
 from .evidence_primitives import canonical_json
 from .persistence import ProductDatabaseAdapter
 from .security import ROLE_PERMISSIONS, Principal
+from .workspace import SELECT_WORKSPACE_MEMBERSHIP
 
 PERMISSION_DECISION_TYPE: Final = "permission-decision/v1"
 CURRENT_PERMISSION_SCOPE_MODEL: Final = "current-global-role/v1"
-DATABASE_PERMISSION_SCOPE_MODEL: Final = "database-active-user-workspace/v1"
+DATABASE_PERMISSION_SCOPE_MODEL: Final = "database-active-user-workspace-membership/v2"
 
 
 def _digest(value: dict[str, object]) -> str:
@@ -182,12 +183,12 @@ class CurrentPrincipalPermissionAuthority:
 
 
 class DatabasePermissionAuthority:
-    """Resolve runtime permission from current durable user/workspace state.
+    """Resolve permission from current durable user/workspace membership state.
 
-    The caller supplies only actor/workspace/environment/permission identity. Role and active-state
-    are read from the product database on every decision, so a stale or client-supplied Principal
-    cannot grant authority. Workspace existence and environment are checked in the same read boundary.
-    The authority performs no writes and returns an explicit fail-closed PermissionDecision.
+    Role, active state, workspace environment and exact user↔workspace membership are read from the
+    product database on every decision. A stale/client-supplied Principal cannot grant authority and a
+    globally privileged role cannot cross into a workspace where it has no current membership.
+    Membership revocation therefore takes effect without rebuilding the canonical runtime.
     """
 
     def __init__(
@@ -214,6 +215,10 @@ class DatabasePermissionAuthority:
                 sql.SELECT_WORKSPACE_CONTEXT,
                 (query.workspace_id,),
             ).fetchone()
+            membership = connection.execute(
+                SELECT_WORKSPACE_MEMBERSHIP,
+                (query.workspace_id, query.actor_id),
+            ).fetchone()
 
         granted = False
         if user is None:
@@ -229,6 +234,8 @@ class DatabasePermissionAuthority:
                 reason = "WORKSPACE_NOT_FOUND"
             elif str(workspace["environment"]) != query.environment:
                 reason = "WORKSPACE_ENVIRONMENT_MISMATCH"
+            elif membership is None:
+                reason = "WORKSPACE_MEMBERSHIP_REQUIRED"
             else:
                 granted = "*" in permissions or query.permission in permissions
                 reason = (
