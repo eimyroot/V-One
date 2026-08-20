@@ -6,6 +6,7 @@ import pytest
 
 from voodoo_product import canonical_pipeline as pipeline_module
 from voodoo_product.canonical_pipeline import CanonicalOperationPipeline
+from voodoo_product.terminal_profile import READ_ONLY_TERMINAL_PROFILE
 
 D1 = "1" * 64
 D2 = "2" * 64
@@ -18,6 +19,7 @@ D8 = "8" * 64
 D9 = "9" * 64
 DA = "a" * 64
 DB = "b" * 64
+DC = "c" * 64
 
 
 class SnapshotService:
@@ -32,6 +34,8 @@ class SnapshotService:
             request_id=kwargs["request_id"],
             snapshot_digest=D1,
             execution_id="exec-1",
+            capability="github.read-ref/v1",
+            capability_definition_identity=DC,
         )
 
 
@@ -49,7 +53,8 @@ class GrantService:
             execution_id=snapshot.execution_id,
             jti="jti-1",
             grant_digest=D2,
-            capability="github.ref.read/v1",
+            capability=snapshot.capability,
+            capability_definition_identity=snapshot.capability_definition_identity,
             target_digest=D3,
         )
 
@@ -69,8 +74,26 @@ class OutboxService:
             grant_digest=D2,
             execution_id="exec-1",
             authorization_snapshot_digest=D1,
-            capability="github.ref.read/v1",
+            capability="github.read-ref/v1",
+            capability_definition_identity=DC,
             target_digest=self.target_digest,
+        )
+
+
+class ProfileRegistry:
+    def __init__(self, calls: list[str], *, allow: bool = True) -> None:
+        self.calls = calls
+        self.allow = allow
+
+    def resolve(self, *, capability_definition_identity: str, capability: str) -> object:
+        self.calls.append("terminal-profile")
+        if not self.allow:
+            raise PermissionError("TERMINAL_PROFILE_NOT_ALLOWLISTED")
+        assert capability_definition_identity == DC
+        assert capability == "github.read-ref/v1"
+        return SimpleNamespace(
+            terminal_profile=READ_ONLY_TERMINAL_PROFILE,
+            binding_digest=DA,
         )
 
 
@@ -80,7 +103,9 @@ class FakeEnvelope:
         self.dispatch_id = D4
         self.execution_id = "exec-1"
         self.request_id = "req-1"
-        self.capability = "github.ref.read/v1"
+        self.capability = "github.read-ref/v1"
+        self.capability_definition_identity = DC
+        self.environment = "staging"
         self.target_digest = D3
         self.authorization_snapshot_digest = D1
         self.grant_digest = D2
@@ -128,7 +153,11 @@ class Coordinator:
         raise AssertionError("pre-effect pipeline must never call complete")
 
 
-def make_pipeline(monkeypatch: pytest.MonkeyPatch) -> tuple[
+def make_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    allow_profile: bool = True,
+) -> tuple[
     CanonicalOperationPipeline,
     list[str],
     GrantService,
@@ -172,15 +201,14 @@ def make_pipeline(monkeypatch: pytest.MonkeyPatch) -> tuple[
         grant_service=grant_service,
         outbox_service=outbox_service,
         coordinator=coordinator,
+        terminal_profile_registry=ProfileRegistry(calls, allow=allow_profile),
         envelope_revision="dispatch-envelope/reconciliation-r1",
     )
     return pipeline, calls, grant_service, outbox_service, coordinator
 
 
-@pytest.mark.parametrize("profile", ["READ_ONLY_VERIFIED", "BOUNDED_MUTATION_VERIFIED"])
 def test_prepare_composes_one_pre_effect_authority_and_durable_path(
     monkeypatch: pytest.MonkeyPatch,
-    profile: str,
 ) -> None:
     pipeline, calls, grant_service, outbox_service, coordinator = make_pipeline(monkeypatch)
 
@@ -189,11 +217,11 @@ def test_prepare_composes_one_pre_effect_authority_and_durable_path(
         request_id="req-1",
         idempotency_key="idem-1",
         correlation_id="corr-1",
-        terminal_profile=profile,
     )
 
     assert calls == [
         "snapshot",
+        "terminal-profile",
         "grant",
         "outbox",
         "envelope",
@@ -204,7 +232,9 @@ def test_prepare_composes_one_pre_effect_authority_and_durable_path(
     assert grant_service.last_authority is not None
     assert outbox_service.last_jti == "jti-1"
     assert coordinator.last_admission_id == D8
-    assert prepared.terminal_profile == profile
+    assert prepared.terminal_profile == READ_ONLY_TERMINAL_PROFILE
+    assert prepared.terminal_profile_binding_digest == DA
+    assert prepared.capability_definition_identity == DC
     assert prepared.execution_id == "exec-1"
     assert prepared.request_id == "req-1"
     assert prepared.target_digest == D3
@@ -212,23 +242,45 @@ def test_prepare_composes_one_pre_effect_authority_and_durable_path(
     assert prepared.grant_digest == D2
     assert prepared.execution_capsule_digest == D6
     assert prepared.execution_epoch == 1
+    assert prepared.snapshot is not None
+    assert prepared.grant is not None
+    assert prepared.outbox is not None
+    assert prepared.envelope is not None
+    assert prepared.admission is not None
+    assert prepared.lease is not None
 
 
-def test_unknown_terminal_profile_fails_before_authority_or_durable_state(
+def test_caller_cannot_supply_or_strengthen_terminal_profile(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline, calls, _, _, _ = make_pipeline(monkeypatch)
 
-    with pytest.raises(ValueError, match="terminal_profile is unsupported"):
+    with pytest.raises(TypeError, match="terminal_profile"):
         pipeline.prepare(
             actor_id="actor-1",
             request_id="req-1",
             idempotency_key="idem-1",
             correlation_id="corr-1",
-            terminal_profile="UNREGISTERED_PROFILE",
+            terminal_profile="BOUNDED_MUTATION_VERIFIED",  # type: ignore[call-arg]
         )
 
     assert calls == []
+
+
+def test_non_allowlisted_capability_stops_before_grant_or_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline, calls, _, _, _ = make_pipeline(monkeypatch, allow_profile=False)
+
+    with pytest.raises(PermissionError, match="TERMINAL_PROFILE_NOT_ALLOWLISTED"):
+        pipeline.prepare(
+            actor_id="actor-1",
+            request_id="req-1",
+            idempotency_key="idem-1",
+            correlation_id="corr-1",
+        )
+
+    assert calls == ["snapshot", "terminal-profile"]
 
 
 def test_pipeline_rejects_split_durable_database_boundaries() -> None:
@@ -245,6 +297,7 @@ def test_pipeline_rejects_split_durable_database_boundaries() -> None:
             grant_service=grant_service,
             outbox_service=outbox_service,
             coordinator=Coordinator(calls),
+            terminal_profile_registry=ProfileRegistry(calls),
             envelope_revision="dispatch-envelope/reconciliation-r1",
         )
 
@@ -263,6 +316,7 @@ def test_pipeline_rejects_outbox_with_another_grant_service() -> None:
             grant_service=grant_service,
             outbox_service=outbox_service,
             coordinator=Coordinator(calls),
+            terminal_profile_registry=ProfileRegistry(calls),
             envelope_revision="dispatch-envelope/reconciliation-r1",
         )
 
@@ -271,7 +325,7 @@ def test_cross_binding_mismatch_fails_closed_before_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline, calls, _, outbox_service, _ = make_pipeline(monkeypatch)
-    outbox_service.target_digest = "c" * 64
+    outbox_service.target_digest = "e" * 64
 
     with pytest.raises(PermissionError, match="CANONICAL_PIPELINE_TARGET_DIGEST_MISMATCH"):
         pipeline.prepare(
@@ -279,10 +333,9 @@ def test_cross_binding_mismatch_fails_closed_before_dispatch(
             request_id="req-1",
             idempotency_key="idem-1",
             correlation_id="corr-1",
-            terminal_profile="READ_ONLY_VERIFIED",
         )
 
-    assert calls == ["snapshot", "grant", "outbox"]
+    assert calls == ["snapshot", "terminal-profile", "grant", "outbox"]
 
 
 def test_pre_effect_pipeline_exposes_no_provider_effect_or_completion_api(
