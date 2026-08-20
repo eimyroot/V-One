@@ -50,7 +50,7 @@ def insert_binding(database: SQLiteProductDatabase) -> None:
 def test_schema_v6_contains_external_identity_boundary(tmp_path: Path) -> None:
     database = initialized_database(tmp_path)
 
-    assert database.schema_version() == 13
+    assert database.schema_version() == 14
     with database.connect() as connection:
         columns = {
             row["name"]
