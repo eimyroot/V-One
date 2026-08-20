@@ -3,10 +3,10 @@
 | Field | Value |
 |---|---|
 | Document status | Accepted descriptive architecture / reconciliation candidate |
-| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` |
+| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` plus PR #128 candidate |
 | VOP semantic candidate | `vop-terminology-freeze-r2` / ADR-0018 |
-| Current packaging | Modular monolith + separately exercised isolated pilot runtimes |
-| Current composition | Deep trust-plane components exist; one canonical FastAPI orchestration is still partial |
+| Current packaging | Modular monolith + explicit profile-specific runtime packs |
+| Current composition | Canonical trust-plane runtime is ProductComposition-capable; default provider runtime remains fail-closed |
 | Production effects | BLOCKED / disabled by default |
 
 ## Purpose
@@ -19,12 +19,13 @@ V-One owns governance and trust semantics for consequential operations:
 - narrow one-time ExecutionGrant;
 - durable control-plane grant consumption;
 - dispatch/coordination/fencing;
+- capability-bound terminal selection;
 - bounded Runner execution;
 - independent post-state verification;
 - profile-correct portable evidence.
 
-It does not turn intelligence, transport, execution success or evidence integrity into stronger
-authority/verification by inference.
+It does not turn intelligence, transport, execution success, preflight readiness or evidence integrity
+into stronger authority/verification by inference.
 
 ## Current system context
 
@@ -34,29 +35,31 @@ Operator / AI proposal / CyberCore intelligence
                     v
              FastAPI product boundary
                     |
-        +-----------+-----------+
-        |                       |
-        v                       v
-legacy composed product    current VOP trust-plane
-ExecutionService           contracts + durable services
-        |                       |
-        |                       v
-        |             authority / dispatch / lease
-        |                       |
-        |                       v
-        |                bounded Runner
-        |                       |
-        |                       v
-        |             profile-specific evidence tail
-        |                       |
-        +---- composition convergence still required ----+
-
-SQLite persistence: migrations 0001–0013
+        +-----------+-------------------+
+        |                               |
+        v                               v
+legacy API compatibility         ProductComposition
+ExecutionService                        |
+                                ProductService database
+                                        |
+                                DatabasePermissionAuthority
+                                        |
+                                CanonicalOperationPipeline
+                                        |
+                                CapabilityTerminalProfileRegistry
+                                        |
+                                CanonicalOperationRuntime
+                                  /                \
+                                 v                  v
+                       READ verified terminal    A09 WRITE/rollback
+                                                pre-effect only
 ```
 
-The technical gap is composition, not absence of the core contracts.
+The canonical trust-plane runtime is now a ProductComposition seam. The default application does not
+silently instantiate a provider runtime pack; without explicit runtime dependencies it remains
+fail-closed.
 
-## Canonical shared authority/execution prefix
+## Canonical authority/execution prefix
 
 ```text
 ReviewedOperation
@@ -69,34 +72,67 @@ ReviewedOperation
 → DispatchInboxAdmission/v1
 → ExecutionEpoch + ExecutionLease/v1
 → ExecutionCapsule/v1
-→ RunnerIdentity + RunnerBoundary
-→ CredentialAccessDecision
-→ RuntimeActivation
-→ Provider effect / Observation
+→ capability-bound terminal profile
 ```
 
 One-time grant consumption occurs **before Dispatch in the control plane**. Runner authority is
 `bounded_execution_only`; Runner never issues or consumes grants.
 
-## Terminal profiles
+`CanonicalOperationPipeline.prepare()` stops before any provider effect and returns exact bound runtime
+objects for the selected terminal.
 
-The shared prefix has typed evidence terminals. `OPERATION_STAGES` is a semantic superset, not one
-mandatory path.
+## Terminal profile authority
 
-### READ-only verified
+Terminal strength is not caller-controlled. The pipeline resolves an immutable binding from the exact
+`capability_definition_identity` plus capability name to one allowed profile.
+
+```text
+CapabilityDefinition identity
+        ↓
+immutable terminal allowlist
+        ↓
+READ_ONLY_VERIFIED | BOUNDED_MUTATION_VERIFIED
+```
+
+The caller cannot pass a stronger `terminal_profile` argument to `prepare()`.
+
+## Product permission authority
+
+Canonical product composition uses `DatabasePermissionAuthority`, sharing the exact ProductService
+database. Every decision rereads current user/workspace state, including role and active state.
+Stale in-memory principals therefore cannot preserve authority after a backing role/state change.
+
+A canonical runtime factory is rejected if it uses another database or another permission-authority
+instance. This prevents a compatibility/runtime authority fork.
+
+## READ-only terminal
 
 ```text
 READ_ONLY_VERIFIED
-Runner Observation
-→ independent Verifier Observation
+CanonicalPreparedExecution
+→ isolated READ Runner
+→ Runner GitHub observation
+→ durable completion
+→ independent verification boundary
+→ separate verifier credential decision
+→ independent GitHub observation
 → ObservedPostState/v1
 → VerificationStrength/v1
 → VerificationResult/v1
 ```
 
-This profile currently terminates at `VerificationResult/v1`.
+`CanonicalGitHubReadTerminal` reuses accepted D4b/E3/E4b contracts. READ currently terminates at
+`VerificationResult/v1`.
 
-### Bounded mutation verified
+```text
+ExecutionReceipt/v2 = NOT_APPLICABLE
+OperationProof/v2   = NOT_APPLICABLE
+OperationCell/v1    = NOT_APPLICABLE
+```
+
+## Bounded mutation terminal
+
+The semantic completed terminal remains:
 
 ```text
 BOUNDED_MUTATION_VERIFIED
@@ -111,85 +147,85 @@ bounded provider mutation
 ```
 
 `ExecutionReceipt/v2` and `OperationProof/v2` require exactly one bounded provider mutation and no
-automatic mutation retry. They are specialized current mutation-lineage contracts, not universal
-replacement contracts for READ or every historical v1 lineage.
+automatic mutation retry. They are specialized mutation-lineage contracts, not universal READ
+contracts.
 
-## Current components
+PR #128 does not execute a new mutation. It adds reusable A09 preparation seams.
 
-### Product surface
+## A09 CREATE_REF pre-effect orchestration
 
-- FastAPI `/api/v1`;
-- local authentication/session/RBAC/workspaces/change requests/approvals;
-- static console;
-- emergency stop/evidence/health;
-- legacy `ExecutionService` remains product-composed.
+```text
+CanonicalPreparedExecution
+→ exact definition/capsule/handler evidence
+→ ControlledWriteRequirement
+→ write Runner identity/boundary
+→ scoped credential decision metadata
+→ runtime activation metadata
+→ exact target binding/request
+→ current-fence checked WriteEffectPreflight/v1
+→ STOP
+```
 
-PR #128 corrects the Evidence UI so ledger integrity uses `PASS/FAIL` and raw receipt verification
-fails closed to `UNKNOWN` unless an actual independent VerificationResult is exposed.
+Properties:
 
-### VOP machine language
+- no provider mutation transport in A09;
+- no credential secret input/serialization;
+- no `create_ref()` call;
+- no historical PR120/ref/SHA hard-bind;
+- one exact current authority/lease/target chain;
+- a future provider effect remains a separate authorization boundary.
+
+## A09 rollback pre-effect orchestration
+
+```text
+CanonicalPreparedExecution
+→ exact rollback definition/capsule/handler evidence
+→ rollback provenance/condition
+→ rollback Runner identity/boundary
+→ scoped rollback credential decision metadata
+→ current pre-delete observation
+→ current-fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
+```
+
+Rollback preparation contains no GitHub DELETE transport and performs no provider mutation. Rollback
+execution remains separately authorized.
+
+## ProductComposition
+
+`ProductComposition` owns:
+
+- ProductService and its shared evidence/persistence services;
+- `DatabasePermissionAuthority`;
+- optional `CanonicalOperationRuntime` produced by an explicit runtime factory.
+
+The canonical runtime factory must use the exact ProductService database and permission authority.
+Without a runtime factory, `canonical_operation_runtime=None` is intentional fail-closed behavior.
+Legacy `ExecutionService` remains an explicit API compatibility surface until canonical public
+operation endpoints are separately introduced and proven.
+
+## VOP machine language
 
 Authorities:
 
 - `voodoo_product/vop_vocabulary.py`;
 - `schemas/vop/registry.v1.json`;
+- `voodoo_product/terminal_profile.py` for exact capability→profile bindings;
 - human projection `docs/architecture/VOP_CANONICAL_VOCABULARY.md`.
 
-R2 adds explicit `operation_terminal_profiles` and `schema_compatibility`. Only true semantic
+R2 carries explicit `operation_terminal_profiles` and narrow compatibility rules. Only true semantic
 replacement belongs in `schema_supersessions`.
 
-### Authority
+## Persistence
 
-Implemented/tested:
+Released backend remains SQLite schema 13 with immutable/checksum-verified migrations, central
+statements, audit/receipt ledgers, snapshots, grants, outbox/inbox and execution epoch/lease state.
+PostgreSQL remains fail-closed/unreleased.
 
-```text
-AuthoritativeSnapshotCreator
-→ AuthorizationSnapshot
-→ AuthoritativeGrantIssuer / DurableGrantService
-→ ExecutionGrant/v2
-→ DurableDispatchOutboxService.consume_and_enqueue()
-```
+## Historical verified mutation atom
 
-The atomic outbox service is the intended composition seam for ONE_TIME grant consumption and durable
-handoff; ProductComposition must not call Runner-side consumption.
-
-### Dispatch / coordination
-
-```text
-DispatchOutboxEntry/v1
-→ DispatchEnvelope/v1
-→ DurableDispatchInboxService
-→ DispatchInboxAdmission/v1
-→ DurableExecutionLeaseService
-→ ExecutionEpoch + ExecutionLease/v1
-→ NativeDurableCoordinator / CurrentExecutionFence
-```
-
-Migrations 0010–0013 persist the released SQLite grant/dispatch/coordination model.
-
-### Runner
-
-Source includes Capsule/RunnerIdentity/RunnerBoundary, credential decisions, runtime activation and
-READ/write runtime boundaries. D4b provides real bounded GitHub READ evidence. E3/E4b exercise
-separate verification identity/readback.
-
-The current D3 `IsolatedRunnerAdapter` is READ-only. Historical write runtime has separate explicit
-write-boundary/credential/effect-preflight contracts; those must not be collapsed into D3 READ by
-configuration trickery.
-
-### Receipt / verification / proof
-
-```text
-ExecutionReceipt != VerificationResult
-VerificationResult != OperationProof
-OperationProof != OperationCell
-```
-
-Receipt/v2 is bounded-write execution evidence only. `VerificationResult/v1` is independent provider
-truth. Proof/v2 can only be created after canonical verification provenance recomputation. Cell/v1 can
-only be trusted after canonical Proof/v2 recomputation through an accepted lineage composer.
-
-Historical F6b produced:
+Historical F6b produced one complete bounded staging atom:
 
 ```text
 OperationProof/v2
@@ -199,69 +235,7 @@ OperationCell/v1
 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
 ```
 
-That proves one bounded-mutation atom, not a universal READ terminal.
-
-### Security Intelligence
-
-R-SI1.1 is descriptive intelligence metadata only. It creates no VOP authority, execution or proof.
-
-### Persistence
-
-Released backend: SQLite schema 13 with immutable/checksum-verified migrations, central statements,
-audit/receipt ledgers, snapshots, grants, outbox/inbox and execution epoch/lease state. PostgreSQL
-remains fail-closed/unreleased.
-
-## Historical runtime checkpoint
-
-Latest retained full local runtime checkpoint:
-
-```text
-main@d57d37111b8bc9471a136b6c618aad8e920f1aff
-archive SHA-256: 80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
-image ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
-```
-
-It is historical evidence and does not attest later source trees.
-
-## ProductComposition target
-
-The next functional architecture is one shared composition with explicit terminal selection:
-
-```text
-FastAPI / governed operation entry
-        ↓
-review + approval
-        ↓
-AuthoritativeSnapshotCreator
-        ↓
-ExecutionGrant/v2
-        ↓
-atomic consume + outbox
-        ↓
-envelope + inbox admission
-        ↓
-epoch / lease / current fence
-        ↓
-bounded Runner
-        ↓
-terminal profile selector
-        ├── READ_ONLY_VERIFIED → VerificationResult/v1
-        └── BOUNDED_MUTATION_VERIFIED
-             → ExecutionReceipt/v2
-             → VerificationResult/v1
-             → OperationProof/v2
-             → OperationCell/v1
-```
-
-Composition rules:
-
-1. reuse accepted authority contracts; no parallel v3 authority path;
-2. no test/pilot fixture seeding in product runtime;
-3. all durable transitions use released persistence services;
-4. profile selection is explicit/fail-closed;
-5. READ must not be coerced into mutation-only schemas;
-6. provider effect activation remains separately authorized;
-7. legacy ExecutionService remains explicit compatibility surface until replacement behavior is proven.
+That historical evidence does not prove or authorize a new A09 provider effect.
 
 ## Architectural invariants
 
@@ -270,23 +244,27 @@ Composition rules:
 3. Grant consumption is durable control-plane state before Dispatch.
 4. Dispatch/Epoch/Lease coordinate but never widen authority.
 5. Runner never issues/consumes grants or self-authorizes.
-6. Current fence prevents stale completion/effect authority.
-7. ExecutionReceipt != VerificationResult.
-8. Runner and Verifier remain separated as required by the profile.
-9. READ_ONLY_VERIFIED terminates at VerificationResult/v1 today.
-10. Receipt/v2 and Proof/v2 remain bounded-mutation-specific.
-11. Cell/v1 requires canonical Proof/v2 provenance.
-12. Evidence-chain integrity != provider verification.
-13. Unreleased backends fail closed.
-14. Production effects remain disabled until separate authorization/release.
-15. Documentation cannot upgrade capability state.
+6. Terminal profile strength is derived from immutable capability identity, not caller choice.
+7. Current database state, not stale Principal memory, is permission authority for canonical product runtime.
+8. Current fence prevents stale completion/effect authority.
+9. ExecutionReceipt != VerificationResult.
+10. Runner and Verifier remain separated as required by the profile.
+11. READ_ONLY_VERIFIED terminates at VerificationResult/v1 today.
+12. Receipt/v2 and Proof/v2 remain bounded-mutation-specific.
+13. Cell/v1 requires canonical Proof/v2 provenance.
+14. Preflight != provider effect.
+15. Prepared rollback != rollback execution.
+16. Evidence-chain integrity != provider verification.
+17. Unreleased backends/provider packs fail closed.
+18. Production effects remain disabled until separate authorization/release.
+19. Documentation cannot upgrade capability state.
 
 ## GitHub governance boundary
 
-Policy requires PR-only main, latest-head `ci / verify`, no force push/delete and conversation
-resolution. Available connector evidence cannot prove the complete modern ruleset. Classic required
-status enforcement was observed off, therefore enforcement remains `UNKNOWN / BLOCKED` rather than
-inferred from CI success.
+Policy requires PR-only main, latest-head checks, no force push/delete and conversation resolution.
+Available connector evidence cannot prove the complete modern ruleset. Successful Actions runs are not
+ruleset-enforcement evidence, therefore GitHub settings enforcement remains `UNKNOWN / RELEASE
+BLOCKER`.
 
 ## CyberCore boundary
 
@@ -298,8 +276,7 @@ CyberCore != Runner
 CyberCore != Verifier
 ```
 
-CyberCore remains blocked until the canonical composition, reusable governed write orchestration,
-exact-head gates and final reconciliation audit pass.
+CyberCore remains blocked until final exact-head gates and the new reconciliation audit pass.
 
 ## Related documents
 
