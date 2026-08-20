@@ -2,13 +2,16 @@
 
 | Field | Value |
 |---|---|
-| Document status | Current + target trust-boundary inventory |
-| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` |
+| Document status | Current trust-boundary inventory / reconciliation candidate |
+| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` plus PR #128 |
 | Security posture | deny by default / fail closed |
 | Production effects | BLOCKED until separately released |
 | Update trigger | any material identity, authority, execution, persistence, evidence or integration change |
 
 ## Canonical authority and execution topology
+
+The system has one shared authority/dispatch prefix and **profile-specific terminals**. There is no
+universal mandatory Receipt→Proof→Cell tail.
 
 ```text
 Untrusted client / agent intent
@@ -33,24 +36,42 @@ ExecutionEpoch + ExecutionLease/v1 + CurrentExecutionFence
         ↓
 ExecutionCapsule/v1
         ↓
-RunnerIdentity + RunnerBoundary
+immutable capability→terminal profile binding
         ↓
-CredentialAccessDecision + RuntimeActivation
-        ↓
-bounded Handler / provider effect
-        ↓
-ExecutionReceipt/v2
-        ↓
-SEPARATE independent Verifier identity/credential/readback
-        ↓
-ObservedPostState + VerificationStrength + VerificationResult/v1
-        ↓
-OperationProof/v2
-        ↓
-OperationCell/v1
+profile-specific runtime terminal
 ```
 
-### Non-negotiable authority boundary
+### READ_ONLY_VERIFIED
+
+```text
+RunnerIdentity + READ RunnerBoundary
+→ READ CredentialAccessDecision + RuntimeActivation
+→ Runner provider observation
+→ durable completion
+→ SEPARATE independent Verifier identity/credential/readback
+→ ObservedPostState/v1
+→ VerificationStrength/v1
+→ VerificationResult/v1
+→ STOP
+```
+
+### BOUNDED_MUTATION_VERIFIED
+
+A completed authorized mutation may continue:
+
+```text
+write Runner/boundary/credential/runtime
+→ exact provider effect
+→ ExecutionReceipt/v2
+→ SEPARATE independent Verifier readback
+→ VerificationResult/v1
+→ OperationProof/v2
+→ OperationCell/v1
+```
+
+PR #128 does not execute a new bounded mutation. Its A09 runtime ends at effect preflight.
+
+## Non-negotiable authority boundary
 
 ```text
 Control plane consumes ExecutionGrant before Dispatch.
@@ -58,13 +79,13 @@ Runner does NOT issue ExecutionGrant.
 Runner does NOT consume ExecutionGrant.
 Runner does NOT allocate a parallel authority epoch.
 Dispatch does NOT create authority.
+Terminal profile strength is NOT caller-selected.
+Stale in-memory Principal state is NOT canonical permission authority.
+Preflight does NOT equal provider effect.
 ExecutionReceipt does NOT create VerificationResult.
-OperationProof does NOT create new execution authority.
+OperationProof does NOT create execution authority.
 OperationCell does NOT widen authority.
 ```
-
-Historical wording that placed one-time Grant consumption inside Runner admission is superseded by the
-merged Phase-C durable authority chain.
 
 ## TB-01 — HTTP client to control plane
 
@@ -73,8 +94,8 @@ merged Phase-C durable authority chain.
 Controls include trusted-host validation, browser security headers, input bounds, authenticated
 requests, rate limiting, permission checks and environment classification.
 
-Residual boundary: current deployment is not an unrestricted public production release and external
-enterprise identity remains unreleased.
+Residual boundary: the public API does not yet expose a new canonical VOP operation endpoint and the
+product is not an unrestricted production release.
 
 ## TB-02 — Credential/session material
 
@@ -92,26 +113,39 @@ Residual boundary: no released OIDC/MFA/tenant-specific enterprise key system.
 
 **Status: VERIFIED for SQLite.**
 
-SQLite migrations are checksum-governed and current through schema 13. Durable authority/dispatch
-state includes AuthorizationSnapshot, ExecutionGrant, grant consumption, Outbox, Inbox and
-ExecutionEpoch/Lease persistence.
+SQLite migrations are checksum-governed through schema 13. Durable state includes
+AuthorizationSnapshot, ExecutionGrant, grant consumption, Outbox, Inbox and ExecutionEpoch/Lease.
 
-Residual boundary: SQLite is the released single-node backend. PostgreSQL remains fail closed until a
-separate adapter/concurrency/operations release gate.
+Residual boundary: PostgreSQL remains fail-closed until separate adapter/concurrency/operations gates.
 
-## TB-04 — AuthorizationSnapshot / ExecutionGrant
+## TB-04 — Product permission authority
 
-**Status: IMPLEMENTED component layer.**
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
 
-Snapshot and Grant contracts are immutable/content-bound. Grant issuance cannot be reconstructed from
-mutable UI state after the fact. ONE_TIME Grant consumption is a **control-plane transaction**, not a
-Runner action.
+`DatabasePermissionAuthority` shares the exact ProductService database and rereads current user,
+workspace, active-state and role data for every canonical permission decision.
 
-Residual boundary: these components are not yet one canonical FastAPI ProductComposition lifecycle.
+Controls:
 
-## TB-05 — Durable Dispatch / coordination
+- stale `Principal` role does not preserve stronger permission after DB role change;
+- inactive/deleted user state fails closed;
+- workspace/environment bindings are checked against current database state;
+- ProductComposition runtime factory cannot substitute another permission-authority instance.
 
-**Status: IMPLEMENTED component/pilot layer.**
+Residual boundary: this is candidate source/test evidence until final exact-head gates close.
+
+## TB-05 — AuthorizationSnapshot / ExecutionGrant
+
+**Status: IMPLEMENTED component + canonical composition seam.**
+
+Snapshot and Grant contracts are immutable/content-bound. ONE_TIME Grant consumption is a
+**control-plane transaction** before Dispatch.
+
+Residual boundary: component/composition readiness does not authorize provider effects.
+
+## TB-06 — Durable Dispatch / coordination
+
+**Status: IMPLEMENTED component + canonical composition seam.**
 
 ```text
 GrantConsumptionWitness
@@ -130,72 +164,101 @@ Controls:
 - stale-attempt fencing;
 - no authority creation during dispatch.
 
-Residual boundary: current product API does not yet expose this as the sole execution path.
+## TB-07 — Capability terminal-profile authority
 
-## TB-06 — Isolated Runner
+**Status: IMPLEMENTED CANDIDATE in PR #128.**
 
-**Status: VERIFIED for bounded D4b/E3/E4b pilot scopes; product composition remains partial.**
+An immutable registry binds the exact `capability_definition_identity` and capability to one terminal
+profile. `CanonicalOperationPipeline.prepare()` has no caller-supplied `terminal_profile` argument.
 
-Runner authority is `bounded_execution_only`.
+Residual boundary: future capabilities must be explicitly registered; absence/mismatch fails closed.
 
-Controls demonstrated in bounded pilots include:
+## TB-08 — Isolated READ Runner
 
-- exact RunnerIdentity/RunnerBoundary binding;
-- current lease/fence checks;
-- read-only filesystem/rootfs constraints where applicable;
-- capability/target-specific provider transport;
-- narrowed network policy;
-- no generic authority issuance;
-- no Grant re-consumption.
+**Status: VERIFIED pilot primitives + IMPLEMENTED canonical terminal composition.**
 
-Residual boundary: current live pilot workflows are not the general product runtime and production
-mutation remains separately blocked.
+Runner authority remains `bounded_execution_only`.
 
-## TB-07 — Provider WRITE effect
+Controls include exact lease/capsule/Runner binding, current-fence checks, READ-only runtime profile,
+narrowed network/provider access and no grant issuance/re-consumption.
 
-**Status: VERIFIED only for historical bounded F4b/F6b staging pilots.**
+`CanonicalGitHubReadTerminal` composes these controls from `CanonicalPreparedExecution`.
 
-Historical write/rollback controls include exact target binding, one mutation, no automatic mutation
-retry, ephemeral credential delivery, current-fence preflight and separately governed rollback.
+## TB-09 — Independent Verifier
 
-Residual boundary:
+**Status: VERIFIED bounded GitHub readback + IMPLEMENTED canonical READ terminal.**
 
-- F4b workflow on current main is hard-bound to historical PR #120/main identity;
-- historical F6b rollback workflow is evidence, not a reusable current product entrypoint;
-- no provider mutation is authorized by repository presence alone.
+Verifier uses separate identity, provider-instance and credential boundaries. Only the independent
+verification path produces `VerificationResult/v1` and strength classification.
 
-## TB-08 — ExecutionReceipt / evidence ledger
+```text
+Runner credential != Verifier credential
+Runner observation != Verifier observation
+Execution success != VerificationResult
+```
 
-**Status: VERIFIED for contract and ledger integrity scopes.**
+READ terminates at `VerificationResult/v1`; Receipt/v2, Proof/v2 and Cell/v1 are not required.
 
-`ExecutionReceipt/v2` records what execution claims it performed. Receipt/hash-chain integrity can be
-`PASS` while independent provider verification is still `UNKNOWN` or pending.
+## TB-10 — Provider WRITE effect
+
+**Status: VERIFIED only for historical bounded F4b/F6b staging effects. New A09 effect = NOT EXECUTED.**
+
+PR #128 adds reusable CREATE_REF preparation:
+
+```text
+CanonicalPreparedExecution
+→ exact write bindings
+→ scoped credential decision metadata
+→ exact provider request
+→ WriteEffectPreflight/v1
+→ STOP
+```
+
+Controls:
+
+- no provider transport in A09 orchestration;
+- no credential secret argument/serialization;
+- no historical PR120/ref/SHA hard-bind;
+- exact current lease/target/fence binding;
+- future mutation requires separate authorization/effect step.
+
+Historical F4b execution remains evidence only and is not current effect authority.
+
+## TB-11 — Rollback effect
+
+**Status: VERIFIED historical F6b effect; reusable A09 rollback preparation IMPLEMENTED / NOT EXECUTED.**
+
+```text
+CanonicalPreparedExecution
+→ exact rollback provenance
+→ current pre-delete observation
+→ rollback Runner/boundary/credential metadata
+→ current-fence recheck
+→ RollbackWriteEffectPreflight/v2
+→ STOP
+```
+
+There is no GitHub DELETE transport call inside A09. A prepared rollback does not authorize or prove
+rollback execution.
+
+## TB-12 — ExecutionReceipt / evidence ledger
+
+**Status: VERIFIED contract and ledger-integrity scope.**
+
+`ExecutionReceipt/v2` is bounded mutation execution evidence. Receipt/hash-chain integrity may be
+`PASS` while provider verification is still `UNKNOWN` or `NOT_EVALUATED`.
 
 ```text
 ExecutionReceipt != VerificationResult
 receipt chain integrity != independent verification
 ```
 
-Residual boundary: local ledger integrity is not an external signed anchor and does not independently
-prove provider state.
-
-## TB-09 — Independent Verifier
-
-**Status: VERIFIED for bounded GitHub readback scope.**
-
-Verifier uses a separate identity/instance/credential boundary and READ-only provider observation.
-Only the independent verification path may produce `VerificationResult/v1` and its strength class.
-
-Residual boundary: current FastAPI ProductComposition does not yet bind every product execution to
-this verifier path.
-
-## TB-10 — OperationProof / OperationCell
+## TB-13 — OperationProof / OperationCell
 
 **Status: VERIFIED contract + historical F6b instance scope.**
 
-`OperationProof/v2` binds the current ExecutionReceipt/v2 + independent verification lineage.
-`OperationCell/v1` is a minimal provider/lineage-neutral stable atom over a canonically revalidated
-OperationProof/v2.
+`OperationProof/v2` binds mutation Receipt/v2 + independent verification lineage. `OperationCell/v1`
+is a stable atom over a canonically revalidated Proof/v2.
 
 ```text
 VerificationResult != OperationProof
@@ -203,31 +266,33 @@ OperationProof != OperationCell
 OperationCell != new authority
 ```
 
-Residual boundary: proof/cell emission is not yet automatic for the legacy ProductComposition path.
+Residual boundary: A09 preflight preparation cannot emit or claim a new Proof/Cell because no new
+provider effect/Receipt/VerificationResult exists.
 
-## TB-11 — ProductComposition compatibility boundary
+## TB-14 — ProductComposition compatibility boundary
 
-**Status: PARTIAL / reconciliation required.**
+**Status: IMPLEMENTED CANDIDATE with explicit compatibility surface.**
 
-The current product still composes the legacy ExecutionService surface for existing API behavior while
-the newer VOP authority/dispatch/Runner/verification/proof/cell components exist beside it.
+`ProductComposition` now owns the database-backed permission authority and may own an explicit
+`CanonicalOperationRuntime` created by a runtime factory sharing the exact ProductService DB/authority.
 
-The next architecture slice must converge to one canonical runtime path without silently deleting
-legacy behavior before replacement tests prove the required product surface.
+Without that factory, canonical runtime is absent/fail-closed. Legacy `ExecutionService` remains an
+explicit existing API compatibility surface; it is not silently treated as canonical VOP authority.
 
-## TB-12 — GitHub repository governance
+Residual boundary: a canonical public operation API is not yet claimed.
 
-**Status: UNKNOWN / BLOCKED as an enforcement boundary.**
+## TB-15 — GitHub repository governance
 
-Repository policy requires PR-only main, required `ci / verify`, latest-head checks, no force push,
-no branch deletion and conversation resolution. Classic required-status metadata is observed off; a
-modern ruleset is not independently proven by current connector evidence.
+**Status: UNKNOWN / RELEASE BLOCKER as an enforcement boundary.**
 
-Until live settings prove every control, GitHub must not be treated as a completed authority boundary.
+Repository policy requires PR-only main, latest-head checks, no force push/delete and conversation
+resolution. Current connector evidence does not independently prove the complete modern ruleset.
 
-## TB-13 — Security Intelligence / CyberCore
+Successful Actions runs are not Settings/ruleset enforcement evidence.
 
-**Status: IMPLEMENTED metadata boundary for R-SI1.1; CyberCore integration BLOCKED pending reconciliation.**
+## TB-16 — Security Intelligence / CyberCore
+
+**Status: R-SI1.1 metadata IMPLEMENTED; CyberCore integration BLOCKED pending final reconciliation.**
 
 ```text
 Security Intelligence = observations/classification/context/proposals
@@ -238,15 +303,16 @@ neither = Runner
 neither = Verifier
 ```
 
-Any later active effect still flows through the same canonical V-One authority and verification
-lineage.
+Any future active effect must enter the same canonical capability-bound V-One authority/runtime path.
 
 ## Production gate
 
 ```text
 VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+NEW_A09_CREATE_REF_EFFECT=NO
+NEW_A09_DELETE_REF_EFFECT=NO
 UNRESTRICTED_PRODUCTION=BLOCKED
 ```
 
-No CI pass, historical live pilot, proof, cell, Security Intelligence metadata or future CyberCore
-proposal may bypass that gate.
+No CI pass, preflight, historical live pilot, proof, cell, Security Intelligence metadata or future
+CyberCore proposal may bypass that gate.
