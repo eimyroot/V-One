@@ -8,7 +8,7 @@ from . import statements as sql
 from . import workspace_membership_statements as membership_sql
 from .approval_policy import VALID_ENVIRONMENTS
 from .evidence_primitives import canonical_json
-from .persistence import ProductDatabaseAdapter
+from .persistence import DatabaseConnection, ProductDatabaseAdapter
 from .security import ROLE_PERMISSIONS, Principal
 
 PERMISSION_DECISION_TYPE: Final = "permission-decision/v1"
@@ -146,6 +146,66 @@ class PermissionAuthority(Protocol):
     def decide(self, query: PermissionQuery) -> PermissionDecision: ...
 
 
+def decide_database_permission_on_connection(
+    connection: DatabaseConnection,
+    *,
+    query: PermissionQuery,
+    authority_revision: str,
+) -> PermissionDecision:
+    """Evaluate the canonical SQLite user/role/workspace/membership permission on one connection.
+
+    Callers that already own a serialized transaction use this helper so a membership/role mutation
+    cannot race between live authority revalidation and the durable transition guarded by that
+    transaction. It is the same evaluator used by DatabasePermissionAuthority.decide().
+    """
+
+    if not isinstance(query, PermissionQuery):
+        raise ValueError("query must be PermissionQuery")
+    authority_revision = _require_text(authority_revision, field="authority_revision")
+
+    user = connection.execute(sql.SELECT_ACTIVE_USER, (query.actor_id,)).fetchone()
+    workspace = connection.execute(
+        sql.SELECT_WORKSPACE_CONTEXT,
+        (query.workspace_id,),
+    ).fetchone()
+    membership = connection.execute(
+        membership_sql.SELECT_WORKSPACE_MEMBERSHIP,
+        (query.workspace_id, query.actor_id),
+    ).fetchone()
+
+    granted = False
+    if user is None:
+        reason = "ACTOR_NOT_FOUND"
+    elif not int(user["active"]):
+        reason = "ACTOR_INACTIVE"
+    else:
+        role = str(user["role"])
+        permissions = ROLE_PERMISSIONS.get(role)
+        if permissions is None:
+            reason = "ACTOR_ROLE_INVALID"
+        elif workspace is None:
+            reason = "WORKSPACE_NOT_FOUND"
+        elif str(workspace["environment"]) != query.environment:
+            reason = "WORKSPACE_ENVIRONMENT_MISMATCH"
+        elif membership is None:
+            reason = "WORKSPACE_MEMBERSHIP_REQUIRED"
+        else:
+            granted = "*" in permissions or query.permission in permissions
+            reason = (
+                "DATABASE_ROLE_PERMISSION_GRANTED"
+                if granted
+                else "DATABASE_ROLE_PERMISSION_DENIED"
+            )
+
+    return PermissionDecision.create(
+        query=query,
+        granted=granted,
+        reason=reason,
+        authority_revision=authority_revision,
+        scope_model=DATABASE_PERMISSION_SCOPE_MODEL,
+    )
+
+
 class CurrentPrincipalPermissionAuthority:
     """Adapter over one already-authenticated Principal role model.
 
@@ -188,7 +248,6 @@ class DatabasePermissionAuthority:
     Role, active state, workspace environment and exact user↔workspace membership are read from the
     product database on every decision. A stale/client-supplied Principal cannot grant authority and a
     globally privileged role cannot cross into a workspace where it has no current membership.
-    Membership revocation therefore takes effect without rebuilding the canonical runtime.
     """
 
     def __init__(
@@ -208,46 +267,9 @@ class DatabasePermissionAuthority:
     def decide(self, query: PermissionQuery) -> PermissionDecision:
         if not isinstance(query, PermissionQuery):
             raise ValueError("query must be PermissionQuery")
-
         with self.db.connect() as connection:
-            user = connection.execute(sql.SELECT_ACTIVE_USER, (query.actor_id,)).fetchone()
-            workspace = connection.execute(
-                sql.SELECT_WORKSPACE_CONTEXT,
-                (query.workspace_id,),
-            ).fetchone()
-            membership = connection.execute(
-                membership_sql.SELECT_WORKSPACE_MEMBERSHIP,
-                (query.workspace_id, query.actor_id),
-            ).fetchone()
-
-        granted = False
-        if user is None:
-            reason = "ACTOR_NOT_FOUND"
-        elif not int(user["active"]):
-            reason = "ACTOR_INACTIVE"
-        else:
-            role = str(user["role"])
-            permissions = ROLE_PERMISSIONS.get(role)
-            if permissions is None:
-                reason = "ACTOR_ROLE_INVALID"
-            elif workspace is None:
-                reason = "WORKSPACE_NOT_FOUND"
-            elif str(workspace["environment"]) != query.environment:
-                reason = "WORKSPACE_ENVIRONMENT_MISMATCH"
-            elif membership is None:
-                reason = "WORKSPACE_MEMBERSHIP_REQUIRED"
-            else:
-                granted = "*" in permissions or query.permission in permissions
-                reason = (
-                    "DATABASE_ROLE_PERMISSION_GRANTED"
-                    if granted
-                    else "DATABASE_ROLE_PERMISSION_DENIED"
-                )
-
-        return PermissionDecision.create(
-            query=query,
-            granted=granted,
-            reason=reason,
-            authority_revision=self.authority_revision,
-            scope_model=DATABASE_PERMISSION_SCOPE_MODEL,
-        )
+            return decide_database_permission_on_connection(
+                connection,
+                query=query,
+                authority_revision=self.authority_revision,
+            )
