@@ -38,6 +38,13 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 REQUIRED_SCHEMA: dict[str, set[str]] = {
     "users": {"id", "username", "password_hash", "role", "active", "created_at"},
     "workspaces": {"id", "name", "environment", "created_at"},
+    "workspace_memberships": {
+        "workspace_id",
+        "user_id",
+        "membership_role",
+        "created_by",
+        "created_at",
+    },
     "change_requests": {
         "id",
         "workspace_id",
@@ -138,6 +145,7 @@ REQUIRED_INDEXES = {
     "idx_active_sessions_user_expiry",
     "idx_authorization_snapshots_request",
     "idx_authorization_snapshots_workspace_environment",
+    "idx_workspace_memberships_user",
 }
 REQUIRED_TRIGGERS = {
     "trg_change_requests_environment_insert",
@@ -158,6 +166,8 @@ REQUIRED_TRIGGERS = {
     "trg_authorization_snapshots_request_binding_insert",
     "trg_authorization_snapshots_immutable_update",
     "trg_authorization_snapshots_immutable_delete",
+    "trg_workspace_memberships_role_insert",
+    "trg_workspace_memberships_role_update",
 }
 SQLITE_JOURNAL_MODE_RETRY_SECONDS = 5.0
 SQLITE_BUSY_TIMEOUT_MS = 5_000
