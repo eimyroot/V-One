@@ -11,8 +11,10 @@ from .authoritative_grant import ExecutionGrantV2, GrantRevocationEpochAuthority
 from .authorization_snapshot import AuthorizationSnapshot
 from .evidence_primitives import canonical_json, new_id
 from .execution_conformance import ExecutionConformanceAuthority, ExecutionConformanceWitness
+from .execution_contract import REQUIRED_EXECUTION_PERMISSION
 from .monotonic_authority import AuthorityConstraint
 from .operational_safety import OperationalSafetyService
+from .permission_authority import PermissionQuery, decide_database_permission_on_connection
 from .persistence import (
     DatabaseConnection,
     DatabaseIntegrityError,
@@ -24,6 +26,7 @@ from .trusted_clock import ClockWitness, TrustedClockAuthority
 GRANT_CONSUMPTION_WITNESS_TYPE: Final = "grant-consumption-witness/v1"
 SQLITE_SERIALIZATION_CONTRACT: Final = "sqlite-begin-immediate/v1"
 MINIMUM_SCHEMA_VERSION: Final = 10
+LIVE_PERMISSION_AUTHORITY_REVISION: Final = "database-permission/durable-grant-live-r1"
 
 _REQUIRED_TABLE_COLUMNS: Final = {
     "execution_grants_v2": {
@@ -392,7 +395,9 @@ class GrantConsumptionDenied(PermissionError):
 class DurableGrantService:
     """Durably issue/store and atomically consume authoritative ExecutionGrant/v2.
 
-    This is an authority-consumption boundary only. It does not dispatch or execute work.
+    This is an authority-consumption boundary only. It does not dispatch or execute work. Current
+    database permission (including exact workspace membership) is revalidated in the same SQLite
+    serialized transaction used for both durable store and one-time consumption.
     """
 
     def __init__(
@@ -673,6 +678,8 @@ class DurableGrantService:
         if self.operational_safety_service.is_active(connection):
             self._deny("EMERGENCY_STOP_ACTIVE")
 
+        self._assert_live_permission(connection, grant=grant)
+
         try:
             live_epoch = self.revocation_authority.current_epoch(
                 connection,
@@ -687,6 +694,45 @@ class DurableGrantService:
         if live_epoch != grant.revocation_epoch:
             self._deny("REVOCATION_EPOCH_CHANGED")
         return live_epoch
+
+    def _assert_live_permission(
+        self,
+        connection: DatabaseConnection,
+        *,
+        grant: ExecutionGrantV2,
+    ) -> None:
+        if grant.required_permission != REQUIRED_EXECUTION_PERMISSION:
+            self._deny("GRANT_PERMISSION_INVALID")
+        query = PermissionQuery(
+            actor_id=grant.actor_id,
+            workspace_id=grant.workspace_id,
+            environment=grant.environment,
+            permission=grant.required_permission,
+        )
+        try:
+            decision = decide_database_permission_on_connection(
+                connection,
+                query=query,
+                authority_revision=LIVE_PERMISSION_AUTHORITY_REVISION,
+            )
+        except (LookupError, PermissionError, RuntimeError, TypeError, ValueError) as exc:
+            self._deny("EXECUTION_PERMISSION_DENIED", cause=exc)
+        expected = (
+            grant.actor_id,
+            grant.workspace_id,
+            grant.environment,
+            grant.required_permission,
+        )
+        actual = (
+            decision.actor_id,
+            decision.workspace_id,
+            decision.environment,
+            decision.permission,
+        )
+        if actual != expected:
+            self._deny("EXECUTION_PERMISSION_BINDING_MISMATCH")
+        if not decision.granted:
+            self._deny("EXECUTION_PERMISSION_DENIED")
 
     def _fresh_conformance(
         self,
