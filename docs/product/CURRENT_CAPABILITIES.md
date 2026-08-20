@@ -9,7 +9,7 @@
 | Reconciliation candidate | PR #128 / `feat/reconciliation-p0-p1-r1` |
 | Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
-| SQLite schema | version 13 |
+| SQLite schema | version 14 |
 | Production effects | disabled |
 | Release classification | development / governed pilot, not unrestricted production |
 
@@ -41,8 +41,9 @@ Is it released/deployed?
 | RBAC and approval separation | VERIFIED | governance/service tests | not full organization/tenant policy |
 | Approval policy decision model | VERIFIED | deterministic policy-decision tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not implemented |
 | Policy Decision Graph | PROPOSED | ADR-0003 design only | organization-scoped policy activation is not runtime authority |
-| DatabasePermissionAuthority | IMPLEMENTED | PR #128 adversarial/system tests | SQLite product backend; not a release claim |
+| DatabasePermissionAuthority | IMPLEMENTED | PR #128 adversarial/system tests | requires current role, active state, workspace/environment and membership |
 | Current-role/current-active permission reevaluation | IMPLEMENTED | role/state mutation tests | applies to canonical runtime authority path |
+| Workspace membership scope | IMPLEMENTED | schema 0014 + membership/revocation tests | legacy schema-13 workspaces are not backfilled; explicit admin membership required |
 | Workspace environment invariants | VERIFIED | service + DB-trigger tests | SQLite pilot backend |
 | Change-request lifecycle | VERIFIED | change-request/product tests | legacy API compatibility surface remains |
 | VOP canonical vocabulary R2 | IMPLEMENTED | machine registry + terminology tests | final exact-head reconciliation gate pending |
@@ -82,7 +83,7 @@ Is it released/deployed?
 | OperationCell/v1 | VERIFIED | current contract/tests + historical F6b digest | mutation-only stable operation atom |
 | Unified authority→profile runtime composition | IMPLEMENTED | ProductComposition + canonical runtime tests | default provider pack off; canonical public API later |
 | Receipt/audit hash-chain integrity | VERIFIED | ledger verification tests | chain integrity != independent provider verification |
-| SQLite migrations | VERIFIED | migrations 0001–0013 + integrity tests | single-node released backend |
+| SQLite migrations | VERIFIED | migrations 0001–0014 + integrity tests | single-node released backend |
 | PostgreSQL backend | BLOCKED | fail-closed startup contract | adapter/concurrency/operations gates not released |
 | OIDC identity provider | BLOCKED | fail-closed configuration tests | no released external identity runtime |
 | Security Intelligence R-SI1.1 | IMPLEMENTED | metadata + tests | intelligence-only; no execution/proof authority |
@@ -106,6 +107,8 @@ ProductService database
         ↓
 DatabasePermissionAuthority
         ↓
+current user + role + active state + workspace membership
+        ↓
 CanonicalOperationPipeline
         ↓
 immutable capability→terminal profile
@@ -121,7 +124,8 @@ CanonicalOperationRuntime
 ```
 
 The runtime factory must share the exact ProductService database and permission-authority instance.
-Without an explicit provider/runtime pack the default composition remains fail-closed.
+Without an explicit provider/runtime pack the default composition remains fail-closed. Workspace
+membership is a scope check, not activation of the separately PROPOSED Solo/Team/Regulated policy.
 
 ## Verified historical complete operation atom
 
