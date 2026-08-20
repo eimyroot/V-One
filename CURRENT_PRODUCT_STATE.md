@@ -58,13 +58,14 @@ RELEASED / DEPLOYED       = separately governed states
 | Default provider runtime pack | **DISABLED / FAIL-CLOSED** |
 | Canonical public operation API | **NOT YET SURFACED** |
 | Capability→terminal profile authority | **IMPLEMENTED CANDIDATE; caller cannot strengthen profile** |
-| Runtime/database-backed permission authority | **IMPLEMENTED CANDIDATE** |
+| Runtime/database-backed permission authority | **IMPLEMENTED CANDIDATE; current role + active state + workspace membership** |
+| Workspace membership scope | **IMPLEMENTED CANDIDATE; schema 14, no legacy inference/backfill** |
 | READ Runner→independent Verifier terminal | **IMPLEMENTED CANDIDATE; live pilot primitives already VERIFIED** |
 | Reusable CREATE_REF WRITE orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
 | Reusable DELETE_REF rollback orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
 | Canonical VOP language | **R2 RECONCILIATION CANDIDATE** |
 | UI receipt/verification truth | **FIXED IN PR #128; final exact-head gate pending** |
-| SQLite persistence | **IMPLEMENTED through schema 13** |
+| SQLite persistence | **IMPLEMENTED through schema 14** |
 | OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; historical F6b instance VERIFIED** |
 | OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; historical F6b instance VERIFIED** |
 | Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
@@ -111,9 +112,17 @@ profile by supplying a stronger string to `CanonicalOperationPipeline.prepare()`
 ## Runtime permission authority
 
 `DatabasePermissionAuthority` is the current candidate permission source for canonical product
-composition. It reads current user/workspace state from the same ProductService database for every
-permission decision, including current role and active state. A stale in-memory `Principal` therefore
-does not retain a stronger permission after the backing role/state changes.
+composition. Every permission decision re-reads the same ProductService database and requires the
+current active user, current global role permissions, exact workspace/environment and an exact current
+user↔workspace membership. A stale in-memory `Principal`, a later role downgrade, deactivation or
+membership revocation therefore cannot preserve stronger canonical authority.
+
+Global role still answers **what** a principal may do; current membership answers **where** that
+permission may be considered. Membership role (`owner`/`member`) controls membership management and
+does not activate the separately PROPOSED Solo/Team/Regulated organization-policy semantics.
+Migration `0014_workspace_memberships.sql` deliberately does not infer memberships for historical
+schema-13 workspaces; upgraded legacy workspaces remain fail-closed until an administrator records
+membership explicitly.
 
 `ProductComposition` owns this database-backed authority. A canonical runtime factory is rejected if
 it attempts to use another database or another permission-authority instance.
@@ -245,6 +254,7 @@ Release != Deploy
 | ExecutionEpoch/Lease + DurableCoordinator | IMPLEMENTED | canonical pipeline | component/pilot |
 | Capability terminal allowlist | IMPLEMENTED | canonical pipeline | system tests |
 | Database permission authority | IMPLEMENTED | ProductComposition | system tests |
+| Workspace membership scope | IMPLEMENTED | DatabasePermissionAuthority | schema-14/membership tests; no live provider claim |
 | Capsule / Runner identity/boundary | IMPLEMENTED | profile terminals | pilot/tests |
 | READ runtime activation | IMPLEMENTED | CanonicalGitHubReadTerminal | D4b |
 | Independent verifier / VerificationResult | IMPLEMENTED | CanonicalGitHubReadTerminal | E3/E4b/F6b |
@@ -288,7 +298,8 @@ reconciliation audit = completed
 
 Intermediate green runs are useful regression evidence but do not attest later candidate commits.
 The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
-authority and A09 modules/tests so those layers cannot silently fall outside future readiness checks.
+authority, workspace membership boundary and A09 modules/tests so those layers cannot silently fall
+outside future readiness checks.
 
 ## UI truth
 
