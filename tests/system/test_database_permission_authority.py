@@ -38,23 +38,41 @@ def product(tmp_path: Path) -> tuple[ProductService, dict[str, str]]:
         password="VeryStrongViewerPassword1!",
         role="viewer",
     )
+    outsider = service.create_user(
+        actor_id=bootstrap["user_id"],
+        username="outsider",
+        password="VeryStrongOutsiderPassword1!",
+        role="operator",
+    )
+    service.workspace_service.add_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        user_id=operator["id"],
+    )
+    service.workspace_service.add_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=bootstrap["workspace_id"],
+        user_id=viewer["id"],
+    )
     staging = service.create_workspace(
         actor_id=bootstrap["user_id"],
         name="Staging",
         environment="staging",
     )
     return service, {
+        "admin": bootstrap["user_id"],
         "local_workspace": bootstrap["workspace_id"],
         "staging_workspace": staging["id"],
         "operator": operator["id"],
         "viewer": viewer["id"],
+        "outsider": outsider["id"],
     }
 
 
 def authority(service: ProductService) -> DatabasePermissionAuthority:
     return DatabasePermissionAuthority(
         database=service.db,
-        authority_revision="database-permission/test-r1",
+        authority_revision="database-permission/test-r2",
     )
 
 
@@ -76,10 +94,10 @@ def test_operator_permission_is_resolved_from_current_database_state(tmp_path: P
     assert decision.granted is True
     assert decision.reason == "DATABASE_ROLE_PERMISSION_GRANTED"
     assert decision.scope_model == DATABASE_PERMISSION_SCOPE_MODEL
-    assert decision.authority_revision == "database-permission/test-r1"
+    assert decision.authority_revision == "database-permission/test-r2"
 
 
-def test_viewer_is_denied_even_when_caller_requests_execution_permission(tmp_path: Path) -> None:
+def test_viewer_is_denied_even_with_current_workspace_membership(tmp_path: Path) -> None:
     service, ids = product(tmp_path)
     decision = authority(service).decide(
         query(actor_id=ids["viewer"], workspace_id=ids["local_workspace"])
@@ -87,6 +105,37 @@ def test_viewer_is_denied_even_when_caller_requests_execution_permission(tmp_pat
 
     assert decision.granted is False
     assert decision.reason == "DATABASE_ROLE_PERMISSION_DENIED"
+
+
+def test_operator_without_workspace_membership_is_denied(tmp_path: Path) -> None:
+    service, ids = product(tmp_path)
+    decision = authority(service).decide(
+        query(actor_id=ids["outsider"], workspace_id=ids["local_workspace"])
+    )
+
+    assert decision.granted is False
+    assert decision.reason == "WORKSPACE_MEMBERSHIP_REQUIRED"
+
+
+def test_membership_revocation_is_observed_without_rebuilding_authority(tmp_path: Path) -> None:
+    service, ids = product(tmp_path)
+    subject = authority(service)
+    initial = subject.decide(
+        query(actor_id=ids["operator"], workspace_id=ids["local_workspace"])
+    )
+    assert initial.granted is True
+
+    service.workspace_service.remove_member(
+        actor_id=ids["admin"],
+        workspace_id=ids["local_workspace"],
+        user_id=ids["operator"],
+    )
+
+    revoked = subject.decide(
+        query(actor_id=ids["operator"], workspace_id=ids["local_workspace"])
+    )
+    assert revoked.granted is False
+    assert revoked.reason == "WORKSPACE_MEMBERSHIP_REQUIRED"
 
 
 def test_inactive_actor_is_denied_from_live_database_state(tmp_path: Path) -> None:
@@ -118,7 +167,7 @@ def test_missing_actor_and_workspace_fail_closed(tmp_path: Path) -> None:
     assert missing_workspace.reason == "WORKSPACE_NOT_FOUND"
 
 
-def test_workspace_environment_mismatch_is_denied(tmp_path: Path) -> None:
+def test_workspace_environment_mismatch_is_denied_before_membership(tmp_path: Path) -> None:
     service, ids = product(tmp_path)
     decision = authority(service).decide(
         query(
