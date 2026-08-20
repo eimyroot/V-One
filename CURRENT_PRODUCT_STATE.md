@@ -38,6 +38,10 @@ PRODUCT_IMAGE_ID: sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f0
 It does **not** attest the later reconciliation baseline or later source changes. Those later trees
 require their own commit-bound CI/pilot evidence.
 
+Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains retained
+only as ADR-0008 evidence-index provenance. It is **not** the current Git baseline and does not attest
+this reconciliation candidate.
+
 ## How status is represented
 
 A V-One capability has separate dimensions. They MUST NOT be collapsed into one overloaded status:
