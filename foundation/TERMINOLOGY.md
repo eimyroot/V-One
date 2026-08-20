@@ -63,8 +63,7 @@ approval and target facts.
 
 `ExecutionGrant` is the canonical semantic noun. Version-specific behavior must state the schema.
 
-`execution-grant/v1` is historical deterministic representation. The current authoritative runtime
-authority contract is:
+`execution-grant/v1` is historical deterministic representation. The current authoritative runtime authority contract is:
 
 ```text
 execution-grant/v2
