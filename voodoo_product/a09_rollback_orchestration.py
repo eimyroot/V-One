@@ -10,6 +10,7 @@ from .execution_capsule import ImmutableExecutionCapsuleRegistry
 from .execution_conformance import ImmutableHandlerConformanceRegistry
 from .rollback_control import (
     GITHUB_DELETE_REF_CAPABILITY,
+    WRITE_RUNNER_CLASS,
     CredentialAccessDecisionV3,
     CredentialBrokerPolicyV3,
     GitHubDeleteRefConditionContract,
@@ -17,7 +18,6 @@ from .rollback_control import (
     GitHubDeleteRefRequest,
     RollbackWriteRequirement,
     RunnerBoundaryV3,
-    WRITE_RUNNER_CLASS,
 )
 from .rollback_runtime import (
     EphemeralRollbackCredentialDelivery,
