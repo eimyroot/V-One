@@ -5,10 +5,11 @@ from collections.abc import Callable
 from typing import Any
 
 from . import statements as sql
+from . import workspace_membership_statements as membership_sql
 from .audit import AuditLedgerWriter
 from .config import ProductConfig
 from .persistence import ProductDatabaseAdapter
-from .workspace import INSERT_WORKSPACE_MEMBERSHIP, WORKSPACE_OWNER
+from .workspace import WORKSPACE_OWNER
 
 VALID_BOOTSTRAP_ENVIRONMENTS = {"local", "development", "staging", "production"}
 
@@ -78,7 +79,7 @@ class BootstrapService:
                 ),
             )
             connection.execute(
-                INSERT_WORKSPACE_MEMBERSHIP,
+                membership_sql.INSERT_WORKSPACE_MEMBERSHIP,
                 (workspace_id, user_id, WORKSPACE_OWNER, user_id, now),
             )
             self.audit_ledger.append(
