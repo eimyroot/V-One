@@ -44,7 +44,7 @@ legacy schema.
 
 Before upgrade, activate emergency stop and verify both evidence chains, then stop all writers and
 back up the main database, `-wal` and `-shm` files as one set. Keep production effects disabled. Start
-one new instance, require health schema version `13`, verify evidence integrity again, and only then
+one new instance, require health schema version `14`, verify evidence integrity again, and only then
 scale out.
 
 Migration `0003_receipt_sequence.sql` replaces timestamp/random-ID receipt ordering with a database
@@ -127,6 +127,18 @@ deleted and epoch-state rows cannot be deleted. The application additionally con
 reacquisition cannot allocate two successors and a superseded lease cannot record durable completion.
 This migration still does not introduce a concrete RunnerIdentity, credentials, handler invocation or
 provider mutation; those remain later execution-fabric gates.
+
+Migration `0014_workspace_memberships.sql` adds the current user↔workspace scope boundary used by the
+canonical database-backed permission authority. Membership rows bind an existing user to an existing
+workspace as either `owner` or `member`; the schema validates the role vocabulary and indexes user
+lookup. Fresh bootstrap creates the first administrator and bootstrap workspace owner atomically, and
+new workspaces atomically add their creator as owner. Existing schema-13 databases are deliberately
+**not** backfilled: migration does not infer historical memberships from global roles or past activity.
+After upgrade, a legacy workspace therefore remains fail-closed for canonical workspace-scoped
+permission decisions until an administrator explicitly records membership. Global product role still
+defines which permissions a principal may exercise; membership defines the workspace in which those
+permissions may be considered. This migration does not activate the separately PROPOSED Solo/Team/
+Regulated organization policy model.
 
 There are no automated down migrations. If rollout must be reversed and the older binary is not
 compatible with the forward schema, stop all processes and restore the complete pre-migration backup.
