@@ -18,6 +18,8 @@ Untrusted client / agent intent
         ↓
 HTTP security + authenticated principal
         ↓
+current active user + global role + exact workspace membership
+        ↓
 ReviewedOperation + Approval evidence
         ↓
 AuthorizationSnapshot
@@ -81,6 +83,8 @@ Runner does NOT allocate a parallel authority epoch.
 Dispatch does NOT create authority.
 Terminal profile strength is NOT caller-selected.
 Stale in-memory Principal state is NOT canonical permission authority.
+Global role does NOT imply membership in arbitrary workspaces.
+Historical workspace activity does NOT fabricate current membership.
 Preflight does NOT equal provider effect.
 ExecutionReceipt does NOT create VerificationResult.
 OperationProof does NOT create execution authority.
@@ -113,24 +117,35 @@ Residual boundary: no released OIDC/MFA/tenant-specific enterprise key system.
 
 **Status: VERIFIED for SQLite.**
 
-SQLite migrations are checksum-governed through schema 13. Durable state includes
-AuthorizationSnapshot, ExecutionGrant, grant consumption, Outbox, Inbox and ExecutionEpoch/Lease.
+SQLite migrations are checksum-governed through schema 14. Durable state includes
+AuthorizationSnapshot, ExecutionGrant, grant consumption, Outbox, Inbox, ExecutionEpoch/Lease and the
+explicit user↔workspace membership scope required by canonical permission decisions.
+
+Migration 0014 does not infer/backfill historical memberships. A schema-13 workspace upgraded to 14
+has no canonical membership authority until an administrator explicitly records it.
 
 Residual boundary: PostgreSQL remains fail-closed until separate adapter/concurrency/operations gates.
 
-## TB-04 — Product permission authority
+## TB-04 — Product permission and workspace-scope authority
 
 **Status: IMPLEMENTED CANDIDATE in PR #128.**
 
 `DatabasePermissionAuthority` shares the exact ProductService database and rereads current user,
-workspace, active-state and role data for every canonical permission decision.
+active-state, global role permission set, exact workspace/environment and exact user↔workspace
+membership for every canonical permission decision.
 
 Controls:
 
 - stale `Principal` role does not preserve stronger permission after DB role change;
 - inactive/deleted user state fails closed;
 - workspace/environment bindings are checked against current database state;
+- an otherwise privileged global role without workspace membership is denied;
+- membership revocation is effective without rebuilding the authority/runtime;
+- schema-14 migration does not fabricate legacy memberships;
 - ProductComposition runtime factory cannot substitute another permission-authority instance.
+
+Membership role (`owner`/`member`) governs membership management only. It does not activate the
+separately PROPOSED Solo/Team/Regulated organization-policy model.
 
 Residual boundary: this is candidate source/test evidence until final exact-head gates close.
 
