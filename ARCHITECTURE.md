@@ -42,6 +42,9 @@ legacy API compatibility         ProductComposition
 ExecutionService                        |
                                 ProductService database
                                         |
+                                current user/role/active
+                                + workspace membership
+                                        |
                                 DatabasePermissionAuthority
                                         |
                                 CanonicalOperationPipeline
@@ -99,8 +102,18 @@ The caller cannot pass a stronger `terminal_profile` argument to `prepare()`.
 ## Product permission authority
 
 Canonical product composition uses `DatabasePermissionAuthority`, sharing the exact ProductService
-database. Every decision rereads current user/workspace state, including role and active state.
-Stale in-memory principals therefore cannot preserve authority after a backing role/state change.
+database. Every decision rereads the current active user, global role permission set, exact workspace,
+workspace environment and exact current user↔workspace membership. Stale in-memory principals,
+role downgrades, deactivation and membership revocation therefore cannot preserve stronger canonical
+authority.
+
+Global role defines **what** permission is available. Membership defines **where** that permission may
+be considered. Membership role (`owner`/`member`) is only a workspace-scope management primitive and
+does not activate the separately PROPOSED Solo/Team/Regulated organization-policy model.
+
+Migration `0014_workspace_memberships.sql` deliberately does not infer membership for historical
+schema-13 workspaces. Upgraded legacy workspaces remain fail-closed for canonical permission decisions
+until membership is explicitly recorded by an authorized administrator/owner.
 
 A canonical runtime factory is rejected if it uses another database or another permission-authority
 instance. This prevents a compatibility/runtime authority fork.
@@ -219,9 +232,9 @@ replacement belongs in `schema_supersessions`.
 
 ## Persistence
 
-Released backend remains SQLite schema 13 with immutable/checksum-verified migrations, central
-statements, audit/receipt ledgers, snapshots, grants, outbox/inbox and execution epoch/lease state.
-PostgreSQL remains fail-closed/unreleased.
+Released backend remains SQLite schema 14 with immutable/checksum-verified migrations, central
+statements, audit/receipt ledgers, snapshots, grants, outbox/inbox, execution epoch/lease state and
+explicit workspace membership scope. PostgreSQL remains fail-closed/unreleased.
 
 ## Historical verified mutation atom
 
@@ -245,19 +258,21 @@ That historical evidence does not prove or authorize a new A09 provider effect.
 4. Dispatch/Epoch/Lease coordinate but never widen authority.
 5. Runner never issues/consumes grants or self-authorizes.
 6. Terminal profile strength is derived from immutable capability identity, not caller choice.
-7. Current database state, not stale Principal memory, is permission authority for canonical product runtime.
-8. Current fence prevents stale completion/effect authority.
-9. ExecutionReceipt != VerificationResult.
-10. Runner and Verifier remain separated as required by the profile.
-11. READ_ONLY_VERIFIED terminates at VerificationResult/v1 today.
-12. Receipt/v2 and Proof/v2 remain bounded-mutation-specific.
-13. Cell/v1 requires canonical Proof/v2 provenance.
-14. Preflight != provider effect.
-15. Prepared rollback != rollback execution.
-16. Evidence-chain integrity != provider verification.
-17. Unreleased backends/provider packs fail closed.
-18. Production effects remain disabled until separate authorization/release.
-19. Documentation cannot upgrade capability state.
+7. Current database role + active state + exact workspace membership, not stale Principal memory, are canonical permission authority inputs.
+8. Global role permission never implies membership in an arbitrary workspace.
+9. Historical workspace activity never fabricates schema-14 membership.
+10. Current fence prevents stale completion/effect authority.
+11. ExecutionReceipt != VerificationResult.
+12. Runner and Verifier remain separated as required by the profile.
+13. READ_ONLY_VERIFIED terminates at VerificationResult/v1 today.
+14. Receipt/v2 and Proof/v2 remain bounded-mutation-specific.
+15. Cell/v1 requires canonical Proof/v2 provenance.
+16. Preflight != provider effect.
+17. Prepared rollback != rollback execution.
+18. Evidence-chain integrity != provider verification.
+19. Unreleased backends/provider packs fail closed.
+20. Production effects remain disabled until separate authorization/release.
+21. Documentation cannot upgrade capability state.
 
 ## GitHub governance boundary
 
