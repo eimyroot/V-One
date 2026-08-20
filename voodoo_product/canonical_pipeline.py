@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from .dispatch_envelope import DispatchEnvelope
 from .monotonic_authority import AuthorityConstraint, AuthorityScope
+from .terminal_profile import ImmutableCapabilityTerminalProfileRegistry
 from .vop_vocabulary import OPERATION_TERMINAL_PROFILES
 
 
@@ -38,6 +39,15 @@ class _Coordinator(Protocol):
     def admit(self, *, envelope: DispatchEnvelope) -> object: ...
 
     def acquire(self, *, admission_id: str) -> object: ...
+
+
+class _TerminalProfileRegistry(Protocol):
+    def resolve(
+        self,
+        *,
+        capability_definition_identity: str,
+        capability: str,
+    ) -> object: ...
 
 
 def _require_text(value: object, *, field: str) -> str:
@@ -82,17 +92,20 @@ def _require_equal(*, field: str, expected: object, actual: object) -> None:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalPreparedExecution:
-    """Immutable pre-effect checkpoint for one canonical V-One operation.
+    """Immutable pre-effect checkpoint plus retained runtime objects for the terminal router.
 
     Reaching this value proves only that the current authority/durable-dispatch prefix was composed
-    through a current execution lease. It does not prove Runner execution, provider effect,
-    independent verification, OperationProof, OperationCell, release or deployment.
+    through a current execution lease. Retained objects are process-local composition context, not a
+    serialized evidence contract. The summary fields remain the explicit content-bound identifiers.
     """
 
     terminal_profile: str
+    terminal_profile_binding_digest: str
     execution_id: str
     request_id: str
     capability: str
+    capability_definition_identity: str
+    environment: str
     target_digest: str
     authorization_snapshot_digest: str
     grant_digest: str
@@ -104,38 +117,58 @@ class CanonicalPreparedExecution:
     lease_digest: str
     execution_epoch: int
     execution_capsule_digest: str
+    snapshot: object = field(repr=False, compare=False)
+    grant: object = field(repr=False, compare=False)
+    outbox: object = field(repr=False, compare=False)
+    envelope: object = field(repr=False, compare=False)
+    admission: object = field(repr=False, compare=False)
+    lease: object = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.terminal_profile not in OPERATION_TERMINAL_PROFILES:
             raise ValueError("terminal_profile is unsupported")
-        for field in (
+        for field_name in (
             "execution_id",
             "request_id",
             "capability",
+            "environment",
             "grant_jti",
-            "lease_id",
         ):
-            _require_text(getattr(self, field), field=field)
-        for field in (
+            _require_text(getattr(self, field_name), field=field_name)
+        for field_name in (
+            "terminal_profile_binding_digest",
+            "capability_definition_identity",
             "target_digest",
             "authorization_snapshot_digest",
             "grant_digest",
             "outbox_entry_digest",
             "envelope_digest",
             "admission_digest",
+            "lease_id",
             "lease_digest",
             "execution_capsule_digest",
         ):
-            _require_digest(getattr(self, field), field=field)
+            _require_digest(getattr(self, field_name), field=field_name)
         _require_epoch(self.execution_epoch)
+
+        for name, value in (
+            ("snapshot", self.snapshot),
+            ("grant", self.grant),
+            ("outbox", self.outbox),
+            ("envelope", self.envelope),
+            ("admission", self.admission),
+            ("lease", self.lease),
+        ):
+            if value is None:
+                raise ValueError(f"{name} runtime context is required")
 
 
 class CanonicalOperationPipeline:
     """Compose the current V-One authority and durable-dispatch prefix exactly once.
 
-    The pipeline deliberately stops after acquisition of the current durable ExecutionLease. It has
-    no provider-effect, credential-delivery, Runner-execution, completion, verification, proof, cell,
-    release or deploy method. Those remain profile-specific downstream gates.
+    Terminal semantics are not caller-controlled. After the authoritative snapshot resolves the exact
+    capability definition identity, this pipeline resolves one immutable terminal-profile allowlist
+    binding and carries it forward. The pipeline still stops before any Runner/provider effect.
     """
 
     def __init__(
@@ -145,6 +178,7 @@ class CanonicalOperationPipeline:
         grant_service: _GrantService,
         outbox_service: _OutboxService,
         coordinator: _Coordinator,
+        terminal_profile_registry: _TerminalProfileRegistry,
         envelope_revision: str,
     ) -> None:
         for owner, method in (
@@ -153,6 +187,7 @@ class CanonicalOperationPipeline:
             (outbox_service, "consume_and_enqueue"),
             (coordinator, "admit"),
             (coordinator, "acquire"),
+            (terminal_profile_registry, "resolve"),
         ):
             if not callable(getattr(owner, method, None)):
                 raise ValueError(f"canonical pipeline dependency must implement {method}")
@@ -171,6 +206,7 @@ class CanonicalOperationPipeline:
         self.grant_service = grant_service
         self.outbox_service = outbox_service
         self.coordinator = coordinator
+        self.terminal_profile_registry = terminal_profile_registry
         self.envelope_revision = _require_text(
             envelope_revision,
             field="envelope_revision",
@@ -183,16 +219,13 @@ class CanonicalOperationPipeline:
         request_id: str,
         idempotency_key: str,
         correlation_id: str,
-        terminal_profile: str,
     ) -> CanonicalPreparedExecution:
-        """Prepare one current operation through durable lease acquisition, then stop pre-effect."""
+        """Prepare one operation through durable lease acquisition, then stop pre-effect."""
 
         actor_id = _require_text(actor_id, field="actor_id")
         request_id = _require_text(request_id, field="request_id")
         idempotency_key = _require_text(idempotency_key, field="idempotency_key")
         correlation_id = _require_text(correlation_id, field="correlation_id")
-        if terminal_profile not in OPERATION_TERMINAL_PROFILES:
-            raise ValueError("terminal_profile is unsupported")
 
         snapshot = self.snapshot_creator.create_snapshot(
             actor_id=actor_id,
@@ -210,6 +243,25 @@ class CanonicalOperationPipeline:
             expected=actor_id,
             actual=_attribute(snapshot, "actor_id"),
         )
+        capability = _require_text(_attribute(snapshot, "capability"), field="capability")
+        capability_definition_identity = _require_digest(
+            _attribute(snapshot, "capability_definition_identity"),
+            field="capability_definition_identity",
+        )
+        profile_binding = self.terminal_profile_registry.resolve(
+            capability_definition_identity=capability_definition_identity,
+            capability=capability,
+        )
+        terminal_profile = _require_text(
+            _attribute(profile_binding, "terminal_profile"),
+            field="terminal_profile",
+        )
+        if terminal_profile not in OPERATION_TERMINAL_PROFILES:
+            raise PermissionError("CANONICAL_PIPELINE_TERMINAL_PROFILE_UNSUPPORTED")
+        terminal_profile_binding_digest = _require_digest(
+            _attribute(profile_binding, "binding_digest"),
+            field="terminal_profile_binding_digest",
+        )
 
         scope = AuthorityScope.from_snapshot(snapshot)  # type: ignore[arg-type]
         authority = AuthorityConstraint.from_scope(scope)
@@ -217,21 +269,26 @@ class CanonicalOperationPipeline:
             snapshot=snapshot,
             authority=authority,
         )
-        _require_equal(
-            field="snapshot_digest",
-            expected=_attribute(snapshot, "snapshot_digest"),
-            actual=_attribute(grant, "authorization_snapshot_digest"),
-        )
-        _require_equal(
-            field="execution_id",
-            expected=_attribute(snapshot, "execution_id"),
-            actual=_attribute(grant, "execution_id"),
-        )
+        for field_name, expected, actual in (
+            (
+                "snapshot_digest",
+                _attribute(snapshot, "snapshot_digest"),
+                _attribute(grant, "authorization_snapshot_digest"),
+            ),
+            ("execution_id", _attribute(snapshot, "execution_id"), _attribute(grant, "execution_id")),
+            ("capability", capability, _attribute(grant, "capability")),
+            (
+                "capability_definition_identity",
+                capability_definition_identity,
+                _attribute(grant, "capability_definition_identity"),
+            ),
+        ):
+            _require_equal(field=field_name, expected=expected, actual=actual)
 
         outbox = self.outbox_service.consume_and_enqueue(
             jti=_require_text(_attribute(grant, "jti"), field="grant.jti")
         )
-        for field, expected, actual in (
+        for field_name, expected, actual in (
             ("grant_digest", _attribute(grant, "grant_digest"), _attribute(outbox, "grant_digest")),
             ("execution_id", _attribute(grant, "execution_id"), _attribute(outbox, "execution_id")),
             (
@@ -240,9 +297,14 @@ class CanonicalOperationPipeline:
                 _attribute(outbox, "authorization_snapshot_digest"),
             ),
             ("capability", _attribute(grant, "capability"), _attribute(outbox, "capability")),
+            (
+                "capability_definition_identity",
+                _attribute(grant, "capability_definition_identity"),
+                _attribute(outbox, "capability_definition_identity"),
+            ),
             ("target_digest", _attribute(grant, "target_digest"), _attribute(outbox, "target_digest")),
         ):
-            _require_equal(field=field, expected=expected, actual=actual)
+            _require_equal(field=field_name, expected=expected, actual=actual)
 
         envelope = DispatchEnvelope.create(
             outbox_entry=outbox,  # type: ignore[arg-type]
@@ -251,21 +313,16 @@ class CanonicalOperationPipeline:
         envelope.assert_bound_to(outbox)  # type: ignore[arg-type]
         inbox_result = self.coordinator.admit(envelope=envelope)
         admission = _attribute(inbox_result, "admission")
-        _require_equal(
-            field="dispatch_id",
-            expected=envelope.dispatch_id,
-            actual=_attribute(admission, "dispatch_id"),
-        )
-        _require_equal(
-            field="execution_id",
-            expected=envelope.execution_id,
-            actual=_attribute(admission, "execution_id"),
-        )
-        _require_equal(
-            field="capsule_digest",
-            expected=envelope.execution_capsule_digest,
-            actual=_attribute(admission, "execution_capsule_digest"),
-        )
+        for field_name, expected, actual in (
+            ("dispatch_id", envelope.dispatch_id, _attribute(admission, "dispatch_id")),
+            ("execution_id", envelope.execution_id, _attribute(admission, "execution_id")),
+            (
+                "capsule_digest",
+                envelope.execution_capsule_digest,
+                _attribute(admission, "execution_capsule_digest"),
+            ),
+        ):
+            _require_equal(field=field_name, expected=expected, actual=actual)
 
         lease_result = self.coordinator.acquire(
             admission_id=_require_digest(
@@ -274,27 +331,28 @@ class CanonicalOperationPipeline:
             )
         )
         lease = _attribute(lease_result, "lease")
-        _require_equal(
-            field="admission_id",
-            expected=_attribute(admission, "admission_id"),
-            actual=_attribute(lease, "admission_id"),
-        )
-        _require_equal(
-            field="execution_id",
-            expected=envelope.execution_id,
-            actual=_attribute(lease, "execution_id"),
-        )
-        _require_equal(
-            field="capsule_digest",
-            expected=envelope.execution_capsule_digest,
-            actual=_attribute(lease, "execution_capsule_digest"),
-        )
+        for field_name, expected, actual in (
+            ("admission_id", _attribute(admission, "admission_id"), _attribute(lease, "admission_id")),
+            ("execution_id", envelope.execution_id, _attribute(lease, "execution_id")),
+            (
+                "capsule_digest",
+                envelope.execution_capsule_digest,
+                _attribute(lease, "execution_capsule_digest"),
+            ),
+        ):
+            _require_equal(field=field_name, expected=expected, actual=actual)
 
         return CanonicalPreparedExecution(
             terminal_profile=terminal_profile,
+            terminal_profile_binding_digest=terminal_profile_binding_digest,
             execution_id=_require_text(envelope.execution_id, field="execution_id"),
             request_id=_require_text(envelope.request_id, field="request_id"),
             capability=_require_text(envelope.capability, field="capability"),
+            capability_definition_identity=_require_digest(
+                envelope.capability_definition_identity,
+                field="capability_definition_identity",
+            ),
+            environment=_require_text(envelope.environment, field="environment"),
             target_digest=_require_digest(envelope.target_digest, field="target_digest"),
             authorization_snapshot_digest=_require_digest(
                 envelope.authorization_snapshot_digest,
@@ -318,4 +376,10 @@ class CanonicalOperationPipeline:
                 envelope.execution_capsule_digest,
                 field="execution_capsule_digest",
             ),
+            snapshot=snapshot,
+            grant=grant,
+            outbox=outbox,
+            envelope=envelope,
+            admission=admission,
+            lease=lease,
         )
