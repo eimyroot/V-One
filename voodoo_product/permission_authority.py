@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from typing import Final, Protocol, Self, runtime_checkable
 
 from . import statements as sql
+from . import workspace_membership_statements as membership_sql
 from .approval_policy import VALID_ENVIRONMENTS
 from .evidence_primitives import canonical_json
 from .persistence import ProductDatabaseAdapter
 from .security import ROLE_PERMISSIONS, Principal
-from .workspace import SELECT_WORKSPACE_MEMBERSHIP
 
 PERMISSION_DECISION_TYPE: Final = "permission-decision/v1"
 CURRENT_PERMISSION_SCOPE_MODEL: Final = "current-global-role/v1"
@@ -216,7 +216,7 @@ class DatabasePermissionAuthority:
                 (query.workspace_id,),
             ).fetchone()
             membership = connection.execute(
-                SELECT_WORKSPACE_MEMBERSHIP,
+                membership_sql.SELECT_WORKSPACE_MEMBERSHIP,
                 (query.workspace_id, query.actor_id),
             ).fetchone()
 
