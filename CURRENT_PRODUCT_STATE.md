@@ -8,8 +8,10 @@
 ```text
 AS_OF: 2026-08-20
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
+RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_CANDIDATE: PR #128 / feat/reconciliation-p0-p1-r1
+LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 VOP_SEMANTIC_REVISION_CANDIDATE: vop-terminology-freeze-r2
 PRODUCT_VERSION: 0.9.0-rc2-dev
 PRODUCTION_EFFECTS: DISABLED
@@ -19,6 +21,19 @@ DEPLOYMENT: NOT_PERFORMED
 
 The exact candidate and live `main` identities must be queried directly. A retained SHA in this file is
 never a self-updating claim about future repository state.
+
+## Historical checkpoint boundary
+
+The latest retained full runtime-attested checkpoint remains historical evidence for exactly
+`main@d57d37111b8bc9471a136b6c618aad8e920f1aff`:
+
+```text
+POST_MERGE_CHECKPOINT_ZIP_SHA256=80e53da665fe122375900ac888fef3562b0182018c4f7492f355d3d3401f4df2
+POST_MERGE_CHECKPOINT_IMAGE_ID=sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
+```
+
+Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains ADR-0008
+evidence-index provenance only; it is not the current Git baseline.
 
 ## Truth dimensions
 
@@ -154,7 +169,7 @@ OperationCell/v1    = NOT_APPLICABLE
 
 ### Bounded mutation verified
 
-The semantic terminal remains:
+The semantic completed terminal remains:
 
 ```text
 BOUNDED_MUTATION_VERIFIED
@@ -272,7 +287,7 @@ reconciliation audit = completed
 ```
 
 Intermediate green runs are useful regression evidence but do not attest later candidate commits.
-The product-readiness inventory now includes the canonical runtime, terminal allowlist, DB permission
+The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
 authority and A09 modules/tests so those layers cannot silently fall outside future readiness checks.
 
 ## UI truth
