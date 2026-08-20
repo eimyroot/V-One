@@ -8,8 +8,8 @@ from .canonical_pipeline import CanonicalPreparedExecution
 from .capability_registry import ImmutableCapabilityRegistry
 from .controlled_write import (
     GITHUB_CREATE_REF_CAPABILITY,
-    GitHubCreateRefConditionContract,
     ControlledWriteRequirement,
+    GitHubCreateRefConditionContract,
 )
 from .durable_current_fence import DurableCurrentExecutionFence
 from .execution_capsule import ImmutableExecutionCapsuleRegistry
