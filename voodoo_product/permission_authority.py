@@ -4,12 +4,15 @@ import hashlib
 from dataclasses import dataclass
 from typing import Final, Protocol, Self, runtime_checkable
 
+from . import statements as sql
 from .approval_policy import VALID_ENVIRONMENTS
 from .evidence_primitives import canonical_json
-from .security import Principal
+from .persistence import ProductDatabaseAdapter
+from .security import ROLE_PERMISSIONS, Principal
 
 PERMISSION_DECISION_TYPE: Final = "permission-decision/v1"
 CURRENT_PERMISSION_SCOPE_MODEL: Final = "current-global-role/v1"
+DATABASE_PERMISSION_SCOPE_MODEL: Final = "database-active-user-workspace/v1"
 
 
 def _digest(value: dict[str, object]) -> str:
@@ -143,11 +146,11 @@ class PermissionAuthority(Protocol):
 
 
 class CurrentPrincipalPermissionAuthority:
-    """Adapter over the current authenticated Principal role model.
+    """Adapter over one already-authenticated Principal role model.
 
-    This is server-side current-behavior authority only. It deliberately records the
-    current global-role scope model so future workspace-scoped authorization cannot be
-    inferred from this decision.
+    This compatibility authority remains useful at explicit request/session boundaries, but it is not
+    the canonical multi-user ProductComposition authority because it captures one Principal at
+    construction time.
     """
 
     def __init__(self, *, principal: Principal, authority_revision: str) -> None:
@@ -175,4 +178,69 @@ class CurrentPrincipalPermissionAuthority:
             reason="CURRENT_ROLE_PERMISSION_GRANTED" if granted else "CURRENT_ROLE_PERMISSION_DENIED",
             authority_revision=self._authority_revision,
             scope_model=CURRENT_PERMISSION_SCOPE_MODEL,
+        )
+
+
+class DatabasePermissionAuthority:
+    """Resolve runtime permission from current durable user/workspace state.
+
+    The caller supplies only actor/workspace/environment/permission identity. Role and active-state
+    are read from the product database on every decision, so a stale or client-supplied Principal
+    cannot grant authority. Workspace existence and environment are checked in the same read boundary.
+    The authority performs no writes and returns an explicit fail-closed PermissionDecision.
+    """
+
+    def __init__(
+        self,
+        *,
+        database: ProductDatabaseAdapter,
+        authority_revision: str,
+    ) -> None:
+        if not isinstance(database, ProductDatabaseAdapter):
+            raise ValueError("database must implement ProductDatabaseAdapter")
+        self.db = database
+        self.authority_revision = _require_text(
+            authority_revision,
+            field="authority_revision",
+        )
+
+    def decide(self, query: PermissionQuery) -> PermissionDecision:
+        if not isinstance(query, PermissionQuery):
+            raise ValueError("query must be PermissionQuery")
+
+        with self.db.connect() as connection:
+            user = connection.execute(sql.SELECT_ACTIVE_USER, (query.actor_id,)).fetchone()
+            workspace = connection.execute(
+                sql.SELECT_WORKSPACE_CONTEXT,
+                (query.workspace_id,),
+            ).fetchone()
+
+        granted = False
+        if user is None:
+            reason = "ACTOR_NOT_FOUND"
+        elif not int(user["active"]):
+            reason = "ACTOR_INACTIVE"
+        else:
+            role = str(user["role"])
+            permissions = ROLE_PERMISSIONS.get(role)
+            if permissions is None:
+                reason = "ACTOR_ROLE_INVALID"
+            elif workspace is None:
+                reason = "WORKSPACE_NOT_FOUND"
+            elif str(workspace["environment"]) != query.environment:
+                reason = "WORKSPACE_ENVIRONMENT_MISMATCH"
+            else:
+                granted = "*" in permissions or query.permission in permissions
+                reason = (
+                    "DATABASE_ROLE_PERMISSION_GRANTED"
+                    if granted
+                    else "DATABASE_ROLE_PERMISSION_DENIED"
+                )
+
+        return PermissionDecision.create(
+            query=query,
+            granted=granted,
+            reason=reason,
+            authority_revision=self.authority_revision,
+            scope_model=DATABASE_PERMISSION_SCOPE_MODEL,
         )
