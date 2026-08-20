@@ -8,6 +8,7 @@ from . import statements as sql
 from .audit import AuditLedgerWriter
 from .config import ProductConfig
 from .persistence import ProductDatabaseAdapter
+from .workspace import INSERT_WORKSPACE_MEMBERSHIP, WORKSPACE_OWNER
 
 VALID_BOOTSTRAP_ENVIRONMENTS = {"local", "development", "staging", "production"}
 
@@ -76,6 +77,10 @@ class BootstrapService:
                     now,
                 ),
             )
+            connection.execute(
+                INSERT_WORKSPACE_MEMBERSHIP,
+                (workspace_id, user_id, WORKSPACE_OWNER, user_id, now),
+            )
             self.audit_ledger.append(
                 connection,
                 actor_id=user_id,
@@ -86,6 +91,7 @@ class BootstrapService:
                     "username": username,
                     "role": "administrator",
                     "workspace_environment": workspace_environment,
+                    "workspace_membership_role": WORKSPACE_OWNER,
                 },
             )
 
