@@ -6,7 +6,8 @@
 | Scope | Product, architecture, evidence, and roadmap language |
 | Rule | New public terms require documentation and compatibility review |
 | VOP authority | `docs/architecture/VOP_CANONICAL_VOCABULARY.md` + `voodoo_product/vop_vocabulary.py` |
-| VOP freeze | ADR-0014 / `vop-terminology-freeze-r1` |
+| Original VOP freeze | ADR-0014 / `vop-terminology-freeze-r1` |
+| Current VOP revision | ADR-0018 / `vop-terminology-freeze-r2` |
 | Reconciled | `2026-08-20` |
 
 ## Canonical-language boundary
@@ -17,11 +18,12 @@ explains product/foundation language; it must not fork VOP nouns, verbs, relatio
 
 > **Stejný VOP termín musí mít napříč kódem, docs, receipts, API a UI jeden význam. Změna významu vyžaduje nový termín nebo novou verzi.**
 
-Machine vocabulary lives in `voodoo_product/vop_vocabulary.py`; canonical schema identities and
-supersession lineage live in `schemas/vop/registry.v1.json`.
+Machine vocabulary lives in `voodoo_product/vop_vocabulary.py`; canonical schema identities,
+compatibility classification and terminal profiles live in `schemas/vop/registry.v1.json`.
 
-Historical schema identities remain reserved for auditability. Supersession means current lineage,
-not deletion or silent reinterpretation of historical evidence.
+Historical schema identities remain reserved for auditability. `SUPERSEDES` is used only for a true
+semantic replacement; a newer specialized contract must instead carry explicit compatibility/lineage
+classification.
 
 ## Capability-status vocabulary
 
@@ -68,7 +70,7 @@ authority contract is:
 execution-grant/v2
 ```
 
-It is narrow, exact-content bound and ONE_TIME.
+It is narrow, exact-content bound and ONE_TIME. This is a true semantic supersession.
 
 ### Grant consumption witness
 
@@ -106,9 +108,9 @@ Canonical common-language Runner authority is `bounded_execution_only`.
 
 ### RunnerIdentity / RunnerBoundary
 
-`runner-identity/v1` is descriptive identity evidence for one concrete Runner instance.
-RunnerBoundary is the fail-closed execution ceiling binding Runner to exact lease/capsule/capability
-constraints. Neither creates authorization.
+`runner-identity/v1` is descriptive identity evidence for one concrete Runner instance. RunnerBoundary
+is the fail-closed execution ceiling binding Runner to exact lease/capsule/capability constraints.
+Neither creates authorization.
 
 ### CredentialAccessDecision
 
@@ -122,10 +124,21 @@ post-state verification.
 
 ### ExecutionReceipt
 
-Execution subsystem claim about what it attempted/performed.
+Execution-side claim about what the execution subsystem attempted/performed. Version semantics are
+mandatory:
 
-Current effect-lineage contract is `execution-receipt/v2`; historical `execution-receipt/v1` remains
-reserved.
+```text
+execution-receipt/v1
+= legacy generic v1 receipt lineage
+
+execution-receipt/v2
+= current bounded-mutation effect receipt
+  provider_mutation_count == 1
+  automatic_retry_performed == false
+  verification_status == NOT_EVALUATED
+```
+
+Therefore `execution-receipt/v2` is **not** a universal replacement for every v1 receipt lineage.
 
 ```text
 ExecutionReceipt != VerificationResult
@@ -158,26 +171,48 @@ Classification of how strongly a VerificationResult is supported.
 Independent determination of actual observed provider/target post-state. It is distinct from Runner
 execution evidence, Observation, OperationProof and OperationCell.
 
+For the current `READ_ONLY_VERIFIED` terminal profile, `VerificationResult/v1` is the verified terminal:
+
+```text
+READ_ONLY_VERIFIED
+→ independent_verification
+→ verification_result
+```
+
+No current READ-only contract is silently promoted into `ExecutionReceipt/v2`, `OperationProof/v2` or
+`OperationCell/v1`.
+
 ### OperationProof
 
-Portable content-addressed proof over governed authority/effect/independent-verification lineage.
-
-Version lineage:
+Portable content-addressed proof for a registered evidence lineage.
 
 ```text
 operation-proof/v1
-SUPERSEDED_BY
+= legacy generic v1 proof lineage
+
 operation-proof/v2
+= current bounded-mutation proof lineage
+  ExecutionReceipt/v2
+  + canonical independent VerificationResult/v1 evidence
 ```
 
-`operation-proof/v1` remains historical. `operation-proof/v2` is the current proof contract for
-`ExecutionReceipt/v2 + VerificationResult/v1` lineage and requires canonical verification provenance
-recomputation rather than trusting a self-consistent `VERIFIED` object.
+`operation-proof/v2` requires exactly one bounded provider mutation, forbids automatic mutation retry
+and recomputes canonical verification provenance. It is **not a universal supersession** of
+`operation-proof/v1`.
 
 ### OperationCell
 
-`operation-cell/v1` is the stable minimal provider/lineage-neutral product atom over one canonically
-revalidated `OperationProof/v2`.
+`operation-cell/v1` is the stable minimal provider-neutral product atom for the current
+`BOUNDED_MUTATION_VERIFIED` lineage over one canonically revalidated `OperationProof/v2`.
+
+```text
+BOUNDED_MUTATION_VERIFIED
+→ execution_receipt
+→ independent_verification
+→ verification_result
+→ operation_proof
+→ operation_cell
+```
 
 ```text
 VerificationResult != OperationProof
