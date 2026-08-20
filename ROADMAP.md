@@ -3,10 +3,10 @@
 | Field | Value |
 |---|---|
 | Document status | Living delivery plan |
-| Reconciled | `2026-08-20` |
-| Reconciliation base | `main@71a931b561faa93c8dd2e062b83559401143b1df` |
-| Reconciliation candidate | PR #128 / `feat/reconciliation-p0-p1-r1` |
-| VOP semantic candidate | `vop-terminology-freeze-r2` / ADR-0018 |
+| Reconciled | `2026-08-21` |
+| Reconciliation base | historical `main@71a931b561faa93c8dd2e062b83559401143b1df` |
+| Reconciliation merge | PR #128 / `d9e27ff17b76f29daba4a3421b11cc396826fe12` |
+| VOP semantic revision | `vop-terminology-freeze-r2` / ADR-0018 |
 | Capability truth | [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) |
 | Current-state truth | [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md) |
 | Production status | BLOCKED until separately governed release |
@@ -65,13 +65,13 @@ terminates at `VerificationResult/v1`. No diagram or compatibility path may wide
 | ExecutionReceipt/v2 | VERIFIED | bounded-mutation contract + F6b |
 | OperationProof/v2 | VERIFIED | bounded-mutation contract + F6b |
 | OperationCell/v1 | VERIFIED | bounded-mutation contract + F6b |
-| Capability→terminal allowlist | IMPLEMENTED | PR #128 tests |
-| Database-backed product permission authority | IMPLEMENTED | PR #128 tests |
-| Canonical authority/dispatch/lease pipeline | IMPLEMENTED | PR #128 tests |
-| Canonical READ Runner→Verifier terminal | IMPLEMENTED | PR #128 composition tests + existing D4b/E3/E4b evidence |
-| ProductComposition canonical runtime seam | IMPLEMENTED | PR #128 composition tests |
-| Reusable CREATE_REF A09 preflight orchestration | IMPLEMENTED | PR #128 tests; no provider effect |
-| Reusable rollback A09 preflight orchestration | IMPLEMENTED | PR #128 tests; no provider effect |
+| Capability→terminal allowlist | IMPLEMENTED | merged PR #128 tests |
+| Database-backed product permission authority | IMPLEMENTED | merged PR #128 tests |
+| Canonical authority/dispatch/lease pipeline | IMPLEMENTED | merged PR #128 tests |
+| Canonical READ Runner→Verifier terminal | IMPLEMENTED | merged PR #128 composition tests + D4b/E3/E4b evidence |
+| ProductComposition canonical runtime seam | IMPLEMENTED | merged PR #128 composition tests |
+| Reusable CREATE_REF A09 preflight orchestration | IMPLEMENTED | merged PR #128 tests; no provider effect |
+| Reusable rollback A09 preflight orchestration | IMPLEMENTED | merged PR #128 tests; no provider effect |
 | Security Intelligence R-SI1.1 | IMPLEMENTED | intelligence-only metadata/tests |
 
 These rows do not authorize new provider mutation or release.
@@ -84,9 +84,9 @@ not adoption of that organization-policy design.
 
 ## Gate R1 — Truth + semantic reconciliation
 
-**Status: IMPLEMENTED CANDIDATE / final exact-head closure pending in PR #128.**
+**Status: VERIFIED / MERGED via PR #128.**
 
-Required closure:
+Closed properties:
 
 1. receipt/hash-chain UI never manufactures `VERIFIED`;
 2. Runner never issues/consumes ExecutionGrant;
@@ -98,9 +98,14 @@ Required closure:
 8. global role authority cannot cross workspace boundaries without current membership;
 9. schema-13 history does not fabricate schema-14 membership.
 
+Final pre-merge head `fcdd43578860bf8bf01f85b3f088bb5c6d21526c` passed CI #839, D4b #157,
+E3 #148 and E4b #144. The self/adversarial R3 passed with organizationally independent review absent;
+the remaining independence risk was explicitly accepted for that merge. That risk acceptance is not a
+standing bypass for future high-risk changes.
+
 ## Gate G0 — GitHub main enforcement
 
-**Status: BLOCKED / live ruleset evidence UNKNOWN.**
+**Status: BLOCKED / live modern ruleset evidence UNKNOWN.**
 
 Required release baseline:
 
@@ -113,13 +118,17 @@ conversation resolution required
 ordinary admin bypass disabled
 ```
 
-Successful CI does not prove these Settings/ruleset controls.
+The live branch endpoint reports `protected=true`, while classic required status checks report
+enforcement `off`. The available connector cannot inspect the full modern ruleset configuration.
+Successful CI therefore does not prove Settings/ruleset enforcement.
+
+**This is the highest-priority remaining release-governance blocker.**
 
 ## Gate G1 — Canonical ProductComposition
 
-**Status: IMPLEMENTED CANDIDATE in PR #128.**
+**Status: IMPLEMENTED / MERGED via PR #128.**
 
-Current candidate composition:
+Current composition:
 
 ```text
 ProductService database
@@ -134,12 +143,12 @@ ProductService database
 → CanonicalOperationRuntime
 ```
 
-Properties now enforced:
+Properties enforced:
 
 - one product database boundary;
 - one database-backed permission authority;
 - stale Principal role/state cannot preserve stronger permission;
-- membership revocation is observed without rebuilding authority;
+- membership revocation is observed before durable grant store/one-time consume;
 - global role does not imply membership in arbitrary workspaces;
 - no legacy membership inference/backfill during schema-14 migration;
 - no caller-selected stronger terminal profile;
@@ -147,12 +156,11 @@ Properties now enforced:
 - default app remains fail-closed unless an explicit canonical runtime factory/provider pack is supplied;
 - legacy `ExecutionService` remains an explicit compatibility API surface, not hidden fallback authority.
 
-The canonical public HTTP operation endpoint is a later product-surface task and is not inferred from
-ProductComposition wiring.
+The canonical public HTTP operation endpoint remains a separate product-surface gate.
 
 ## Gate G2 — Profile-specific terminal composition
 
-**Status: IMPLEMENTED CANDIDATE in PR #128.**
+**Status: IMPLEMENTED / MERGED via PR #128.**
 
 ### READ terminal
 
@@ -184,11 +192,11 @@ BOUNDED_MUTATION_VERIFIED
 → OperationCell/v1
 ```
 
-PR #128 only prepares current WRITE/rollback effects through A09 and does not execute this tail.
+Merged PR #128 only prepared current WRITE/rollback effects through A09 and did not execute this tail.
 
 ## Gate G3 — Reusable governed WRITE / rollback orchestration
 
-**Status: IMPLEMENTED PRE-EFFECT CANDIDATE / NOT EXECUTED.**
+**Status: IMPLEMENTED PRE-EFFECT / MERGED / NOT EXECUTED.**
 
 CREATE_REF path:
 
@@ -211,7 +219,7 @@ CanonicalPreparedExecution
 → STOP
 ```
 
-Required properties satisfied by the candidate design/tests:
+Current properties:
 
 - no PR120/old-main/ref/SHA hard binding in A09;
 - explicit current capability/target lineage;
@@ -220,15 +228,15 @@ Required properties satisfied by the candidate design/tests:
 - current fence immediately before preflight readiness;
 - rollback remains separately authorized;
 - no provider transport call inside A09;
-- no new CREATE_REF or DELETE_REF execution in this reconciliation work.
+- no new CREATE_REF or DELETE_REF execution in reconciliation work.
 
 A preflight is not a provider effect and cannot be presented as `VERIFIED`.
 
-## Gate G4 — Product readiness
+## Gate G4 — Product readiness baseline
 
-**Status: FINAL EXACT-HEAD GATE PENDING.**
+**Status: VERIFIED for merged PR #128 baseline.**
 
-Readiness must inventory:
+The PR #128 exact-head CI covered:
 
 - canonical pipeline/runtime/router;
 - capability terminal allowlist;
@@ -241,44 +249,28 @@ Readiness must inventory:
 - UI/API truth tests;
 - migrations through schema 14;
 - supply-chain/dependency/image gates;
-- production effects disabled until separate release authorization.
+- production effects disabled.
 
-Exit requires one exact candidate head with:
+Every later product-hardening change must obtain a fresh exact-head CI/readiness result; the historical
+PR #128 gate is not reusable proof for future heads.
 
-```text
-CI = SUCCESS
-D4b = SUCCESS
-E3 = SUCCESS
-E4b = SUCCESS
-```
+## Gate G5 — R3 adversarial review baseline
 
-Intermediate runs do not attest later commits.
+**Status: COMPLETED for PR #128 with retained governance risk.**
 
-## Gate G5 — R3 adversarial review
+The review attacked terminal-profile escalation, stale role/Principal authority, cross-workspace access,
+membership revocation/backfill, parallel ProductComposition authority, Runner/Verifier collapse, A09
+hidden provider transport, stale lease/fence, rollback provenance substitution and evidence-semantic
+conflation.
 
-**Status: PENDING FINAL HEAD.**
+Organizationally independent review was **not present**. The owner accepted that remaining risk for PR
+#128 only. Future high-risk changes require their own review/risk decision.
 
-Review must attack at least:
+## Gate G6 — Reconciliation audit
 
-- terminal-profile privilege escalation;
-- stale Principal / role-change authority;
-- cross-workspace authority without membership;
-- membership revocation or historical-backfill bypass;
-- parallel ProductComposition authority/database paths;
-- Runner/Verifier identity or credential collapse;
-- A09 hidden provider transport/effect;
-- stale lease/fence bypass;
-- rollback provenance substitution;
-- receipt/verification/proof/cell semantic conflation;
-- historical evidence upgraded into current provider execution claims.
+**Status: PASS / MERGED.**
 
-Organizational independence must be reported truthfully; self-review is not independent review.
-
-## Gate G6 — Final reconciliation audit
-
-**Status: PENDING FINAL HEAD + R3.**
-
-Require:
+The merged baseline established:
 
 ```text
 one meaning per canonical term
@@ -290,12 +282,59 @@ profile-specific Runner + verifier terminal
 A09 WRITE/rollback reusable but inert
 UI/API no stronger than evidence
 historical uncertainty preserved
-GitHub enforcement VERIFIED or explicit release blocker
+GitHub enforcement retained as explicit release blocker
 ```
 
-## Gate G7 — CyberCore
+## Gate G7 — Canonical public operation API
 
-**Status: BLOCKED until G6 passes.**
+**Status: NOT YET SURFACED / NEXT PRODUCT GATE.**
+
+Requirements:
+
+- expose canonical operation preparation/READ lifecycle through versioned FastAPI endpoints;
+- preserve existing authorization, membership, profile and evidence semantics;
+- no endpoint may accept a caller-selected stronger terminal profile;
+- READ response must distinguish execution success from independent VerificationResult;
+- WRITE endpoints, if introduced later, must stop at preflight unless separately authorized;
+- legacy `ExecutionService` compatibility must be explicit and non-authoritative for canonical flow;
+- API contracts, OpenAPI schema, HTTP tests and product truth docs must converge.
+
+## Gate G8 — Explicit provider runtime pack
+
+**Status: BLOCKED / default remains fail-closed.**
+
+First productized runtime pack should be READ-first and explicitly configured. It must:
+
+- share the exact ProductComposition database/permission authority;
+- use separate Runner and Verifier identities/credential decisions;
+- preserve current fence/lease checks;
+- fail closed if provider configuration or credentials are unavailable;
+- expose no ambient provider authority;
+- require fresh live verification before being called product-ready.
+
+Mutation runtime remains a later, separately authorized gate.
+
+## Gate G9 — Release / deployment readiness
+
+**Status: BLOCKED.**
+
+Before release/deploy:
+
+- G0 GitHub enforcement evidence/fix;
+- canonical public API and READ runtime pack gates;
+- fresh security/adversarial review;
+- dependency/SBOM/image/provenance gates;
+- secrets/credential rotation and operational runbooks;
+- observability/incident/rollback plan;
+- commercial/legal/privacy/support requirements as applicable;
+- explicit release authorization;
+- explicit deployment authorization.
+
+Production effects stay disabled until those gates are separately satisfied.
+
+## Gate G10 — CyberCore
+
+**Status: BLOCKED during V-One product/release-governance hardening.**
 
 ```text
 CyberCore = intelligence_only
@@ -307,13 +346,12 @@ CyberCore != Verifier
 
 Initial integration remains descriptive/read-only and must reuse the canonical VOP language. Any later
 active effect enters the same V-One authority/execution pipeline and its capability-bound terminal.
+CyberCore must not become a workaround for unfinished V-One product/release controls.
 
 ## Later productization
 
-- canonical public operation API/UI surface;
-- multi-provider semantic/runtime packs;
 - organization/tenant policy maturation through ADR-0003 lineage;
-- released enterprise identity;
+- released enterprise identity / MFA / OIDC;
 - PostgreSQL adapter/isolation gates;
 - artifact provenance/signing eligibility;
 - production deployment/release runbooks;
