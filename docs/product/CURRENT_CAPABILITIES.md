@@ -7,6 +7,7 @@
 | Reconciliation base Git baseline | `main@71a931b561faa93c8dd2e062b83559401143b1df` |
 | Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
 | Reconciliation candidate | PR #128 / `feat/reconciliation-p0-p1-r1` |
+| Latest runtime-attested committed baseline | `main@d57d37111b8bc9471a136b6c618aad8e920f1aff` |
 | Product version | `0.9.0-rc2-dev` |
 | SQLite schema | version 13 |
 | Production effects | disabled |
@@ -38,6 +39,8 @@ Is it released/deployed?
 | Static command-center console | IMPLEMENTED | product HTTP/static surface | final exact-head reconciliation gate pending |
 | Local bootstrap, login and sessions | VERIFIED | authentication/bootstrap/session tests | no released OIDC/MFA enterprise identity path |
 | RBAC and approval separation | VERIFIED | governance/service tests | not full organization/tenant policy |
+| Approval policy decision model | VERIFIED | deterministic policy-decision tests | default-off runtime compatibility path only; Solo, Team, Regulated enforcement is not implemented |
+| Policy Decision Graph | PROPOSED | ADR-0003 design only | organization-scoped policy activation is not runtime authority |
 | DatabasePermissionAuthority | IMPLEMENTED | PR #128 adversarial/system tests | SQLite product backend; not a release claim |
 | Current-role/current-active permission reevaluation | IMPLEMENTED | role/state mutation tests | applies to canonical runtime authority path |
 | Workspace environment invariants | VERIFIED | service + DB-trigger tests | SQLite pilot backend |
@@ -66,18 +69,18 @@ Is it released/deployed?
 | GitHub READ observation | VERIFIED | D4b live governed read | bounded GitHub pilot scope |
 | CanonicalGitHubReadTerminal | IMPLEMENTED | PR #128 terminal tests | final exact-head candidate gate pending |
 | Independent Verifier identity/boundary | VERIFIED | E3 live independent verifier | bounded GitHub pilot scope |
-| Separate verifier credential decision | IMPLEMENTED / VERIFIED primitives | E3/E4b contracts/tests | must remain distinct from Runner credential path |
+| Separate verifier credential decision | IMPLEMENTED | E3/E4b contracts/tests | must remain distinct from Runner credential path |
 | VerificationResult/v1 | VERIFIED | E4b + historical F6b | READ terminal current stopping point |
 | ExecutionReceipt/v2 | VERIFIED | contract/tests + historical F6b | execution claim only; not independent verification |
-| GitHub CREATE_REF bounded write contract/runtime | VERIFIED historical effect | historical F4b | historical execution is not new current effect authority |
+| GitHub CREATE_REF bounded write contract/runtime | VERIFIED | historical F4b effect evidence | historical execution is not new current effect authority |
 | A09 reusable CREATE_REF preparation | IMPLEMENTED | PR #128 tests | ends at `WriteEffectPreflight/v1`; no transport/effect |
-| GitHub DELETE_REF rollback contract/runtime | VERIFIED historical effect | historical F6b | historical execution is not reusable current authorization |
+| GitHub DELETE_REF rollback contract/runtime | VERIFIED | historical F6b effect evidence | historical execution is not reusable current authorization |
 | A09 reusable rollback preparation | IMPLEMENTED | PR #128 tests | ends at `RollbackWriteEffectPreflight/v2`; no DELETE call |
 | A09 historical PR120/SHA independence | IMPLEMENTED | source-negative tests | only A09 seam; historical pilot files remain historical |
 | OperationProof/v1 | IMPLEMENTED | historical deterministic proof contract | historical lineage; not reinterpreted as v2 |
 | OperationProof/v2 | VERIFIED | current contract/tests + historical F6b digest | mutation-only post-verification lineage |
 | OperationCell/v1 | VERIFIED | current contract/tests + historical F6b digest | mutation-only stable operation atom |
-| Unified authority→profile runtime composition | IMPLEMENTED CANDIDATE | ProductComposition + canonical runtime tests | default provider pack off; canonical public API later |
+| Unified authority→profile runtime composition | IMPLEMENTED | ProductComposition + canonical runtime tests | default provider pack off; canonical public API later |
 | Receipt/audit hash-chain integrity | VERIFIED | ledger verification tests | chain integrity != independent provider verification |
 | SQLite migrations | VERIFIED | migrations 0001–0013 + integrity tests | single-node released backend |
 | PostgreSQL backend | BLOCKED | fail-closed startup contract | adapter/concurrency/operations gates not released |
@@ -86,8 +89,15 @@ Is it released/deployed?
 | CyberCore integration | BLOCKED | reconciliation gate | waits for final exact-head R3 + reconciliation audit |
 | Main GitHub governance policy | IMPLEMENTED | repository policy | live modern ruleset enforcement not verified |
 | Main required latest-head enforcement | UNKNOWN | connector/settings evidence insufficient | explicit release blocker |
-| Release-candidate build | VERIFIED historical/workflow scope | fail-closed workflow + image/SBOM checks | build candidate != deployment |
+| Release-candidate build | VERIFIED | fail-closed workflow + historical image/SBOM checks | build candidate != deployment |
 | Unrestricted production release | BLOCKED | production effects default disabled | separate security/legal/ops/release authorization required |
+| Public commercial distribution | BLOCKED | no distribution authorization | licensing/EULA/privacy/support and production gates remain separate |
+
+## Verified command surfaces
+
+The current HTTP surface still exposes the established product endpoints. It does **not** yet claim a
+new public endpoint for the full canonical VOP runtime. ProductComposition wiring and public product
+surfacing are separate truth dimensions.
 
 ## Canonical ProductComposition shape
 
@@ -136,12 +146,6 @@ OperationCell/v1  = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0
 ```
 
 This is historical evidence for one real atom. It does not execute or verify the new A09 candidate.
-
-## Public/command surface truth
-
-The current HTTP surface still exposes the established product endpoints. It does **not** yet claim a
-new public endpoint for the full canonical VOP runtime. ProductComposition wiring and public product
-surfacing are separate truth dimensions.
 
 ## Release boundary
 
