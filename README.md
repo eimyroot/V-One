@@ -66,7 +66,8 @@ OperationProof != OperationCell
 | OperationCell/v1 | IMPLEMENTED bounded-mutation atom; F6b VERIFIED |
 | Security Intelligence R-SI1.1 | IMPLEMENTED intelligence-only metadata/test layer |
 | VOP semantic revision R2 | RECONCILIATION CANDIDATE in PR #128 |
-| Unified canonical FastAPI ProductComposition | PARTIAL / NOT YET COMPOSED |
+| Canonical FastAPI ProductComposition runtime seam | IMPLEMENTED CANDIDATE; explicit runtime factory required, default provider pack disabled |
+| Canonical public operation API | NOT YET SURFACED |
 | GitHub main ruleset enforcement | UNKNOWN / release-blocking until live evidence |
 | Production effects | BLOCKED / disabled by default |
 | Unrestricted production release | BLOCKED |
@@ -126,19 +127,21 @@ Grant consumption belongs to the control plane **before Dispatch**. Runner autho
 ## ProductComposition reality
 
 The repository contains the accepted authority, durable dispatch, coordination, Runner, verifier and
-bounded-mutation proof/cell components. Current FastAPI `ProductComposition` still preserves legacy
-`ExecutionService`; it does not yet orchestrate the current VOP components as one canonical product
-runtime.
+bounded-mutation proof/cell components. PR #128 additionally makes the canonical trust-plane runtime
+a `ProductComposition` seam: an explicit runtime factory must share the exact ProductService database
+and `DatabasePermissionAuthority`, and the default application intentionally leaves the provider
+runtime pack absent/fail-closed.
 
 ```text
 COMPONENT COVERAGE = STRONG
 HISTORICAL BOUNDED-MUTATION ATOM = VERIFIED
-ONE CURRENT PRODUCT ORCHESTRATION = NOT YET IMPLEMENTED
+CANONICAL PRODUCT RUNTIME SEAM = IMPLEMENTED CANDIDATE
+DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
+CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
 ```
 
-The next functional reconciliation slice composes the shared prefix and selects the terminal profile
-explicitly. It must not copy pilot fixture seeding into product runtime or widen existing contracts to
-make a diagram look uniform.
+Legacy `ExecutionService` remains an explicit compatibility surface. ProductComposition wiring does
+not imply a new public canonical operation endpoint, provider mutation, deployment or release.
 
 ## Historical verified bounded-mutation atom
 
@@ -159,8 +162,9 @@ This is real bounded-mutation evidence, not evidence that every READ produces Pr
 
 - production effects default disabled;
 - one-time grant consumption in control plane;
+- exact current user/global-role/workspace/environment/membership permission revalidation before durable grant store/consume;
 - exact target/capsule/dispatch/epoch/fence bindings in current contracts;
-- SQLite migrations through schema 13;
+- SQLite migrations through schema 14;
 - bounded isolated pilot runtimes;
 - separate independent verifier path;
 - receipt/verification semantics separate;
