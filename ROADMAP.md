@@ -34,6 +34,8 @@ ONE AUTHORITY LINEAGE
 +
 ONE EXECUTION LINEAGE
 +
+CURRENT WORKSPACE SCOPE
++
 CAPABILITY-BOUND TERMINAL PROFILE
 +
 INDEPENDENT VERIFICATION
@@ -53,6 +55,7 @@ terminates at `VerificationResult/v1`. No diagram or compatibility path may wide
 | Grant consumption + transactional Outbox | VERIFIED | source/tests + schema 0011 |
 | Dispatch Envelope + Inbox/dedup | VERIFIED | source/tests + schema 0012 |
 | ExecutionEpoch/Lease + DurableCoordinator | VERIFIED | source/tests + schema 0013 |
+| Workspace membership scope | IMPLEMENTED | schema 0014 + membership/revocation tests |
 | Runner identity/boundary + credential decisions | VERIFIED | source/tests/pilot scope |
 | Isolated READ Runner | VERIFIED | D4b live governed read |
 | Independent verifier | VERIFIED | E3 live verifier observation |
@@ -76,7 +79,8 @@ These rows do not authorize new provider mutation or release.
 The organization-scoped approval/profile design remains separately **PROPOSED** in
 [ADR-0003](docs/adr/ADR-0003-organization-roles-and-configurable-approval-policy.md). Its presence does
 not activate Solo, Team or Regulated behavior and does not weaken current human-authorization safety
-requirements.
+requirements. Workspace membership introduced by schema 14 is only a current scope boundary; it is
+not adoption of that organization-policy design.
 
 ## Gate R1 — Truth + semantic reconciliation
 
@@ -90,7 +94,9 @@ Required closure:
 4. READ_ONLY does not require mutation-only Receipt/v2/Proof/v2/Cell/v1;
 5. top-level docs, code, tests and registry express the same model;
 6. readiness/CI fail on semantic drift;
-7. historical governance uncertainty, including PR #125 provenance, stays visible.
+7. historical governance uncertainty, including PR #125 provenance, stays visible;
+8. global role authority cannot cross workspace boundaries without current membership;
+9. schema-13 history does not fabricate schema-14 membership.
 
 ## Gate G0 — GitHub main enforcement
 
@@ -117,6 +123,7 @@ Current candidate composition:
 
 ```text
 ProductService database
+→ current active user + global role + workspace/environment + membership
 → DatabasePermissionAuthority
 → AuthoritativeSnapshotCreator
 → ExecutionGrant/v2
@@ -132,6 +139,9 @@ Properties now enforced:
 - one product database boundary;
 - one database-backed permission authority;
 - stale Principal role/state cannot preserve stronger permission;
+- membership revocation is observed without rebuilding authority;
+- global role does not imply membership in arbitrary workspaces;
+- no legacy membership inference/backfill during schema-14 migration;
 - no caller-selected stronger terminal profile;
 - no second authority path;
 - default app remains fail-closed unless an explicit canonical runtime factory/provider pack is supplied;
@@ -218,17 +228,18 @@ A preflight is not a provider effect and cannot be presented as `VERIFIED`.
 
 **Status: FINAL EXACT-HEAD GATE PENDING.**
 
-Readiness now inventories:
+Readiness must inventory:
 
 - canonical pipeline/runtime/router;
 - capability terminal allowlist;
 - database permission authority;
+- workspace membership statement/migration boundary;
 - READ terminal;
 - A09 CREATE/rollback orchestration;
 - current trust-plane contracts and profile semantics;
 - canonical ProductComposition tests;
 - UI/API truth tests;
-- migrations through schema 13;
+- migrations through schema 14;
 - supply-chain/dependency/image gates;
 - production effects disabled until separate release authorization.
 
@@ -251,6 +262,8 @@ Review must attack at least:
 
 - terminal-profile privilege escalation;
 - stale Principal / role-change authority;
+- cross-workspace authority without membership;
+- membership revocation or historical-backfill bypass;
 - parallel ProductComposition authority/database paths;
 - Runner/Verifier identity or credential collapse;
 - A09 hidden provider transport/effect;
@@ -271,8 +284,8 @@ Require:
 one meaning per canonical term
 code ↔ tests ↔ evidence ↔ docs aligned
 one authority/execution composition
+current role + active state + workspace membership scope
 terminal profile derived from capability identity
-current DB-backed permission authority
 profile-specific Runner + verifier terminal
 A09 WRITE/rollback reusable but inert
 UI/API no stronger than evidence
