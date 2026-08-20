@@ -365,6 +365,11 @@ def run_live_write_pilot() -> dict[str, Any]:
         password="F4bVeryStrongExecutorPassword1!",
         role="operator",
     )
+    service.workspace_service.add_member(
+        actor_id=bootstrap["user_id"],
+        workspace_id=workspace["id"],
+        user_id=executor["id"],
+    )
     approved_payload = {"repository": repository, "ref": ref, "commit_sha": target_sha}
     change = service.create_change_request(
         actor_id=bootstrap["user_id"],
