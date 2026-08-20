@@ -15,6 +15,7 @@ Current released/local product controls include:
 - persistent HMAC-keyed login/bootstrap throttling;
 - exact trusted-host validation, CSP, no-store/no-sniff/anti-frame headers and production-only HSTS;
 - live account/role revalidation and permission-based RBAC;
+- explicit current user↔workspace membership scope in addition to global role;
 - requester/approver separation and workspace-authoritative environment classification;
 - production effects disabled by default;
 - emergency stop and explicit recovery boundaries;
@@ -49,7 +50,13 @@ Grant consumption occurs before Dispatch in the control plane.
 Dispatch/lease/fence coordinate execution but do not create new authority.
 ```
 
-SQLite persistence is current through schema 13. `VOODOO_DATABASE_BACKEND=sqlite` remains the only
+Canonical product authority additionally requires current database-backed actor state: active user,
+global role, exact workspace, workspace environment and exact user↔workspace membership. That decision
+is evaluated at snapshot creation and revalidated inside the SQLite serialized boundary at durable
+Grant store and one-time Grant consumption, so a membership removed before consumption fails closed.
+This does not claim retroactive cancellation of an already-consumed/running execution attempt.
+
+SQLite persistence is current through schema 14. `VOODOO_DATABASE_BACKEND=sqlite` remains the only
 released database mode; selecting unreleased PostgreSQL support fails closed.
 
 ## Isolated bounded Runner evidence
@@ -60,8 +67,10 @@ evidence, with controls including exact runtime identity/binding, read-only file
 for the pilot, dropped Linux capabilities, bounded resources and default-deny egress with explicit
 provider allowlisting.
 
-This does **not** mean the legacy FastAPI `ExecutionService` path has been replaced by that isolated
-execution plane. ProductComposition convergence is a separate gate.
+The legacy FastAPI `ExecutionService` path has not been replaced by that isolated execution plane.
+PR #128 does, however, add a canonical `ProductComposition` runtime seam whose explicit runtime factory
+must share the ProductService database and `DatabasePermissionAuthority`; the default provider runtime
+pack remains absent/fail-closed and no new canonical public operation endpoint is claimed.
 
 Historical F4b/F6b staging workflows additionally demonstrated narrowly scoped GitHub mutation and
 rollback paths. Those historical workflows are evidence artifacts, not generic current production
@@ -110,7 +119,7 @@ OperationCell != authority
 ```
 
 Historical F6b evidence has a strictly validated proof and cell, but that historical success does not
-release production or automatically compose the current FastAPI product path.
+release production or prove any new provider effect.
 
 ## Legacy local execution safety boundary
 
@@ -145,10 +154,11 @@ unexpected exception internals.
 
 ## Persistence / migration boundary
 
-SQLite migration history is immutable/checksum verified and current through `0013`. Grant, dispatch
-and coordination tables use fail-closed binding/immutability rules appropriate to their contracts.
-There are no automated down migrations; rollback of an incompatible schema requires restoring a full
-pre-upgrade database/WAL/SHM backup.
+SQLite migration history is immutable/checksum verified and current through `0014`. Schema 14 adds
+explicit workspace membership state without fabricating memberships for historical schema-13
+workspaces. Grant, dispatch and coordination tables use fail-closed binding/immutability rules
+appropriate to their contracts. There are no automated down migrations; rollback of an incompatible
+schema requires restoring a full pre-upgrade database/WAL/SHM backup.
 
 PostgreSQL remains a future release gate requiring an adapter, dialect-neutral service boundaries,
 transactional migration locking, concurrency tests, backup/restore operations and tenant-isolation
@@ -190,7 +200,8 @@ pass.
 
 ## Required gates before enterprise/unrestricted release
 
-- canonical authority→OperationCell ProductComposition path;
+- final reconciliation closure and governed merge of the canonical ProductComposition/runtime seam;
+- canonical public operation API/UI surfacing with evidence-correct semantics;
 - current reusable governed WRITE/rollback orchestration with separately authorized provider effects;
 - verified live GitHub main enforcement;
 - external penetration test;
