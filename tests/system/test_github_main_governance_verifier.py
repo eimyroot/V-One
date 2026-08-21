@@ -257,6 +257,7 @@ def test_missing_provider_observation_is_unknown_not_blocked() -> None:
         ruleset_details=passing_details(),
         provider_observations={},
         branch_head_sha=BRANCH_SHA,
+        expected_source_sha=BRANCH_SHA,
     )
     assert report["verdict"] == "UNKNOWN"
 
@@ -339,6 +340,7 @@ def test_hidden_bypass_actor_property_is_unknown_not_empty() -> None:
         ruleset_details=details,
         provider_observations=provider_observations(),
         branch_head_sha=BRANCH_SHA,
+        expected_source_sha=BRANCH_SHA,
     )
     assert report["verdict"] == "UNKNOWN"
 
@@ -359,12 +361,27 @@ def test_blocked_report_is_distinct_from_unknown() -> None:
         ruleset_details=[],
         provider_observations=provider_observations(),
         branch_head_sha=BRANCH_SHA,
+        expected_source_sha=BRANCH_SHA,
         sources=["https://api.github.com/example"],
     )
 
     assert report["verdict"] == "BLOCKED"
     assert report["unknown_reasons"] == []
     assert report["error"] is None
+
+
+def test_missing_verifier_source_is_unknown_not_verified() -> None:
+    report = verifier.build_report(
+        baseline(),
+        active_rules=passing_rules(),
+        ruleset_details=passing_details(),
+        provider_observations=provider_observations(),
+        branch_head_sha=BRANCH_SHA,
+    )
+
+    assert report["verdict"] == "UNKNOWN"
+    assert report["checks"]["verifier_source_is_current_main"] is False
+    assert "VERIFIER_SOURCE_EVIDENCE_INCOMPLETE" in report["unknown_reasons"]
 
 
 def test_exact_verifier_source_sha_can_produce_verified_report() -> None:
@@ -440,7 +457,7 @@ def test_check_run_pagination_reads_every_page(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(verifier, "github_get", fake_get)
     items, sources = verifier.github_get_check_run_pages(
-        "https://api.github.com/repos/nulleimy/V-One/commits/abc/check-runs?check_name=verify",
+        "https://api.github.com/repos/nulleimy/V-One/commits/abc/check-runs?check_name=verify&filter=all",
         token=None,
         api_version="2022-11-28",
     )
@@ -448,6 +465,14 @@ def test_check_run_pagination_reads_every_page(monkeypatch: pytest.MonkeyPatch) 
     assert len(items) == verifier.PAGE_SIZE + 1
     assert calls == [1, 2]
     assert len(sources) == 2
+
+
+def test_provider_collection_requests_all_matching_check_runs() -> None:
+    source = (ROOT / "scripts" / "verify_github_main_governance.py").read_text(
+        encoding="utf-8"
+    )
+    assert "filter=all" in source
+    assert "filter=latest" not in source
 
 
 @pytest.mark.parametrize(
