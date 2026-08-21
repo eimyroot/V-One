@@ -18,7 +18,7 @@ The live repository must enforce all of the following on `main`:
 
 1. changes reach `main` through a pull request;
 2. the required GitHub check-run context is `verify` and must pass before merge;
-3. `verify` is produced by the GitHub Actions workflow named `ci`; GitHub UI may display workflow/job together, but protection must bind the actual check context reported by GitHub;
+3. `verify` is produced by GitHub Actions workflow `ci`, and the ruleset check must be pinned to the GitHub Actions App rather than allowing any source;
 4. required checks apply to the latest PR head before merge;
 5. force pushes are disabled;
 6. branch deletion is disabled;
@@ -39,7 +39,7 @@ Product/runtime rule `no requester self-approval` remains a separate V-One autho
 - `.github/CODEOWNERS` assigns canonical ownership;
 - `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates;
 - `scripts/verify_github_main_governance.py` evaluates live active branch rules against `.github/governance/main-branch-baseline.v1.json`;
-- `.github/workflows/g0-governance-verify.yml` provides a read-only manual live-evidence run.
+- `.github/workflows/g0-governance-verify.yml` provides a read-only manual live-evidence run and retains JSON + SHA-256 evidence even when the verdict is fail-closed.
 
 ## Required verification evidence
 
@@ -51,10 +51,13 @@ branch = main
 pull_request_required = true
 required_status_check = verify
 required_check_provider = GitHub Actions / workflow ci
+required_check_source_is_pinned = true
+latest_head_checks = true
 force_push = false
 delete_branch = false
 conversation_resolution = true
 ordinary_admin_bypass = false
+bypass_evidence_complete = true
 verified_at = <timestamp>
 source = GitHub live repository settings/API
 ```
@@ -66,11 +69,12 @@ A repository document, CI pass, issue, PR description or previous observation is
 Canonical local/manual verification:
 
 ```bash
+GITHUB_TOKEN=<governance-evidence-token> \
 python scripts/verify_github_main_governance.py \
   --output g0-governance-evidence.json
 ```
 
-The verifier reads the active rules applying to `main` through GitHub REST, follows the referenced rulesets and evaluates the machine baseline. It never mutates GitHub settings and never serializes credential material.
+The verifier reads the active rules applying to `main`, follows referenced rulesets, resolves the GitHub Actions App identity from live `verify` check runs, and evaluates the machine baseline. It never mutates GitHub settings and never serializes credential material.
 
 The manual Actions workflow is:
 
@@ -78,26 +82,59 @@ The manual Actions workflow is:
 g0-governance-verify
 ```
 
+For the workflow to prove the no-bypass requirement, repository secret
+`VONE_GITHUB_GOVERNANCE_TOKEN` must contain a narrowly scoped governance-evidence credential that is
+allowed to read complete ruleset details including `bypass_actors`. A normal public read or a token
+whose API response omits `bypass_actors` is deliberately insufficient evidence.
+
+The workflow always retains:
+
+```text
+g0-governance-evidence.json
+g0-governance-evidence.sha256
+```
+
 The live verifier has three terminal states:
 
 ```text
-VERIFIED = live evidence is readable and every required control is present
-BLOCKED  = live evidence is readable but one or more required controls are absent
-UNKNOWN  = live evidence cannot be obtained or trusted
+VERIFIED = live evidence is complete and every required control is present
+BLOCKED  = complete live evidence is readable but one or more required controls are absent
+UNKNOWN  = live evidence is unavailable, incomplete or cannot prove a required property
 ```
 
-Only `VERIFIED` exits successfully. `BLOCKED` and `UNKNOWN` fail closed. A historical PASS is not reusable proof after the GitHub ruleset/settings configuration changes.
+Examples that MUST remain `UNKNOWN` rather than being silently promoted to PASS:
+
+- GitHub API is unavailable;
+- required `verify` check provider cannot be independently resolved;
+- ruleset detail omits `bypass_actors` because the evidence credential lacks sufficient access;
+- a ruleset source cannot be resolved to its authoritative detail endpoint.
+
+Examples that are `BLOCKED` when evidence is otherwise complete:
+
+- `verify` is not a required check;
+- `verify` accepts any source or a non-GitHub-Actions integration;
+- latest-head/strict checks are disabled;
+- PR-only flow, force-push blocking, deletion blocking or thread resolution is absent;
+- any bypass actor is configured.
+
+Only `VERIFIED` exits successfully. `BLOCKED` and `UNKNOWN` fail closed. A historical PASS is not reusable proof after GitHub ruleset/settings configuration changes.
+
+## Credential boundary
+
+The governance-evidence token is read-only from the workflow's perspective: the verifier performs GET requests only. The token is not printed, written to the evidence JSON, persisted in artifacts or made available to repository checkout credentials.
+
+The dedicated token exists only because GitHub may omit sensitive `bypass_actors` from ruleset detail responses unless the caller has sufficient access. Missing sensitive fields are evidence incompleteness, never proof of an empty bypass list.
 
 ## Failure semantics
 
-If live protection cannot be read or verified:
+If live protection cannot be read or completely verified:
 
 ```text
 GITHUB_SETTINGS_ENFORCED = UNKNOWN
 P0 = BLOCKED
 ```
 
-If live protection is readable but weaker than this baseline:
+If complete live protection evidence is readable but weaker than this baseline:
 
 ```text
 GITHUB_SETTINGS_ENFORCED = BLOCKED
@@ -117,9 +154,12 @@ REPO_ENFORCEMENT_CONTRACT = VERIFIED
 GITHUB_SETTINGS_ENFORCED = VERIFIED
 MAIN_PR_ONLY = VERIFIED
 REQUIRED_CI = VERIFIED
+REQUIRED_CI_PROVIDER = VERIFIED
+LATEST_HEAD_CHECKS = VERIFIED
 FORCE_PUSH_DISABLED = VERIFIED
 BRANCH_DELETE_DISABLED = VERIFIED
 CONVERSATION_RESOLUTION = VERIFIED
+BYPASS_EVIDENCE_COMPLETE = VERIFIED
 ORDINARY_ADMIN_BYPASS_DISABLED = VERIFIED
 P0_GITHUB_GOVERNANCE = PASS
 ```
