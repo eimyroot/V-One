@@ -454,6 +454,7 @@ def build_report(
     ruleset_details: list[dict[str, Any]] | None = None,
     provider_observations: dict[str, list[dict[str, Any]]] | None = None,
     branch_head_sha: str | None = None,
+    expected_source_sha: str | None = None,
     sources: list[str] | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
@@ -466,7 +467,7 @@ def build_report(
             "source": sources or [],
             "verdict": "UNKNOWN",
             "checks": {},
-            "observed": {},
+            "observed": {"verifier_source_sha": expected_source_sha},
             "unknown_reasons": ["LIVE_EVIDENCE_UNAVAILABLE"],
             "error": error,
         }
@@ -478,6 +479,13 @@ def build_report(
         provider_observations or {},
         branch_head_sha,
     )
+    source_is_current = expected_source_sha is None or (
+        isinstance(branch_head_sha, str) and expected_source_sha == branch_head_sha
+    )
+    evaluation["checks"]["verifier_source_is_current_main"] = source_is_current
+    evaluation["observed"]["verifier_source_sha"] = expected_source_sha
+    evaluation["ok"] = bool(evaluation["ok"]) and source_is_current
+
     verdict = (
         "UNKNOWN"
         if evaluation["unknown_reasons"]
@@ -504,6 +512,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--token-env", default="GITHUB_TOKEN")
+    parser.add_argument("--expected-source-sha")
     parser.add_argument("--api-version", default=os.getenv("GITHUB_API_VERSION", DEFAULT_API_VERSION))
     return parser.parse_args(argv)
 
@@ -527,10 +536,15 @@ def main(argv: list[str] | None = None) -> int:
             ruleset_details=details,
             provider_observations=provider_observations,
             branch_head_sha=branch_head_sha,
+            expected_source_sha=args.expected_source_sha,
             sources=sources,
         )
     except GitHubEvidenceError as exc:
-        report = build_report(baseline, error=str(exc))
+        report = build_report(
+            baseline,
+            expected_source_sha=args.expected_source_sha,
+            error=str(exc),
+        )
 
     rendered = json.dumps(report, indent=2, sort_keys=True)
     print(rendered)
