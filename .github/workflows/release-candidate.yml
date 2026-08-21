@@ -44,6 +44,7 @@ jobs:
         run: |
           python scripts/verify_github_main_governance.py \
             --token-env VONE_GITHUB_GOVERNANCE_TOKEN \
+            --expected-source-sha "${GITHUB_SHA}" \
             --output g0-governance-evidence.json
           sha256sum g0-governance-evidence.json > g0-governance-evidence.sha256
           sha256sum --check g0-governance-evidence.sha256
