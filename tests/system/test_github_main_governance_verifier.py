@@ -10,6 +10,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import verify_github_main_governance as verifier  # noqa: E402
 
+GITHUB_ACTIONS_APP_ID = 15368
+
 
 def baseline() -> dict[str, object]:
     return {
@@ -34,19 +36,35 @@ def passing_rules() -> list[dict[str, object]]:
     return [
         {
             "type": "pull_request",
+            "ruleset_source_type": "Repository",
+            "ruleset_source": "nulleimy/V-One",
             "ruleset_id": 17,
             "parameters": {"required_review_thread_resolution": True},
         },
         {
             "type": "required_status_checks",
+            "ruleset_source_type": "Repository",
+            "ruleset_source": "nulleimy/V-One",
             "ruleset_id": 17,
             "parameters": {
                 "strict_required_status_checks_policy": True,
-                "required_status_checks": [{"context": "verify"}],
+                "required_status_checks": [
+                    {"context": "verify", "integration_id": GITHUB_ACTIONS_APP_ID}
+                ],
             },
         },
-        {"type": "non_fast_forward", "ruleset_id": 17},
-        {"type": "deletion", "ruleset_id": 17},
+        {
+            "type": "non_fast_forward",
+            "ruleset_source_type": "Repository",
+            "ruleset_source": "nulleimy/V-One",
+            "ruleset_id": 17,
+        },
+        {
+            "type": "deletion",
+            "ruleset_source_type": "Repository",
+            "ruleset_source": "nulleimy/V-One",
+            "ruleset_id": 17,
+        },
     ]
 
 
@@ -54,12 +72,31 @@ def passing_details() -> list[dict[str, object]]:
     return [{"id": 17, "enforcement": "active", "bypass_actors": []}]
 
 
+def provider_ids() -> dict[str, set[int]]:
+    return {"verify": {GITHUB_ACTIONS_APP_ID}}
+
+
+def evaluate(
+    rules: list[dict[str, object]] | None = None,
+    details: list[dict[str, object]] | None = None,
+    providers: dict[str, set[int]] | None = None,
+) -> dict[str, object]:
+    return verifier.evaluate_ruleset_state(
+        baseline(),
+        rules if rules is not None else passing_rules(),
+        details if details is not None else passing_details(),
+        providers if providers is not None else provider_ids(),
+    )
+
+
 def test_verified_requires_complete_active_rule_set() -> None:
-    result = verifier.evaluate_ruleset_state(baseline(), passing_rules(), passing_details())
+    result = evaluate()
 
     assert result["ok"] is True
     assert all(result["checks"].values())
+    assert result["unknown_reasons"] == []
     assert result["observed"]["required_status_checks"] == ["verify"]
+    assert result["observed"]["provider_app_ids"] == {"verify": [GITHUB_ACTIONS_APP_ID]}
 
 
 def test_missing_required_verify_check_fails_closed() -> None:
@@ -67,12 +104,56 @@ def test_missing_required_verify_check_fails_closed() -> None:
     status_rule = next(rule for rule in rules if rule["type"] == "required_status_checks")
     parameters = status_rule["parameters"]
     assert isinstance(parameters, dict)
-    parameters["required_status_checks"] = [{"context": "other"}]
+    parameters["required_status_checks"] = [
+        {"context": "other", "integration_id": GITHUB_ACTIONS_APP_ID}
+    ]
 
-    result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
+    result = evaluate(rules=rules)
 
     assert result["ok"] is False
     assert result["checks"]["required_status_checks"] is False
+
+
+def test_any_source_required_check_fails_provider_binding() -> None:
+    rules = passing_rules()
+    status_rule = next(rule for rule in rules if rule["type"] == "required_status_checks")
+    parameters = status_rule["parameters"]
+    assert isinstance(parameters, dict)
+    parameters["required_status_checks"] = [{"context": "verify"}]
+
+    result = evaluate(rules=rules)
+
+    assert result["ok"] is False
+    assert result["checks"]["required_check_provider"] is False
+    assert result["unknown_reasons"] == []
+
+
+def test_wrong_app_required_check_fails_provider_binding() -> None:
+    rules = passing_rules()
+    status_rule = next(rule for rule in rules if rule["type"] == "required_status_checks")
+    parameters = status_rule["parameters"]
+    assert isinstance(parameters, dict)
+    parameters["required_status_checks"] = [{"context": "verify", "integration_id": 999999}]
+
+    result = evaluate(rules=rules)
+
+    assert result["ok"] is False
+    assert result["checks"]["required_check_provider"] is False
+
+
+def test_missing_provider_observation_is_unknown_not_blocked() -> None:
+    result = evaluate(providers={})
+
+    assert result["ok"] is False
+    assert "REQUIRED_CHECK_PROVIDER_EVIDENCE_INCOMPLETE" in result["unknown_reasons"]
+
+    report = verifier.build_report(
+        baseline(),
+        active_rules=passing_rules(),
+        ruleset_details=passing_details(),
+        provider_app_ids={},
+    )
+    assert report["verdict"] == "UNKNOWN"
 
 
 def test_non_strict_status_checks_fail_latest_head_requirement() -> None:
@@ -82,7 +163,7 @@ def test_non_strict_status_checks_fail_latest_head_requirement() -> None:
     assert isinstance(parameters, dict)
     parameters["strict_required_status_checks_policy"] = False
 
-    result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
+    result = evaluate(rules=rules)
 
     assert result["ok"] is False
     assert result["checks"]["require_latest_head_checks"] is False
@@ -95,7 +176,7 @@ def test_missing_conversation_resolution_fails_closed() -> None:
     assert isinstance(parameters, dict)
     parameters["required_review_thread_resolution"] = False
 
-    result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
+    result = evaluate(rules=rules)
 
     assert result["ok"] is False
     assert result["checks"]["conversation_resolution_required"] is False
@@ -106,7 +187,7 @@ def test_force_push_or_delete_permission_fails_closed() -> None:
         rule for rule in passing_rules() if rule["type"] not in {"non_fast_forward", "deletion"}
     ]
 
-    result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
+    result = evaluate(rules=rules)
 
     assert result["ok"] is False
     assert result["checks"]["force_push_disabled"] is False
@@ -124,10 +205,29 @@ def test_any_ruleset_bypass_actor_fails_closed() -> None:
         }
     ]
 
-    result = verifier.evaluate_ruleset_state(baseline(), passing_rules(), details)
+    result = evaluate(details=details)
 
     assert result["ok"] is False
     assert result["checks"]["ordinary_admin_bypass_disabled"] is False
+    assert result["unknown_reasons"] == []
+
+
+def test_hidden_bypass_actor_property_is_unknown_not_empty() -> None:
+    details = [{"id": 17, "enforcement": "active"}]
+
+    result = evaluate(details=details)
+
+    assert result["ok"] is False
+    assert result["checks"]["ordinary_admin_bypass_disabled"] is False
+    assert "RULESET_BYPASS_EVIDENCE_INCOMPLETE" in result["unknown_reasons"]
+
+    report = verifier.build_report(
+        baseline(),
+        active_rules=passing_rules(),
+        ruleset_details=details,
+        provider_app_ids=provider_ids(),
+    )
+    assert report["verdict"] == "UNKNOWN"
 
 
 def test_unknown_live_read_is_not_promoted_to_pass() -> None:
@@ -135,6 +235,7 @@ def test_unknown_live_read_is_not_promoted_to_pass() -> None:
 
     assert report["verdict"] == "UNKNOWN"
     assert report["checks"] == {}
+    assert report["unknown_reasons"] == ["LIVE_EVIDENCE_UNAVAILABLE"]
     assert report["error"] == "GitHub API unavailable"
 
 
@@ -143,10 +244,12 @@ def test_blocked_report_is_distinct_from_unknown() -> None:
         baseline(),
         active_rules=[],
         ruleset_details=[],
+        provider_app_ids=provider_ids(),
         sources=["https://api.github.com/example"],
     )
 
     assert report["verdict"] == "BLOCKED"
+    assert report["unknown_reasons"] == []
     assert report["error"] is None
 
 
