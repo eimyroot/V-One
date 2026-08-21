@@ -14,6 +14,7 @@ concurrency:
 jobs:
   verify:
     name: verify-g0
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -34,6 +35,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.VONE_GITHUB_GOVERNANCE_TOKEN }}
         run: |
           python scripts/verify_github_main_governance.py \
+            --expected-source-sha "${GITHUB_SHA}" \
             --output g0-governance-evidence.json
 
       - name: Checksum G0 evidence
