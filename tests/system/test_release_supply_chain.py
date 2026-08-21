@@ -84,6 +84,10 @@ def test_ci_and_release_candidate_share_the_hardened_image_smoke_gate() -> None:
     checkout = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7"
     setup_python = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6"
     upload = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7"
+    final_sums = (
+        'sha256sum "v-one-${RC_VERSION}.tar.gz" sbom.cdx.json '
+        "g0-governance-evidence.json > SHA256SUMS.txt"
+    )
     assert checkout in ci
     assert checkout in release
     assert setup_python in ci
@@ -92,7 +96,7 @@ def test_ci_and_release_candidate_share_the_hardened_image_smoke_gate() -> None:
     assert "github.ref == 'refs/heads/main'" in release
     assert 'VOODOO_ALLOW_PRODUCTION_EFFECTS: "false"' in release
     assert release.index("Validate release candidate version") < release.index("docker build")
-    assert release.index("-o dist/sbom.cdx.json") < release.index("sha256sum")
+    assert release.index("-o dist/sbom.cdx.json") < release.index(final_sums)
     assert "sha256sum --check SHA256SUMS.txt" in release
 
 
