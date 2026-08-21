@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Document status | Accepted descriptive architecture / reconciliation candidate |
-| Reconciled | `2026-08-20` against `main@71a931b561faa93c8dd2e062b83559401143b1df` plus PR #128 candidate |
-| VOP semantic candidate | `vop-terminology-freeze-r2` / ADR-0018 |
+| Document status | Accepted descriptive architecture / current post-reconciliation baseline |
+| Reconciled | `2026-08-21` after merged PR #128 on canonical `main` |
+| VOP semantic revision | `vop-terminology-freeze-r2` / ADR-0018 |
 | Current packaging | Modular monolith + explicit profile-specific runtime packs |
 | Current composition | Canonical trust-plane runtime is ProductComposition-capable; default provider runtime remains fail-closed |
 | Production effects | BLOCKED / disabled by default |
@@ -163,7 +163,7 @@ bounded provider mutation
 automatic mutation retry. They are specialized mutation-lineage contracts, not universal READ
 contracts.
 
-PR #128 does not execute a new mutation. It adds reusable A09 preparation seams.
+Merged PR #128 did not execute a new mutation. It established reusable A09 preparation seams.
 
 ## A09 CREATE_REF pre-effect orchestration
 
@@ -291,7 +291,9 @@ CyberCore != Runner
 CyberCore != Verifier
 ```
 
-CyberCore remains blocked until final exact-head gates and the new reconciliation audit pass.
+CyberCore remains blocked while product/release-governance hardening is incomplete. Reconciliation is
+merged; CyberCore still cannot be used to bypass GitHub enforcement, public API, runtime-pack, release,
+or deployment gates.
 
 ## Related documents
 

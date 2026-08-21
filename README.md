@@ -65,16 +65,16 @@ OperationProof != OperationCell
 | OperationProof/v2 | IMPLEMENTED bounded-mutation proof; F6b VERIFIED |
 | OperationCell/v1 | IMPLEMENTED bounded-mutation atom; F6b VERIFIED |
 | Security Intelligence R-SI1.1 | IMPLEMENTED intelligence-only metadata/test layer |
-| VOP semantic revision R2 | RECONCILIATION CANDIDATE in PR #128 |
-| Canonical FastAPI ProductComposition runtime seam | IMPLEMENTED CANDIDATE; explicit runtime factory required, default provider pack disabled |
+| VOP semantic revision R2 | CURRENT / MERGED via PR #128 |
+| Canonical FastAPI ProductComposition runtime seam | IMPLEMENTED / MERGED; explicit runtime factory required, default provider pack disabled |
 | Canonical public operation API | NOT YET SURFACED |
 | GitHub main ruleset enforcement | UNKNOWN / release-blocking until live evidence |
 | Production effects | BLOCKED / disabled by default |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED |
-| CyberCore integration | BLOCKED until reconciliation gates pass |
+| CyberCore integration | BLOCKED pending product/release-governance hardening |
 
-Product version remains `0.9.0-rc2-dev`; reconciliation is not release/deploy.
+Product version remains `0.9.0-rc2-dev`; reconciliation merge is not release/deploy.
 
 ### Historical runtime checkpoint
 
@@ -102,7 +102,7 @@ Machine authority:
 Human projection:
 [`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md).
 
-Current semantic revision candidate is `vop-terminology-freeze-r2` (ADR-0018). R2 makes the lifecycle
+Current semantic revision is `vop-terminology-freeze-r2` (ADR-0018). R2 makes the lifecycle
 stage list an ordered superset and registers explicit terminal profiles/compatibility. It deliberately
 does **not** call Receipt/v2 or Proof/v2 universal supersessions of the older v1 families.
 
@@ -127,15 +127,15 @@ Grant consumption belongs to the control plane **before Dispatch**. Runner autho
 ## ProductComposition reality
 
 The repository contains the accepted authority, durable dispatch, coordination, Runner, verifier and
-bounded-mutation proof/cell components. PR #128 additionally makes the canonical trust-plane runtime
-a `ProductComposition` seam: an explicit runtime factory must share the exact ProductService database
+bounded-mutation proof/cell components. Merged PR #128 established the canonical trust-plane runtime
+as a `ProductComposition` seam: an explicit runtime factory must share the exact ProductService database
 and `DatabasePermissionAuthority`, and the default application intentionally leaves the provider
 runtime pack absent/fail-closed.
 
 ```text
 COMPONENT COVERAGE = STRONG
 HISTORICAL BOUNDED-MUTATION ATOM = VERIFIED
-CANONICAL PRODUCT RUNTIME SEAM = IMPLEMENTED CANDIDATE
+CANONICAL PRODUCT RUNTIME SEAM = IMPLEMENTED / MERGED
 DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
 CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
 ```

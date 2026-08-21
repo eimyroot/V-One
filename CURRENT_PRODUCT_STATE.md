@@ -6,21 +6,21 @@
 ## Snapshot identity
 
 ```text
-AS_OF: 2026-08-20
+AS_OF: 2026-08-21
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
 RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
-RECONCILIATION_CANDIDATE: PR #128 / feat/reconciliation-p0-p1-r1
+RECONCILIATION_MERGE: PR #128 / d9e27ff17b76f29daba4a3421b11cc396826fe12
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
-VOP_SEMANTIC_REVISION_CANDIDATE: vop-terminology-freeze-r2
+VOP_SEMANTIC_REVISION: vop-terminology-freeze-r2
 PRODUCT_VERSION: 0.9.0-rc2-dev
 PRODUCTION_EFFECTS: DISABLED
 RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-The exact candidate and live `main` identities must be queried directly. A retained SHA in this file is
-never a self-updating claim about future repository state.
+The exact live `main` identity must be queried directly. Retained SHAs in this file are historical or
+merge provenance and are never self-updating claims about future repository state.
 
 ## Historical checkpoint boundary
 
@@ -54,28 +54,28 @@ RELEASED / DEPLOYED       = separately governed states
 |---|---|
 | Technical trust-plane components | **STRONG / IMPLEMENTED** |
 | Historical bounded-mutation operation atom | **VERIFIED** in F6b staging scope |
-| Canonical ProductComposition trust-plane seam | **IMPLEMENTED CANDIDATE in PR #128** |
+| Canonical ProductComposition trust-plane seam | **IMPLEMENTED / MERGED via PR #128** |
 | Default provider runtime pack | **DISABLED / FAIL-CLOSED** |
 | Canonical public operation API | **NOT YET SURFACED** |
-| Capability→terminal profile authority | **IMPLEMENTED CANDIDATE; caller cannot strengthen profile** |
-| Runtime/database-backed permission authority | **IMPLEMENTED CANDIDATE; current role + active state + workspace membership** |
-| Workspace membership scope | **IMPLEMENTED CANDIDATE; schema 14, no legacy inference/backfill** |
-| READ Runner→independent Verifier terminal | **IMPLEMENTED CANDIDATE; live pilot primitives already VERIFIED** |
+| Capability→terminal profile authority | **IMPLEMENTED / MERGED; caller cannot strengthen profile** |
+| Runtime/database-backed permission authority | **IMPLEMENTED / MERGED; current role + active state + workspace membership** |
+| Workspace membership scope | **IMPLEMENTED / MERGED; schema 14, no legacy inference/backfill** |
+| READ Runner→independent Verifier terminal | **IMPLEMENTED / MERGED; live pilot primitives already VERIFIED** |
 | Reusable CREATE_REF WRITE orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
 | Reusable DELETE_REF rollback orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
-| Canonical VOP language | **R2 RECONCILIATION CANDIDATE** |
-| UI receipt/verification truth | **FIXED IN PR #128; final exact-head gate pending** |
+| Canonical VOP language | **R2 CURRENT / MERGED** |
+| UI receipt/verification truth | **FIXED / MERGED; exact-head closure passed** |
 | SQLite persistence | **IMPLEMENTED through schema 14** |
 | OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; historical F6b instance VERIFIED** |
 | OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; historical F6b instance VERIFIED** |
 | Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
 | GitHub main ruleset enforcement | **UNKNOWN / RELEASE BLOCKER** |
 | Production release/effects | **BLOCKED** |
-| CyberCore | **BLOCKED until final reconciliation closure** |
+| CyberCore | **BLOCKED pending product/release-governance hardening** |
 
 ## Canonical shared authority/execution prefix
 
-PR #128 now contains a reusable canonical prefix:
+Merged PR #128 established a reusable canonical prefix:
 
 ```text
 ReviewedOperation
@@ -111,11 +111,11 @@ profile by supplying a stronger string to `CanonicalOperationPipeline.prepare()`
 
 ## Runtime permission authority
 
-`DatabasePermissionAuthority` is the current candidate permission source for canonical product
-composition. Every permission decision re-reads the same ProductService database and requires the
-current active user, current global role permissions, exact workspace/environment and an exact current
-user↔workspace membership. A stale in-memory `Principal`, a later role downgrade, deactivation or
-membership revocation therefore cannot preserve stronger canonical authority.
+`DatabasePermissionAuthority` is the current permission source for canonical product composition.
+Every permission decision re-reads the same ProductService database and requires the current active
+user, current global role permissions, exact workspace/environment and an exact current user↔workspace
+membership. A stale in-memory `Principal`, a later role downgrade, deactivation or membership
+revocation therefore cannot preserve stronger canonical authority.
 
 Global role still answers **what** a principal may do; current membership answers **where** that
 permission may be considered. Membership role (`owner`/`member`) controls membership management and
@@ -129,8 +129,8 @@ it attempts to use another database or another permission-authority instance.
 
 ## ProductComposition reality
 
-PR #128 now wires the trust-plane seam into `ProductComposition` rather than leaving it as a detached
-pre-effect helper:
+Merged PR #128 wires the trust-plane seam into `ProductComposition` rather than leaving it as a
+detached pre-effect helper:
 
 ```text
 ProductService database
@@ -152,7 +152,7 @@ ProductService database and permission authority. Without that explicit provider
 fallback to legacy authority or ambient GitHub credentials.
 
 Legacy `ExecutionService` remains an explicit existing API compatibility surface. The canonical VOP
-runtime is now product-composable, but a new public HTTP operation endpoint has not been claimed.
+runtime is product-composable, but a new public HTTP operation endpoint has not yet been surfaced.
 
 ## Canonical terminal profiles — R2
 
@@ -190,8 +190,8 @@ bounded provider mutation
 → OperationCell/v1
 ```
 
-PR #128 does **not** execute this terminal. It adds reusable A09 preparation that ends immediately
-before a separately authorized provider effect.
+Merged PR #128 did **not** execute this terminal. It established reusable A09 preparation that ends
+immediately before a separately authorized provider effect.
 
 ### A09 CREATE_REF preparation
 
@@ -263,7 +263,7 @@ Release != Deploy
 | ExecutionReceipt/v2 | IMPLEMENTED | post-effect mutation lineage only | historical F6b |
 | OperationProof/v2 | IMPLEMENTED | post-verification mutation lineage only | historical F6b |
 | OperationCell/v1 | IMPLEMENTED | post-proof mutation lineage only | historical F6b |
-| Canonical operation runtime router | IMPLEMENTED | ProductComposition optional runtime pack | tests; final exact-head gate pending |
+| Canonical operation runtime router | IMPLEMENTED | ProductComposition optional runtime pack | tests + PR #128 exact-head closure |
 
 ## Historical F6b mutation evidence
 
@@ -285,33 +285,38 @@ This historical evidence does not authorize or prove any new A09 provider mutati
 
 ## CI / readiness state
 
-The final reconciliation candidate is not considered closed until one exact head has all of:
+Merged PR #128 was gated on exact head `fcdd43578860bf8bf01f85b3f088bb5c6d21526c` with:
 
 ```text
-full CI = SUCCESS
-D4b = SUCCESS
-E3 = SUCCESS
-E4b = SUCCESS
-R3 adversarial review = completed
-reconciliation audit = completed
+CI #839 = SUCCESS
+D4b #157 = SUCCESS
+E3 #148 = SUCCESS
+E4b #144 = SUCCESS
+R3 self/adversarial review = PASS WITH OWNER-ACCEPTED INDEPENDENCE RISK
+unresolved review threads = 0
 ```
 
-Intermediate green runs are useful regression evidence but do not attest later candidate commits.
+CI #839 included lint, compile, migrations, documentation/VOP truth gates, auth/governance,
+execution/persistence, full tests, Product Readiness, dependency audit, product image build and smoke.
+Those exact-head results are historical merge evidence; later repository state must still be queried and
+re-tested for later changes.
+
 The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
 authority, workspace membership boundary and A09 modules/tests so those layers cannot silently fall
 outside future readiness checks.
 
 ## UI truth
 
-PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
+Merged PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
 verification is `UNKNOWN` unless an actual VerificationResult binding is exposed. Receipt existence
 must never render `VERIFIED` by itself.
 
 ## GitHub governance
 
 Repository policy requires PR-only `main`, latest-head checks, no force push/delete and conversation
-resolution. Available evidence does not prove complete modern ruleset enforcement; successful CI is
-not Settings/ruleset evidence.
+resolution. The live branch endpoint currently reports `protected=true` but classic
+`required_status_checks.enforcement_level=off`; available connector evidence cannot inspect the full
+modern ruleset configuration. Therefore successful CI is not Settings/ruleset evidence.
 
 ```text
 GITHUB_SETTINGS_ENFORCED = UNKNOWN
@@ -325,14 +330,17 @@ RELEASE_BLOCKER = YES
 - Historical PR #125 technical merge/post-state is VERIFIED; separate pre-merge merge-authorization
   provenance remains **NOT VERIFIED** and is not rewritten.
 - ADR-0018 records the R2 terminal-profile correction instead of silently rewriting older history.
+- PR #128 reconciliation merge is recorded in CASER; organizationally independent R3 was absent and
+  the remaining independence risk was explicitly accepted for that merge.
 
 ## CyberCore boundary
 
-CyberCore remains intelligence/context/proposal only and is still blocked. It cannot issue
-ExecutionGrant, consume grants, become Runner/Verifier, execute provider effects or become proof
-evidence by inference.
+CyberCore remains intelligence/context/proposal only and is still blocked from implementation during
+product/release-governance hardening. It cannot issue ExecutionGrant, consume grants, become
+Runner/Verifier, execute provider effects or become proof evidence by inference.
 
-CyberCore may proceed only after final exact-head gates and the new reconciliation audit are closed.
+Reconciliation itself is complete and merged. CyberCore may only proceed after the remaining product
+quality gates are deliberately resolved or explicitly accepted without weakening V-One authority.
 
 ## Release boundary
 
@@ -346,10 +354,11 @@ UNRESTRICTED_PRODUCTION=BLOCKED
 ## Next governed sequence
 
 ```text
-final source/docs/readiness convergence
-→ one fresh exact-head CI + D4b/E3/E4b set
-→ R3 adversarial review
-→ complete reconciliation audit
-→ separate merge authorization gate
-→ CyberCore only after reconciliation PASS
+post-merge source-of-truth convergence
+→ GitHub main enforcement G0 evidence/fix
+→ canonical public operation API design + governed implementation
+→ explicit provider runtime pack, READ-first and fail-closed
+→ release-candidate/security/operations gates
+→ deployment authorization only after release readiness
+→ CyberCore integration only after V-One product baseline is stable
 ```
