@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import verify_github_main_governance as verifier  # noqa: E402
 
 GITHUB_ACTIONS_APP_ID = 15368
+UPLOAD_ARTIFACT_PIN = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
 
 
 def baseline() -> dict[str, object]:
@@ -87,6 +89,42 @@ def evaluate(
         details if details is not None else passing_details(),
         providers if providers is not None else provider_ids(),
     )
+
+
+def test_machine_baseline_matches_verifier_contract() -> None:
+    actual = json.loads(
+        (ROOT / ".github" / "governance" / "main-branch-baseline.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    expected = baseline()
+    assert actual["schema"] == expected["schema"]
+    assert actual["repository"] == expected["repository"]
+    assert actual["branch"] == expected["branch"]
+    assert actual["desired"] == expected["desired"]
+    assert actual["evidence_policy"]["live_github_configuration_required"] is True
+    assert actual["evidence_policy"]["unknown_fails_closed"] is True
+
+
+def test_g0_workflow_is_manual_read_only_and_retains_fail_closed_evidence() -> None:
+    text = (ROOT / ".github" / "workflows" / "g0-governance-verify.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "workflow_dispatch:" in text
+    assert "pull_request:" not in text
+    assert "push:" not in text
+    assert "contents: read" in text
+    assert "checks: read" in text
+    assert "persist-credentials: false" in text
+    assert "VONE_GITHUB_GOVERNANCE_TOKEN" in text
+    assert "continue-on-error: true" in text
+    assert f"actions/upload-artifact@{UPLOAD_ARTIFACT_PIN}" in text
+    assert "g0-governance-evidence.json" in text
+    assert "g0-governance-evidence.sha256" in text
+    assert "Enforce G0 verdict" in text
+    assert "test \"$G0_OUTCOME\" = \"success\"" in text
 
 
 def test_verified_requires_complete_active_rule_set() -> None:
