@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -63,7 +65,9 @@ def test_verified_requires_complete_active_rule_set() -> None:
 def test_missing_required_verify_check_fails_closed() -> None:
     rules = passing_rules()
     status_rule = next(rule for rule in rules if rule["type"] == "required_status_checks")
-    status_rule["parameters"]["required_status_checks"] = [{"context": "other"}]
+    parameters = status_rule["parameters"]
+    assert isinstance(parameters, dict)
+    parameters["required_status_checks"] = [{"context": "other"}]
 
     result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
 
@@ -74,7 +78,9 @@ def test_missing_required_verify_check_fails_closed() -> None:
 def test_non_strict_status_checks_fail_latest_head_requirement() -> None:
     rules = passing_rules()
     status_rule = next(rule for rule in rules if rule["type"] == "required_status_checks")
-    status_rule["parameters"]["strict_required_status_checks_policy"] = False
+    parameters = status_rule["parameters"]
+    assert isinstance(parameters, dict)
+    parameters["strict_required_status_checks_policy"] = False
 
     result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
 
@@ -85,7 +91,9 @@ def test_non_strict_status_checks_fail_latest_head_requirement() -> None:
 def test_missing_conversation_resolution_fails_closed() -> None:
     rules = passing_rules()
     pull_request_rule = next(rule for rule in rules if rule["type"] == "pull_request")
-    pull_request_rule["parameters"]["required_review_thread_resolution"] = False
+    parameters = pull_request_rule["parameters"]
+    assert isinstance(parameters, dict)
+    parameters["required_review_thread_resolution"] = False
 
     result = verifier.evaluate_ruleset_state(baseline(), rules, passing_details())
 
@@ -140,3 +148,17 @@ def test_blocked_report_is_distinct_from_unknown() -> None:
 
     assert report["verdict"] == "BLOCKED"
     assert report["error"] is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "http://api.github.com/repos/nulleimy/V-One",
+        "https://api.github.com.evil.example/repos/nulleimy/V-One",
+        "https://user@example.com@api.github.com/repos/nulleimy/V-One",
+    ],
+)
+def test_live_verifier_rejects_noncanonical_github_urls(url: str) -> None:
+    with pytest.raises(verifier.GitHubEvidenceError, match="refusing"):
+        verifier.github_get(url, token=None, api_version="2022-11-28")
