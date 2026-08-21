@@ -62,8 +62,11 @@ def github_get(url: str, *, token: str | None, api_version: str) -> Any:
         raise GitHubEvidenceError(f"GitHub API unavailable: {exc.reason}") from exc
 
 
-def _required_status_contexts(active_rules: list[dict[str, Any]]) -> tuple[set[str], bool]:
+def _required_status_bindings(
+    active_rules: list[dict[str, Any]],
+) -> tuple[set[str], bool, dict[str, set[int | None]]]:
     contexts: set[str] = set()
+    integrations: dict[str, set[int | None]] = {}
     strict = False
     for rule in active_rules:
         if rule.get("type") != "required_status_checks":
@@ -71,10 +74,18 @@ def _required_status_contexts(active_rules: list[dict[str, Any]]) -> tuple[set[s
         parameters = rule.get("parameters") or {}
         strict = strict or bool(parameters.get("strict_required_status_checks_policy"))
         for item in parameters.get("required_status_checks") or []:
-            context = item.get("context") if isinstance(item, dict) else None
-            if context:
-                contexts.add(str(context))
-    return contexts, strict
+            if not isinstance(item, dict):
+                continue
+            context = item.get("context")
+            if not context:
+                continue
+            normalized = str(context)
+            contexts.add(normalized)
+            integration_id = item.get("integration_id")
+            integrations.setdefault(normalized, set()).add(
+                integration_id if isinstance(integration_id, int) else None
+            )
+    return contexts, strict, integrations
 
 
 def _pull_request_thread_resolution(active_rules: list[dict[str, Any]]) -> bool:
@@ -91,12 +102,14 @@ def evaluate_ruleset_state(
     baseline: dict[str, Any],
     active_rules: list[dict[str, Any]],
     ruleset_details: list[dict[str, Any]],
+    provider_app_ids: dict[str, set[int]],
 ) -> dict[str, Any]:
     desired = baseline["desired"]
     rule_types = {str(rule.get("type")) for rule in active_rules if rule.get("type")}
-    contexts, strict_checks = _required_status_contexts(active_rules)
+    contexts, strict_checks, integrations = _required_status_bindings(active_rules)
     expected_contexts = set(desired.get("required_status_checks") or [])
 
+    bypass_evidence_complete = all("bypass_actors" in ruleset for ruleset in ruleset_details)
     bypass_actors: list[dict[str, Any]] = []
     inactive_rulesets: list[int] = []
     for ruleset in ruleset_details:
@@ -108,11 +121,34 @@ def evaluate_ruleset_state(
             if isinstance(actor, dict):
                 bypass_actors.append(actor)
 
+    provider_evidence_required = bool(desired.get("required_check_provider"))
+    provider_evidence_complete = not provider_evidence_required or all(
+        provider_app_ids.get(context) for context in expected_contexts
+    )
+    provider_binding_ok = not provider_evidence_required or all(
+        bool(
+            {
+                integration_id
+                for integration_id in integrations.get(context, set())
+                if integration_id is not None
+            }
+            & provider_app_ids.get(context, set())
+        )
+        for context in expected_contexts
+    )
+
+    unknown_reasons: list[str] = []
+    if ruleset_details and not bypass_evidence_complete:
+        unknown_reasons.append("RULESET_BYPASS_EVIDENCE_INCOMPLETE")
+    if not provider_evidence_complete:
+        unknown_reasons.append("REQUIRED_CHECK_PROVIDER_EVIDENCE_INCOMPLETE")
+
     checks = {
         "pull_request_required": (
             not desired.get("pull_request_required", False) or "pull_request" in rule_types
         ),
         "required_status_checks": expected_contexts.issubset(contexts),
+        "required_check_provider": provider_binding_ok,
         "require_latest_head_checks": (
             not desired.get("require_latest_head_checks", False) or strict_checks
         ),
@@ -126,9 +162,8 @@ def evaluate_ruleset_state(
             not desired.get("require_conversation_resolution", False)
             or _pull_request_thread_resolution(active_rules)
         ),
-        "ordinary_admin_bypass_disabled": (
-            desired.get("ordinary_admin_bypass") is not False or not bypass_actors
-        ),
+        "ordinary_admin_bypass_disabled": bypass_evidence_complete
+        and (desired.get("ordinary_admin_bypass") is not False or not bypass_actors),
         "rulesets_active": not inactive_rulesets,
     }
 
@@ -137,43 +172,119 @@ def evaluate_ruleset_state(
         "observed": {
             "active_rule_types": sorted(rule_types),
             "required_status_checks": sorted(contexts),
+            "required_status_check_integration_ids": {
+                context: sorted(value for value in values if value is not None)
+                for context, values in sorted(integrations.items())
+            },
+            "provider_app_ids": {
+                context: sorted(values) for context, values in sorted(provider_app_ids.items())
+            },
             "strict_required_status_checks_policy": strict_checks,
+            "bypass_evidence_complete": bypass_evidence_complete,
             "bypass_actors": bypass_actors,
             "inactive_ruleset_ids": inactive_rulesets,
         },
-        "ok": all(checks.values()),
+        "unknown_reasons": unknown_reasons,
+        "ok": not unknown_reasons and all(checks.values()),
     }
+
+
+def _ruleset_detail_url(base: str, rule: dict[str, Any]) -> str:
+    ruleset_id = rule.get("ruleset_id")
+    source_type = rule.get("ruleset_source_type")
+    source = rule.get("ruleset_source")
+    if not isinstance(ruleset_id, int):
+        raise GitHubEvidenceError("active branch rule is missing ruleset_id")
+    if source_type == "Repository":
+        return f"{base}/rulesets/{ruleset_id}"
+    if source_type == "Organization" and isinstance(source, str) and source:
+        org = urllib.parse.quote(source, safe="")
+        return f"https://api.github.com/orgs/{org}/rulesets/{ruleset_id}"
+    raise GitHubEvidenceError(f"unsupported ruleset source type: {source_type!r}")
+
+
+def _collect_provider_app_ids(
+    base: str,
+    branch: str,
+    contexts: list[str],
+    provider_slug: str,
+    *,
+    token: str | None,
+    api_version: str,
+) -> tuple[dict[str, set[int]], list[str]]:
+    result: dict[str, set[int]] = {}
+    sources: list[str] = []
+    encoded_branch = urllib.parse.quote(branch, safe="")
+    for context in contexts:
+        encoded_context = urllib.parse.quote(context, safe="")
+        url = (
+            f"{base}/commits/{encoded_branch}/check-runs"
+            f"?check_name={encoded_context}&filter=latest&per_page=100"
+        )
+        payload = github_get(url, token=token, api_version=api_version)
+        if not isinstance(payload, dict) or not isinstance(payload.get("check_runs"), list):
+            raise GitHubEvidenceError(f"check-runs endpoint is unreadable for context {context!r}")
+        app_ids: set[int] = set()
+        for run in payload["check_runs"]:
+            if not isinstance(run, dict) or run.get("name") != context:
+                continue
+            app = run.get("app")
+            if not isinstance(app, dict) or app.get("slug") != provider_slug:
+                continue
+            app_id = app.get("id")
+            if isinstance(app_id, int):
+                app_ids.add(app_id)
+        result[context] = app_ids
+        sources.append(url)
+    return result, sources
 
 
 def collect_live_ruleset_evidence(
     baseline: dict[str, Any], *, token: str | None, api_version: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, set[int]],
+    list[str],
+]:
     repository = baseline["repository"]
     branch = baseline["branch"]
     owner, repo = repository.split("/", 1)
-    base = f"https://api.github.com/repos/{owner}/{repo}"
-    rules_url = f"{base}/rules/branches/{branch}?per_page=100"
+    encoded_owner = urllib.parse.quote(owner, safe="")
+    encoded_repo = urllib.parse.quote(repo, safe="")
+    encoded_branch = urllib.parse.quote(branch, safe="")
+    base = f"https://api.github.com/repos/{encoded_owner}/{encoded_repo}"
+    rules_url = f"{base}/rules/branches/{encoded_branch}?per_page=100"
     active_rules = github_get(rules_url, token=token, api_version=api_version)
     if not isinstance(active_rules, list):
         raise GitHubEvidenceError("branch rules endpoint did not return a list")
 
-    ruleset_ids = sorted(
-        {
-            int(rule["ruleset_id"])
-            for rule in active_rules
-            if isinstance(rule, dict) and isinstance(rule.get("ruleset_id"), int)
-        }
-    )
+    detail_urls = sorted({_ruleset_detail_url(base, rule) for rule in active_rules})
     details: list[dict[str, Any]] = []
     sources = [rules_url]
-    for ruleset_id in ruleset_ids:
-        detail_url = f"{base}/rulesets/{ruleset_id}"
+    for detail_url in detail_urls:
         detail = github_get(detail_url, token=token, api_version=api_version)
         if not isinstance(detail, dict):
-            raise GitHubEvidenceError(f"ruleset {ruleset_id} endpoint did not return an object")
+            raise GitHubEvidenceError("ruleset detail endpoint did not return an object")
         details.append(detail)
         sources.append(detail_url)
-    return active_rules, details, sources
+
+    desired = baseline["desired"]
+    contexts = [str(value) for value in desired.get("required_status_checks") or []]
+    provider_slug = str(desired.get("required_check_provider") or "")
+    provider_app_ids: dict[str, set[int]] = {}
+    if provider_slug and contexts:
+        provider_app_ids, provider_sources = _collect_provider_app_ids(
+            base,
+            branch,
+            contexts,
+            provider_slug,
+            token=token,
+            api_version=api_version,
+        )
+        sources.extend(provider_sources)
+
+    return active_rules, details, provider_app_ids, sources
 
 
 def build_report(
@@ -181,6 +292,7 @@ def build_report(
     *,
     active_rules: list[dict[str, Any]] | None = None,
     ruleset_details: list[dict[str, Any]] | None = None,
+    provider_app_ids: dict[str, set[int]] | None = None,
     sources: list[str] | None = None,
     error: str | None = None,
 ) -> dict[str, Any]:
@@ -194,6 +306,7 @@ def build_report(
             "verdict": "UNKNOWN",
             "checks": {},
             "observed": {},
+            "unknown_reasons": ["LIVE_EVIDENCE_UNAVAILABLE"],
             "error": error,
         }
 
@@ -201,6 +314,10 @@ def build_report(
         baseline,
         active_rules or [],
         ruleset_details or [],
+        provider_app_ids or {},
+    )
+    verdict = "UNKNOWN" if evaluation["unknown_reasons"] else (
+        "VERIFIED" if evaluation["ok"] else "BLOCKED"
     )
     return {
         "schema": EVIDENCE_SCHEMA,
@@ -208,9 +325,10 @@ def build_report(
         "repository": baseline["repository"],
         "branch": baseline["branch"],
         "source": sources or [],
-        "verdict": "VERIFIED" if evaluation["ok"] else "BLOCKED",
+        "verdict": verdict,
         "checks": evaluation["checks"],
         "observed": evaluation["observed"],
+        "unknown_reasons": evaluation["unknown_reasons"],
         "error": None,
     }
 
@@ -232,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     token = os.getenv(args.token_env) or None
 
     try:
-        active_rules, details, sources = collect_live_ruleset_evidence(
+        active_rules, details, provider_app_ids, sources = collect_live_ruleset_evidence(
             baseline,
             token=token,
             api_version=args.api_version,
@@ -241,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             baseline,
             active_rules=active_rules,
             ruleset_details=details,
+            provider_app_ids=provider_app_ids,
             sources=sources,
         )
     except GitHubEvidenceError as exc:
