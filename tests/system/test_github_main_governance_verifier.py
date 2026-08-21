@@ -137,8 +137,10 @@ def test_g0_workflow_is_manual_read_only_and_retains_fail_closed_evidence() -> N
     assert "push:" not in text
     assert "contents: read" in text
     assert "checks: read" in text
+    assert "if: github.ref == 'refs/heads/main'" in text
     assert "persist-credentials: false" in text
     assert "VONE_GITHUB_GOVERNANCE_TOKEN" in text
+    assert '--expected-source-sha "${GITHUB_SHA}"' in text
     assert "continue-on-error: true" in text
     assert f"actions/upload-artifact@{UPLOAD_ARTIFACT_PIN}" in text
     assert "g0-governance-evidence.json" in text
@@ -363,6 +365,37 @@ def test_blocked_report_is_distinct_from_unknown() -> None:
     assert report["verdict"] == "BLOCKED"
     assert report["unknown_reasons"] == []
     assert report["error"] is None
+
+
+def test_exact_verifier_source_sha_can_produce_verified_report() -> None:
+    report = verifier.build_report(
+        baseline(),
+        active_rules=passing_rules(),
+        ruleset_details=passing_details(),
+        provider_observations=provider_observations(),
+        branch_head_sha=BRANCH_SHA,
+        expected_source_sha=BRANCH_SHA,
+    )
+
+    assert report["verdict"] == "VERIFIED"
+    assert report["checks"]["verifier_source_is_current_main"] is True
+    assert report["observed"]["verifier_source_sha"] == BRANCH_SHA
+
+
+def test_stale_verifier_source_sha_is_blocked() -> None:
+    stale = "b" * 40
+    report = verifier.build_report(
+        baseline(),
+        active_rules=passing_rules(),
+        ruleset_details=passing_details(),
+        provider_observations=provider_observations(),
+        branch_head_sha=BRANCH_SHA,
+        expected_source_sha=stale,
+    )
+
+    assert report["verdict"] == "BLOCKED"
+    assert report["checks"]["verifier_source_is_current_main"] is False
+    assert report["observed"]["verifier_source_sha"] == stale
 
 
 def test_active_rule_pagination_reads_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
