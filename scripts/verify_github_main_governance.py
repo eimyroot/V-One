@@ -5,8 +5,9 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ class GitHubEvidenceError(RuntimeError):
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def load_baseline(path: Path) -> dict[str, Any]:
@@ -33,7 +34,16 @@ def load_baseline(path: Path) -> dict[str, Any]:
     return baseline
 
 
+def _validate_github_api_url(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "api.github.com":
+        raise GitHubEvidenceError("refusing non-GitHub API URL")
+    if parsed.username is not None or parsed.password is not None or parsed.port not in {None, 443}:
+        raise GitHubEvidenceError("refusing non-canonical GitHub API authority")
+
+
 def github_get(url: str, *, token: str | None, api_version: str) -> Any:
+    _validate_github_api_url(url)
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "vone-g0-governance-verifier",
@@ -41,7 +51,7 @@ def github_get(url: str, *, token: str | None, api_version: str) -> Any:
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(url, headers=headers)
+    request = urllib.request.Request(url, headers=headers)  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
             return json.load(response)
