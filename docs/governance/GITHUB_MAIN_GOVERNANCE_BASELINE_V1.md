@@ -18,13 +18,16 @@ The live repository must enforce all of the following on `main`:
 
 1. changes reach `main` through a pull request;
 2. the required GitHub check-run context is `verify` and must pass before merge;
-3. `verify` is produced by GitHub Actions workflow `ci`, and the ruleset check must be pinned to the GitHub Actions App rather than allowing any source;
-4. required checks apply to the latest PR head before merge;
-5. force pushes are disabled;
-6. branch deletion is disabled;
-7. conversation resolution is required before merge when review threads exist;
-8. administrators do not silently bypass the baseline for ordinary development;
-9. direct production/release authority is not implied by merge permission.
+3. the required `verify` context is pinned to the GitHub Actions App rather than allowing any source;
+4. live evidence must additionally prove that the current `verify` check is produced by workflow `ci` at `.github/workflows/ci.yml` on the exact current `main` SHA;
+5. required checks apply to the latest PR head before merge;
+6. force pushes are disabled;
+7. branch deletion is disabled;
+8. conversation resolution is required before merge when review threads exist;
+9. administrators do not silently bypass the baseline for ordinary development;
+10. direct production/release authority is not implied by merge permission.
+
+GitHub required status checks bind a check context and optional GitHub App source; they do not encode the workflow identity itself. V-One therefore treats workflow name/path as a separate live evidence property rather than falsely claiming the ruleset natively binds `ci`. If another GitHub Actions workflow emits the same required `verify` context on the observed current `main` SHA, G0 fails closed.
 
 ## Review-count policy
 
@@ -38,7 +41,7 @@ Product/runtime rule `no requester self-approval` remains a separate V-One autho
 - workflow `ci`, job/check context `verify`, executes lint, compile, focused security/governance gates, full pytest, product readiness, dependency audit, image build and smoke test;
 - `.github/CODEOWNERS` assigns canonical ownership;
 - `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates;
-- `scripts/verify_github_main_governance.py` evaluates live active branch rules against `.github/governance/main-branch-baseline.v1.json`;
+- `scripts/verify_github_main_governance.py` evaluates complete paginated live branch rules against `.github/governance/main-branch-baseline.v1.json` and independently resolves the observed Actions workflow identity for the required check;
 - `.github/workflows/g0-governance-verify.yml` provides a read-only manual live-evidence run and retains JSON + SHA-256 evidence even when the verdict is fail-closed.
 
 ## Required verification evidence
@@ -48,16 +51,21 @@ P0 is complete only when live GitHub configuration evidence proves the desired s
 ```text
 repository = nulleimy/V-One
 branch = main
+branch_head_sha = <exact current main sha>
 pull_request_required = true
 required_status_check = verify
-required_check_provider = GitHub Actions / workflow ci
+required_check_provider = GitHub Actions
 required_check_source_is_pinned = true
+observed_required_workflow = ci
+observed_required_workflow_path = .github/workflows/ci.yml
+required_workflow_identity = true
 latest_head_checks = true
 force_push = false
 delete_branch = false
 conversation_resolution = true
 ordinary_admin_bypass = false
 bypass_evidence_complete = true
+active_rule_pagination_complete = true
 verified_at = <timestamp>
 source = GitHub live repository settings/API
 ```
@@ -74,7 +82,16 @@ python scripts/verify_github_main_governance.py \
   --output g0-governance-evidence.json
 ```
 
-The verifier reads the active rules applying to `main`, follows referenced rulesets, resolves the GitHub Actions App identity from live `verify` check runs, and evaluates the machine baseline. It never mutates GitHub settings and never serializes credential material.
+The verifier:
+
+1. resolves the exact live `main` SHA;
+2. reads **all pages** of active rules applying to `main`;
+3. follows every referenced repository/organization ruleset detail endpoint;
+4. rejects incomplete `bypass_actors` evidence;
+5. resolves all current `verify` GitHub Actions check runs on the exact `main` SHA;
+6. follows their Actions run metadata and requires workflow `ci` at `.github/workflows/ci.yml`;
+7. rejects required-check workflow collisions, stale workflow observations, any-source status checks and wrong integration bindings;
+8. evaluates the machine baseline without mutating GitHub settings or serializing credential material.
 
 The manual Actions workflow is:
 
@@ -105,14 +122,17 @@ UNKNOWN  = live evidence is unavailable, incomplete or cannot prove a required p
 Examples that MUST remain `UNKNOWN` rather than being silently promoted to PASS:
 
 - GitHub API is unavailable;
-- required `verify` check provider cannot be independently resolved;
+- active-rule or check-run pagination cannot be completed;
+- required `verify` provider or workflow identity cannot be independently resolved;
 - ruleset detail omits `bypass_actors` because the evidence credential lacks sufficient access;
-- a ruleset source cannot be resolved to its authoritative detail endpoint.
+- a ruleset source cannot be resolved to its authoritative detail endpoint;
+- exact current `main` SHA cannot be established.
 
 Examples that are `BLOCKED` when evidence is otherwise complete:
 
 - `verify` is not a required check;
 - `verify` accepts any source or a non-GitHub-Actions integration;
+- the observed current `verify` comes from a workflow other than `ci`, from another workflow path, or collides with another workflow emitting the same context;
 - latest-head/strict checks are disabled;
 - PR-only flow, force-push blocking, deletion blocking or thread resolution is absent;
 - any bypass actor is configured.
@@ -155,6 +175,7 @@ GITHUB_SETTINGS_ENFORCED = VERIFIED
 MAIN_PR_ONLY = VERIFIED
 REQUIRED_CI = VERIFIED
 REQUIRED_CI_PROVIDER = VERIFIED
+REQUIRED_CI_WORKFLOW_IDENTITY = VERIFIED
 LATEST_HEAD_CHECKS = VERIFIED
 FORCE_PUSH_DISABLED = VERIFIED
 BRANCH_DELETE_DISABLED = VERIFIED
