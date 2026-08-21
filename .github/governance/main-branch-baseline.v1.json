@@ -9,6 +9,7 @@
     ],
     "required_check_provider": "github-actions",
     "workflow": "ci",
+    "workflow_path": ".github/workflows/ci.yml",
     "require_latest_head_checks": true,
     "allow_force_pushes": false,
     "allow_deletions": false,

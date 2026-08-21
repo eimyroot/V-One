@@ -38,6 +38,16 @@ jobs:
           cache-dependency-path: requirements-dev.lock
       - name: Install locked dependencies
         run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Verify G0 main governance
+        env:
+          VONE_GITHUB_GOVERNANCE_TOKEN: ${{ secrets.VONE_GITHUB_GOVERNANCE_TOKEN }}
+        run: |
+          python scripts/verify_github_main_governance.py \
+            --token-env VONE_GITHUB_GOVERNANCE_TOKEN \
+            --expected-source-sha "${GITHUB_SHA}" \
+            --output g0-governance-evidence.json
+          sha256sum g0-governance-evidence.json > g0-governance-evidence.sha256
+          sha256sum --check g0-governance-evidence.sha256
       - name: Validate release candidate version
         env:
           RC_VERSION: ${{ inputs.version }}
@@ -64,10 +74,11 @@ jobs:
           RC_VERSION: ${{ inputs.version }}
         run: |
           mkdir -p dist
+          cp g0-governance-evidence.json dist/
           git archive --format=tar.gz --prefix="v-one-${RC_VERSION}/" -o "dist/v-one-${RC_VERSION}.tar.gz" HEAD
           python -m pip_audit --disable-pip --strict -r requirements-product.lock --require-hashes -f cyclonedx-json -o dist/sbom.cdx.json
           cd dist
-          sha256sum "v-one-${RC_VERSION}.tar.gz" sbom.cdx.json > SHA256SUMS.txt
+          sha256sum "v-one-${RC_VERSION}.tar.gz" sbom.cdx.json g0-governance-evidence.json > SHA256SUMS.txt
           sha256sum --check SHA256SUMS.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
