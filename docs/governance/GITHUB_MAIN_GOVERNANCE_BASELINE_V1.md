@@ -42,7 +42,8 @@ Product/runtime rule `no requester self-approval` remains a separate V-One autho
 - `.github/CODEOWNERS` assigns canonical ownership;
 - `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates;
 - `scripts/verify_github_main_governance.py` evaluates complete paginated live branch rules against `.github/governance/main-branch-baseline.v1.json` and independently resolves the observed Actions workflow identity for the required check;
-- `.github/workflows/g0-governance-verify.yml` provides a read-only manual live-evidence run and retains JSON + SHA-256 evidence even when the verdict is fail-closed.
+- `.github/workflows/g0-governance-verify.yml` provides a read-only, `main`-only manual live-evidence run and retains JSON + SHA-256 evidence even when the verdict is fail-closed;
+- `.github/workflows/release-candidate.yml` requires fresh G0 `VERIFIED` evidence before version validation, image build or release-candidate artifact creation.
 
 ## Required verification evidence
 
@@ -52,6 +53,8 @@ P0 is complete only when live GitHub configuration evidence proves the desired s
 repository = nulleimy/V-One
 branch = main
 branch_head_sha = <exact current main sha>
+verifier_source_sha = <same exact current main sha>
+verifier_source_is_current_main = true
 pull_request_required = true
 required_status_check = verify
 required_check_provider = GitHub Actions
@@ -74,7 +77,7 @@ A repository document, CI pass, issue, PR description or previous observation is
 
 ## Machine verification
 
-Canonical local/manual verification:
+Canonical local/manual verification can read live settings without claiming checkout freshness:
 
 ```bash
 GITHUB_TOKEN=<governance-evidence-token> \
@@ -82,22 +85,33 @@ python scripts/verify_github_main_governance.py \
   --output g0-governance-evidence.json
 ```
 
+Canonical Actions/release evidence MUST additionally bind the verifier source to the exact checkout SHA:
+
+```bash
+python scripts/verify_github_main_governance.py \
+  --expected-source-sha "${GITHUB_SHA}" \
+  --output g0-governance-evidence.json
+```
+
 The verifier:
 
 1. resolves the exact live `main` SHA;
-2. reads **all pages** of active rules applying to `main`;
-3. follows every referenced repository/organization ruleset detail endpoint;
-4. rejects incomplete `bypass_actors` evidence;
-5. resolves all current `verify` GitHub Actions check runs on the exact `main` SHA;
-6. follows their Actions run metadata and requires workflow `ci` at `.github/workflows/ci.yml`;
-7. rejects required-check workflow collisions, stale workflow observations, any-source status checks and wrong integration bindings;
-8. evaluates the machine baseline without mutating GitHub settings or serializing credential material.
+2. when an expected source SHA is supplied, requires the verifier checkout SHA to equal that live `main` SHA;
+3. reads **all pages** of active rules applying to `main`;
+4. follows every referenced repository/organization ruleset detail endpoint;
+5. rejects incomplete `bypass_actors` evidence;
+6. resolves all current `verify` GitHub Actions check runs on the exact `main` SHA;
+7. follows their Actions run metadata and requires workflow `ci` at `.github/workflows/ci.yml`;
+8. rejects required-check workflow collisions, stale workflow observations, any-source status checks and wrong integration bindings;
+9. evaluates the machine baseline without mutating GitHub settings or serializing credential material.
 
 The manual Actions workflow is:
 
 ```text
 g0-governance-verify
 ```
+
+It is valid only from `refs/heads/main`; evidence generated from another workflow ref is not accepted as canonical G0 proof.
 
 For the workflow to prove the no-bypass requirement, repository secret
 `VONE_GITHUB_GOVERNANCE_TOKEN` must contain a narrowly scoped governance-evidence credential that is
@@ -133,6 +147,7 @@ Examples that are `BLOCKED` when evidence is otherwise complete:
 - `verify` is not a required check;
 - `verify` accepts any source or a non-GitHub-Actions integration;
 - the observed current `verify` comes from a workflow other than `ci`, from another workflow path, or collides with another workflow emitting the same context;
+- verifier source SHA differs from the exact live `main` SHA when source binding is required;
 - latest-head/strict checks are disabled;
 - PR-only flow, force-push blocking, deletion blocking or thread resolution is absent;
 - any bypass actor is configured.
@@ -144,6 +159,12 @@ Only `VERIFIED` exits successfully. `BLOCKED` and `UNKNOWN` fail closed. A histo
 The governance-evidence token is read-only from the workflow's perspective: the verifier performs GET requests only. The token is not printed, written to the evidence JSON, persisted in artifacts or made available to repository checkout credentials.
 
 The dedicated token exists only because GitHub may omit sensitive `bypass_actors` from ruleset detail responses unless the caller has sufficient access. Missing sensitive fields are evidence incompleteness, never proof of an empty bypass list.
+
+## Release-candidate boundary
+
+A release-candidate workflow is not allowed to produce an RC artifact unless the exact checked-out `main` SHA first produces G0 `VERIFIED`. The resulting `g0-governance-evidence.json` is included in the RC artifact and covered by `SHA256SUMS.txt` alongside the source archive and SBOM.
+
+This gate does not itself authorize release or deployment. It only prevents release-candidate artifact construction from bypassing repository-governance evidence.
 
 ## Failure semantics
 
@@ -176,6 +197,7 @@ MAIN_PR_ONLY = VERIFIED
 REQUIRED_CI = VERIFIED
 REQUIRED_CI_PROVIDER = VERIFIED
 REQUIRED_CI_WORKFLOW_IDENTITY = VERIFIED
+VERIFIER_SOURCE_IS_CURRENT_MAIN = VERIFIED
 LATEST_HEAD_CHECKS = VERIFIED
 FORCE_PUSH_DISABLED = VERIFIED
 BRANCH_DELETE_DISABLED = VERIFIED
