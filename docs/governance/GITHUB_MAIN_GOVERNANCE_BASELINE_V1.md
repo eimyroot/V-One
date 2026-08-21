@@ -1,6 +1,6 @@
 # GitHub Main Governance Baseline v1
 
-Status: PREPARED — repository-side contract only
+Status: PREPARED — repository-side contract with fail-closed live verifier
 
 ## Purpose
 
@@ -37,7 +37,9 @@ Product/runtime rule `no requester self-approval` remains a separate V-One autho
 - `.github/workflows/ci.yml` runs on every pull request and pushes to `main`;
 - workflow `ci`, job/check context `verify`, executes lint, compile, focused security/governance gates, full pytest, product readiness, dependency audit, image build and smoke test;
 - `.github/CODEOWNERS` assigns canonical ownership;
-- `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates.
+- `.github/pull_request_template.md` requires purpose, boundary, evidence, tests, rollback, non-scope and acceptance gates;
+- `scripts/verify_github_main_governance.py` evaluates live active branch rules against `.github/governance/main-branch-baseline.v1.json`;
+- `.github/workflows/g0-governance-verify.yml` provides a read-only manual live-evidence run.
 
 ## Required verification evidence
 
@@ -52,11 +54,39 @@ required_check_provider = GitHub Actions / workflow ci
 force_push = false
 delete_branch = false
 conversation_resolution = true
+ordinary_admin_bypass = false
 verified_at = <timestamp>
 source = GitHub live repository settings/API
 ```
 
 A repository document, CI pass, issue, PR description or previous observation is not sufficient evidence of GitHub-side enforcement.
+
+## Machine verification
+
+Canonical local/manual verification:
+
+```bash
+python scripts/verify_github_main_governance.py \
+  --output g0-governance-evidence.json
+```
+
+The verifier reads the active rules applying to `main` through GitHub REST, follows the referenced rulesets and evaluates the machine baseline. It never mutates GitHub settings and never serializes credential material.
+
+The manual Actions workflow is:
+
+```text
+g0-governance-verify
+```
+
+The live verifier has three terminal states:
+
+```text
+VERIFIED = live evidence is readable and every required control is present
+BLOCKED  = live evidence is readable but one or more required controls are absent
+UNKNOWN  = live evidence cannot be obtained or trusted
+```
+
+Only `VERIFIED` exits successfully. `BLOCKED` and `UNKNOWN` fail closed. A historical PASS is not reusable proof after the GitHub ruleset/settings configuration changes.
 
 ## Failure semantics
 
@@ -67,7 +97,14 @@ GITHUB_SETTINGS_ENFORCED = UNKNOWN
 P0 = BLOCKED
 ```
 
-Never convert `UNKNOWN` into `PASS` from documentation intent.
+If live protection is readable but weaker than this baseline:
+
+```text
+GITHUB_SETTINGS_ENFORCED = BLOCKED
+P0 = BLOCKED
+```
+
+Never convert `UNKNOWN` or `BLOCKED` into `PASS` from documentation intent, CI success or branch metadata alone.
 
 ## Change path
 
@@ -82,6 +119,8 @@ MAIN_PR_ONLY = VERIFIED
 REQUIRED_CI = VERIFIED
 FORCE_PUSH_DISABLED = VERIFIED
 BRANCH_DELETE_DISABLED = VERIFIED
+CONVERSATION_RESOLUTION = VERIFIED
+ORDINARY_ADMIN_BYPASS_DISABLED = VERIFIED
 P0_GITHUB_GOVERNANCE = PASS
 ```
 
