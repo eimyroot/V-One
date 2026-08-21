@@ -103,6 +103,7 @@ def test_release_candidate_is_fail_closed_on_live_g0_governance() -> None:
     assert "VONE_GITHUB_GOVERNANCE_TOKEN" in release
     assert "scripts/verify_github_main_governance.py" in release
     assert "--token-env VONE_GITHUB_GOVERNANCE_TOKEN" in release
+    assert '--expected-source-sha "${GITHUB_SHA}"' in release
     assert "--output g0-governance-evidence.json" in release
     assert release.index("Verify G0 main governance") < release.index(
         "Validate release candidate version"
