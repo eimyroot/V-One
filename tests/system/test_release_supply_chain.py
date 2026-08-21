@@ -94,3 +94,19 @@ def test_ci_and_release_candidate_share_the_hardened_image_smoke_gate() -> None:
     assert release.index("Validate release candidate version") < release.index("docker build")
     assert release.index("-o dist/sbom.cdx.json") < release.index("sha256sum")
     assert "sha256sum --check SHA256SUMS.txt" in release
+
+
+def test_product_readiness_retains_g0_governance_evidence_surface() -> None:
+    required_g0_artifacts = (
+        ".github/governance/main-branch-baseline.v1.json",
+        ".github/workflows/g0-governance-verify.yml",
+        "docs/governance/GITHUB_MAIN_GOVERNANCE_BASELINE_V1.md",
+        "scripts/verify_github_main_governance.py",
+        "tests/system/test_github_main_governance_verifier.py",
+    )
+
+    missing = [path for path in required_g0_artifacts if not (ROOT / path).is_file()]
+    assert missing == []
+
+    readiness = (ROOT / "scripts/product_readiness_gate.py").read_text(encoding="utf-8")
+    assert '"tests/system/test_release_supply_chain.py"' in readiness
