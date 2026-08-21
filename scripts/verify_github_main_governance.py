@@ -340,7 +340,7 @@ def _collect_provider_observations(
         encoded_context = urllib.parse.quote(context, safe="")
         check_url = (
             f"{base}/commits/{encoded_sha}/check-runs"
-            f"?check_name={encoded_context}&filter=latest"
+            f"?check_name={encoded_context}&filter=all"
         )
         runs, page_sources = github_get_check_run_pages(
             check_url,
@@ -479,9 +479,12 @@ def build_report(
         provider_observations or {},
         branch_head_sha,
     )
-    source_is_current = expected_source_sha is None or (
+    source_evidence_complete = isinstance(expected_source_sha, str) and bool(expected_source_sha)
+    source_is_current = source_evidence_complete and (
         isinstance(branch_head_sha, str) and expected_source_sha == branch_head_sha
     )
+    if not source_evidence_complete:
+        evaluation["unknown_reasons"].append("VERIFIER_SOURCE_EVIDENCE_INCOMPLETE")
     evaluation["checks"]["verifier_source_is_current_main"] = source_is_current
     evaluation["observed"]["verifier_source_sha"] = expected_source_sha
     evaluation["ok"] = bool(evaluation["ok"]) and source_is_current
