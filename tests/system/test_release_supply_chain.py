@@ -96,6 +96,25 @@ def test_ci_and_release_candidate_share_the_hardened_image_smoke_gate() -> None:
     assert "sha256sum --check SHA256SUMS.txt" in release
 
 
+def test_release_candidate_is_fail_closed_on_live_g0_governance() -> None:
+    release = (ROOT / ".github/workflows/release-candidate.yml").read_text(encoding="utf-8")
+
+    assert "Verify G0 main governance" in release
+    assert "VONE_GITHUB_GOVERNANCE_TOKEN" in release
+    assert "scripts/verify_github_main_governance.py" in release
+    assert "--token-env VONE_GITHUB_GOVERNANCE_TOKEN" in release
+    assert "--output g0-governance-evidence.json" in release
+    assert release.index("Verify G0 main governance") < release.index(
+        "Validate release candidate version"
+    )
+    assert release.index("Verify G0 main governance") < release.index("docker build")
+    assert "cp g0-governance-evidence.json dist/" in release
+    assert (
+        'sha256sum "v-one-${RC_VERSION}.tar.gz" sbom.cdx.json '
+        "g0-governance-evidence.json > SHA256SUMS.txt"
+    ) in release
+
+
 def test_product_readiness_retains_g0_governance_evidence_surface() -> None:
     required_g0_artifacts = (
         ".github/governance/main-branch-baseline.v1.json",
