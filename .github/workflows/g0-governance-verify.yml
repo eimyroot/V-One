@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: g0-governance-verify
@@ -13,20 +14,48 @@ concurrency:
 jobs:
   verify:
     name: verify-g0
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.12"
+          python-version: "3.12.13"
 
       - name: Verify live GitHub main governance
+        id: g0
+        continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.VONE_GITHUB_GOVERNANCE_TOKEN }}
         run: |
           python scripts/verify_github_main_governance.py \
             --output g0-governance-evidence.json
+
+      - name: Checksum G0 evidence
+        if: always()
+        run: |
+          test -f g0-governance-evidence.json
+          sha256sum g0-governance-evidence.json > g0-governance-evidence.sha256
+          sha256sum --check g0-governance-evidence.sha256
+
+      - name: Upload G0 evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: g0-governance-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            g0-governance-evidence.json
+            g0-governance-evidence.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce G0 verdict
+        if: always()
+        env:
+          G0_OUTCOME: ${{ steps.g0.outcome }}
+        run: test "$G0_OUTCOME" = "success"
