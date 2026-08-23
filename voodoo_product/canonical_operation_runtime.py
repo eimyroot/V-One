@@ -5,6 +5,7 @@ from typing import Protocol
 
 from .a09_rollback_orchestration import A09PreparedRollback, A09RollbackPreparer
 from .a09_write_orchestration import A09CreateRefPreparer, A09PreparedCreateRef
+from .canonical_operation_resume import CanonicalOperationResumeService
 from .canonical_pipeline import CanonicalOperationPipeline, CanonicalPreparedExecution
 from .canonical_read_terminal import CanonicalGitHubReadTerminal, CanonicalReadTerminalResult
 from .controlled_write import GITHUB_CREATE_REF_CAPABILITY
@@ -34,17 +35,19 @@ class CanonicalOperationRuntime:
     """Single profile-routed ProductComposition runtime over accepted V-One contracts.
 
     The runtime deliberately has no generic `execute(profile=...)` method. Terminal profile is derived
-    by CanonicalOperationPipeline from the exact capability allowlist. READ is the only route that can
-    execute here; bounded write routes only produce A09 preflight plans and never invoke a provider
-    mutation transport. Every route passes an internal expected profile/capability constraint so a
-    mismatched reviewed request fails before Grant issuance/consumption. A missing terminal/preparer
-    also fails before authority preparation so no Grant is issued or consumed for an unroutable call.
+    by CanonicalOperationPipeline or reconstructed by CanonicalOperationResumeService from durable
+    canonical truth. READ is the only route that can execute here; bounded write routes only produce
+    A09 preflight plans and never invoke a provider mutation transport. Fresh prepare routes pass an
+    internal expected profile/capability constraint so a mismatched reviewed request fails before Grant
+    issuance/consumption. Resume routes never re-enter prepare and re-check the READ route constraint
+    against the reconstructed durable context before terminal execution.
     """
 
     pipeline: CanonicalOperationPipeline
     read_terminal: CanonicalGitHubReadTerminal | None = None
     create_ref_preparer: A09CreateRefPreparer | None = None
     rollback_preparer: A09RollbackPreparer | None = None
+    resume_service: CanonicalOperationResumeService | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.pipeline, CanonicalOperationPipeline):
@@ -61,6 +64,32 @@ class CanonicalOperationRuntime:
             self.rollback_preparer, A09RollbackPreparer
         ):
             raise ValueError("rollback_preparer is invalid")
+        if self.resume_service is not None:
+            self._validate_resume_service_binding()
+
+    def _validate_resume_service_binding(self) -> None:
+        resume_service = self.resume_service
+        if not isinstance(resume_service, CanonicalOperationResumeService):
+            raise ValueError("resume_service is invalid")
+
+        snapshot_creator = self.pipeline.snapshot_creator
+        if resume_service.db is not getattr(snapshot_creator, "db", None):
+            raise ValueError("resume service must share canonical pipeline database")
+        if resume_service.permission_authority is not getattr(
+            snapshot_creator,
+            "permission_authority",
+            None,
+        ):
+            raise ValueError("resume service must share canonical pipeline permission authority")
+        if resume_service.terminal_profile_registry is not self.pipeline.terminal_profile_registry:
+            raise ValueError("resume service must share canonical terminal profile registry")
+        if resume_service.envelope_revision != self.pipeline.envelope_revision:
+            raise ValueError("resume service must share canonical envelope revision")
+        if (
+            self.read_terminal is not None
+            and resume_service.current_fence is not self.read_terminal.runner_adapter.current_fence
+        ):
+            raise ValueError("resume service and READ terminal must share current execution fence")
 
     def _prepare(
         self,
@@ -81,6 +110,19 @@ class CanonicalOperationRuntime:
             required_capability=required_capability,
         )
 
+    def resume(
+        self,
+        *,
+        actor_id: str,
+        execution_id: str,
+    ) -> CanonicalPreparedExecution:
+        if self.resume_service is None:
+            raise RuntimeError("CANONICAL_OPERATION_RESUME_NOT_CONFIGURED")
+        return self.resume_service.resume(
+            actor_id=actor_id,
+            execution_id=execution_id,
+        )
+
     def run_read_only(
         self,
         *,
@@ -98,6 +140,24 @@ class CanonicalOperationRuntime:
             correlation_id=correlation_id,
             required_terminal_profile=READ_ONLY_TERMINAL_PROFILE,
             required_capability=GITHUB_READ_REF_CAPABILITY,
+        )
+        if prepared.terminal_profile != READ_ONLY_TERMINAL_PROFILE:
+            raise PermissionError("CANONICAL_RUNTIME_READ_PROFILE_MISMATCH")
+        if prepared.capability != GITHUB_READ_REF_CAPABILITY:
+            raise PermissionError("CANONICAL_RUNTIME_READ_CAPABILITY_MISMATCH")
+        return self.read_terminal.run(prepared=prepared)
+
+    def run_resumed_read_only(
+        self,
+        *,
+        actor_id: str,
+        execution_id: str,
+    ) -> CanonicalReadTerminalResult:
+        if self.read_terminal is None:
+            raise RuntimeError("CANONICAL_READ_TERMINAL_NOT_CONFIGURED")
+        prepared = self.resume(
+            actor_id=actor_id,
+            execution_id=execution_id,
         )
         if prepared.terminal_profile != READ_ONLY_TERMINAL_PROFILE:
             raise PermissionError("CANONICAL_RUNTIME_READ_PROFILE_MISMATCH")
