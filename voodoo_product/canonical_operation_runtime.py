@@ -8,6 +8,7 @@ from .a09_write_orchestration import A09CreateRefPreparer, A09PreparedCreateRef
 from .canonical_pipeline import CanonicalOperationPipeline, CanonicalPreparedExecution
 from .canonical_read_terminal import CanonicalGitHubReadTerminal, CanonicalReadTerminalResult
 from .controlled_write import GITHUB_CREATE_REF_CAPABILITY
+from .github_read_provider import GITHUB_READ_REF_CAPABILITY
 from .rollback_control import GITHUB_DELETE_REF_CAPABILITY
 from .terminal_profile import (
     BOUNDED_MUTATION_TERMINAL_PROFILE,
@@ -23,6 +24,8 @@ class _Pipeline(Protocol):
         request_id: str,
         idempotency_key: str,
         correlation_id: str,
+        required_terminal_profile: str | None = None,
+        required_capability: str | None = None,
     ) -> CanonicalPreparedExecution: ...
 
 
@@ -33,7 +36,8 @@ class CanonicalOperationRuntime:
     The runtime deliberately has no generic `execute(profile=...)` method. Terminal profile is derived
     by CanonicalOperationPipeline from the exact capability allowlist. READ is the only route that can
     execute here; bounded write routes only produce A09 preflight plans and never invoke a provider
-    mutation transport.
+    mutation transport. Every route passes an internal expected profile/capability constraint so a
+    mismatched reviewed request fails before Grant issuance/consumption.
     """
 
     pipeline: CanonicalOperationPipeline
@@ -64,12 +68,16 @@ class CanonicalOperationRuntime:
         request_id: str,
         idempotency_key: str,
         correlation_id: str,
+        required_terminal_profile: str,
+        required_capability: str,
     ) -> CanonicalPreparedExecution:
         return self.pipeline.prepare(
             actor_id=actor_id,
             request_id=request_id,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
+            required_terminal_profile=required_terminal_profile,
+            required_capability=required_capability,
         )
 
     def run_read_only(
@@ -85,9 +93,13 @@ class CanonicalOperationRuntime:
             request_id=request_id,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
+            required_terminal_profile=READ_ONLY_TERMINAL_PROFILE,
+            required_capability=GITHUB_READ_REF_CAPABILITY,
         )
         if prepared.terminal_profile != READ_ONLY_TERMINAL_PROFILE:
             raise PermissionError("CANONICAL_RUNTIME_READ_PROFILE_MISMATCH")
+        if prepared.capability != GITHUB_READ_REF_CAPABILITY:
+            raise PermissionError("CANONICAL_RUNTIME_READ_CAPABILITY_MISMATCH")
         if self.read_terminal is None:
             raise RuntimeError("CANONICAL_READ_TERMINAL_NOT_CONFIGURED")
         return self.read_terminal.run(prepared=prepared)
@@ -105,6 +117,8 @@ class CanonicalOperationRuntime:
             request_id=request_id,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
+            required_terminal_profile=BOUNDED_MUTATION_TERMINAL_PROFILE,
+            required_capability=GITHUB_CREATE_REF_CAPABILITY,
         )
         if prepared.terminal_profile != BOUNDED_MUTATION_TERMINAL_PROFILE:
             raise PermissionError("CANONICAL_RUNTIME_WRITE_PROFILE_MISMATCH")
@@ -129,6 +143,8 @@ class CanonicalOperationRuntime:
             request_id=request_id,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
+            required_terminal_profile=BOUNDED_MUTATION_TERMINAL_PROFILE,
+            required_capability=GITHUB_DELETE_REF_CAPABILITY,
         )
         if prepared.terminal_profile != BOUNDED_MUTATION_TERMINAL_PROFILE:
             raise PermissionError("CANONICAL_RUNTIME_ROLLBACK_PROFILE_MISMATCH")
