@@ -7,6 +7,7 @@ import pytest
 
 from voodoo_product.canonical_operation_resume import (
     SELECT_CONSUMPTION_BY_ID,
+    SELECT_LEASE_BY_ID,
     CanonicalOperationResumeDenied,
     CanonicalOperationResumeService,
 )
@@ -140,6 +141,42 @@ def test_valid_foreign_clock_witness_is_rejected() -> None:
         )
 
 
+def test_exact_lease_clock_witness_is_accepted() -> None:
+    clock = CanonicalOperationResumeService._decode_clock_witness(
+        _clock_raw(observed_at="2026-08-23T08:10:00.000+00:00")
+    )
+    lease = SimpleNamespace(
+        clock_witness_digest=clock.witness_digest,
+        environment="staging",
+        acquired_at=clock.observed_at,
+    )
+
+    CanonicalOperationResumeService._validate_lease_supporting_clock_witness(
+        lease=lease,
+        clock_witness=clock,
+    )
+
+
+def test_valid_foreign_lease_clock_witness_is_rejected() -> None:
+    clock = CanonicalOperationResumeService._decode_clock_witness(
+        _clock_raw(observed_at="2026-08-23T08:10:01.000+00:00")
+    )
+    lease = SimpleNamespace(
+        clock_witness_digest=clock.witness_digest,
+        environment="staging",
+        acquired_at="2026-08-23T08:10:00.000+00:00",
+    )
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="LEASE_CLOCK_WITNESS_MISMATCH",
+    ):
+        CanonicalOperationResumeService._validate_lease_supporting_clock_witness(
+            lease=lease,
+            clock_witness=clock,
+        )
+
+
 def test_clock_witness_content_digest_tampering_is_rejected() -> None:
     raw = _clock_raw()
     raw["witness_digest"] = "0" * 64
@@ -159,7 +196,9 @@ def test_conformance_witness_content_digest_tampering_is_rejected() -> None:
         ExecutionConformanceWitness.from_dict(raw)
 
 
-def test_consumption_resume_query_loads_supporting_json_read_only() -> None:
+def test_resume_queries_load_supporting_json_read_only() -> None:
     assert SELECT_CONSUMPTION_BY_ID.mode == "read"
     assert "conformance_witness_json" in SELECT_CONSUMPTION_BY_ID.sqlite_sql
     assert "clock_witness_json" in SELECT_CONSUMPTION_BY_ID.sqlite_sql
+    assert SELECT_LEASE_BY_ID.mode == "read"
+    assert "clock_witness_json" in SELECT_LEASE_BY_ID.sqlite_sql
