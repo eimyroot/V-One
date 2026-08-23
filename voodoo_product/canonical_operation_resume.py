@@ -12,11 +12,13 @@ from .dispatch_inbox import DispatchInboxAdmission
 from .dispatch_outbox import DispatchOutboxEntry
 from .durable_current_fence import DurableCurrentExecutionFence
 from .evidence_primitives import canonical_json
+from .execution_conformance import ExecutionConformanceWitness
 from .execution_contract import REQUIRED_EXECUTION_PERMISSION
 from .execution_lease import ExecutionLease
 from .grant_consumption import GrantConsumptionWitness
 from .permission_authority import DatabasePermissionAuthority, PermissionQuery
 from .persistence import DatabaseConnection, DatabaseRow, DatabaseStatement, ProductDatabaseAdapter
+from .trusted_clock import CLOCK_WITNESS_TYPE, ClockWitness
 
 MINIMUM_CANONICAL_RESUME_SCHEMA_VERSION = 14
 
@@ -46,7 +48,8 @@ SELECT_CONSUMPTION_BY_ID = DatabaseStatement(
     sqlite_sql="""
         SELECT consumption_id, jti, grant_digest, execution_id,
                authorization_snapshot_digest, execution_capsule_digest, runner_class,
-               conformance_witness_digest, clock_witness_digest, live_revocation_epoch,
+               conformance_witness_digest, conformance_witness_json,
+               clock_witness_digest, clock_witness_json, live_revocation_epoch,
                consumed_at, serialization_contract, authority_revision,
                consumption_digest, consumption_json
         FROM grant_consumptions_v1
@@ -262,6 +265,18 @@ class CanonicalOperationResumeService:
             decoder=GrantConsumptionWitness.from_dict,
             artifact="CONSUMPTION",
         )
+        conformance_witness = self._decode_value(
+            consumption_row,
+            json_field="conformance_witness_json",
+            decoder=ExecutionConformanceWitness.from_dict,
+            artifact="CONSUMPTION_CONFORMANCE",
+        )
+        clock_witness = self._decode_value(
+            consumption_row,
+            json_field="clock_witness_json",
+            decoder=self._decode_clock_witness,
+            artifact="CONSUMPTION_CLOCK",
+        )
         outbox = self._decode_value(
             outbox_row,
             json_field="entry_json",
@@ -283,6 +298,12 @@ class CanonicalOperationResumeService:
 
         self._validate_grant_row(grant_row, grant=grant)
         self._validate_consumption_row(consumption_row, consumption=consumption)
+        self._validate_consumption_supporting_witnesses(
+            grant=grant,
+            consumption=consumption,
+            conformance_witness=conformance_witness,
+            clock_witness=clock_witness,
+        )
         self._validate_outbox_row(outbox_row, outbox=outbox)
         self._validate_inbox_row(inbox_row, admission=admission)
         self._validate_lease_row(lease_row, lease=lease)
@@ -401,6 +422,28 @@ class CanonicalOperationResumeService:
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             cls._deny(f"{artifact}_ROW_INVALID", cause=exc)
 
+    @staticmethod
+    def _decode_clock_witness(value: Mapping[str, Any]) -> ClockWitness:
+        expected_fields = frozenset(
+            {
+                "witness_type",
+                "source_identity",
+                "authority_revision",
+                "environment",
+                "observed_at",
+                "witness_digest",
+            }
+        )
+        if frozenset(value) != expected_fields or value.get("witness_type") != CLOCK_WITNESS_TYPE:
+            raise ValueError("clock witness schema or type is unsupported")
+        return ClockWitness(
+            source_identity=value["source_identity"],
+            authority_revision=value["authority_revision"],
+            environment=value["environment"],
+            observed_at=value["observed_at"],
+            witness_digest=value["witness_digest"],
+        )
+
     @classmethod
     def _validate_grant_row(cls, row: DatabaseRow, *, grant: object) -> None:
         cls._require_row_projection(
@@ -444,6 +487,44 @@ class CanonicalOperationResumeService:
             },
             reason="CONSUMPTION_ROW_INVALID",
         )
+
+    @classmethod
+    def _validate_consumption_supporting_witnesses(
+        cls,
+        *,
+        grant: object,
+        consumption: object,
+        conformance_witness: object,
+        clock_witness: object,
+    ) -> None:
+        expected = {
+            "conformance_witness_digest": consumption.conformance_witness_digest,
+            "conformance_grant_digest": grant.grant_digest,
+            "conformance_execution_binding_digest": grant.execution_binding_digest,
+            "conformance_execution_capsule_digest": grant.execution_capsule_digest,
+            "conformance_capability_definition_identity": grant.capability_definition_identity,
+            "conformance_target_kind": grant.target_kind,
+            "conformance_runner_class": grant.runner_class,
+            "clock_witness_digest": consumption.clock_witness_digest,
+            "clock_environment": grant.environment,
+            "clock_observed_at": consumption.consumed_at,
+        }
+        actual = {
+            "conformance_witness_digest": conformance_witness.witness_digest,
+            "conformance_grant_digest": conformance_witness.grant_digest,
+            "conformance_execution_binding_digest": conformance_witness.execution_binding_digest,
+            "conformance_execution_capsule_digest": conformance_witness.execution_capsule_digest,
+            "conformance_capability_definition_identity": (
+                conformance_witness.capability_definition_identity
+            ),
+            "conformance_target_kind": conformance_witness.target_kind,
+            "conformance_runner_class": conformance_witness.runner_class,
+            "clock_witness_digest": clock_witness.witness_digest,
+            "clock_environment": clock_witness.environment,
+            "clock_observed_at": clock_witness.observed_at,
+        }
+        if actual != expected:
+            cls._deny("CONSUMPTION_SUPPORTING_WITNESS_MISMATCH")
 
     @classmethod
     def _validate_outbox_row(cls, row: DatabaseRow, *, outbox: object) -> None:
