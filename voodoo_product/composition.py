@@ -88,6 +88,7 @@ def _validate_canonical_runtime(
         )
     resume_service = runtime.resume_service
     if resume_service is not None:
+        runtime._validate_resume_service_binding()
         if resume_service.db is not service.db:
             raise ValueError("canonical runtime resume service must use product database")
         if resume_service.permission_authority is not permission_authority:
