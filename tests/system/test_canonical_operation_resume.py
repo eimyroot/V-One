@@ -180,6 +180,7 @@ def fixture_state() -> tuple[
     object,
     StoredValue,
     StoredValue,
+    StoredValue,
     AdmissionValue,
     LeaseValue,
     list[str],
@@ -231,11 +232,29 @@ def fixture_state() -> tuple[
         expires_at="2026-08-23T08:01:00.000+00:00",
         revocation_epoch=7,
     )
+    consumption = StoredValue(
+        raw={"kind": "consumption"},
+        consumption_id="consumption-1",
+        jti=grant.jti,
+        grant_id=grant.grant_id,
+        grant_digest=grant.grant_digest,
+        execution_id=grant.execution_id,
+        authorization_snapshot_digest=grant.authorization_snapshot_digest,
+        execution_capsule_digest=grant.execution_capsule_digest,
+        runner_class=grant.runner_class,
+        conformance_witness_digest=DC,
+        clock_witness_digest=DD,
+        live_revocation_epoch=grant.revocation_epoch,
+        consumed_at="2026-08-23T08:00:00.000+00:00",
+        serialization_contract="sqlite-begin-immediate/v1",
+        authority_revision="grant-consumption/test-r1",
+        witness_digest=DB,
+    )
     outbox = StoredValue(
         raw={"kind": "outbox"},
         outbox_id="outbox-1",
-        consumption_id="consumption-1",
-        consumption_witness_digest=DB,
+        consumption_id=consumption.consumption_id,
+        consumption_witness_digest=consumption.witness_digest,
         jti=grant.jti,
         grant_id=grant.grant_id,
         grant_digest=grant.grant_digest,
@@ -256,7 +275,7 @@ def fixture_state() -> tuple[
         runner_class=grant.runner_class,
         precondition_enforcement_class=grant.precondition_enforcement_class,
         use_semantics=grant.use_semantics,
-        created_at="2026-08-23T08:00:00.000+00:00",
+        created_at=consumption.consumed_at,
         outbox_revision="outbox-r1",
         entry_digest=DC,
     )
@@ -316,6 +335,25 @@ def fixture_state() -> tuple[
                 "issued_at": grant.issued_at,
                 "expires_at": grant.expires_at,
                 "revocation_epoch": grant.revocation_epoch,
+            }
+        ],
+        "canonical_resume.select_consumption_by_id": [
+            {
+                "consumption_id": consumption.consumption_id,
+                "jti": consumption.jti,
+                "grant_digest": consumption.grant_digest,
+                "execution_id": consumption.execution_id,
+                "authorization_snapshot_digest": consumption.authorization_snapshot_digest,
+                "execution_capsule_digest": consumption.execution_capsule_digest,
+                "runner_class": consumption.runner_class,
+                "conformance_witness_digest": consumption.conformance_witness_digest,
+                "clock_witness_digest": consumption.clock_witness_digest,
+                "live_revocation_epoch": consumption.live_revocation_epoch,
+                "consumed_at": consumption.consumed_at,
+                "serialization_contract": consumption.serialization_contract,
+                "authority_revision": consumption.authority_revision,
+                "consumption_digest": consumption.witness_digest,
+                "consumption_json": encoded(consumption),
             }
         ],
         "canonical_resume.select_outbox_by_execution": [
@@ -419,7 +457,7 @@ def fixture_state() -> tuple[
             }
         ],
     }
-    return FakeDatabase(rows), snapshot, grant, outbox, admission, lease, events
+    return FakeDatabase(rows), snapshot, grant, consumption, outbox, admission, lease, events
 
 
 def make_service(
@@ -436,11 +474,12 @@ def make_service(
     object,
     StoredValue,
     StoredValue,
+    StoredValue,
     AdmissionValue,
     LeaseValue,
     list[str],
 ]:
-    db, snapshot, grant, outbox, admission, lease, events = fixture_state()
+    db, snapshot, grant, consumption, outbox, admission, lease, events = fixture_state()
     snapshot_store = SnapshotStore(db, snapshot)
     permission = PermissionAuthority(db, granted=granted)
     profiles = TerminalRegistry(events)
@@ -450,6 +489,11 @@ def make_service(
         resume_module.ExecutionGrantV2,
         "from_dict",
         staticmethod(lambda _: grant),
+    )
+    monkeypatch.setattr(
+        resume_module.GrantConsumptionWitness,
+        "from_dict",
+        staticmethod(lambda _: consumption),
     )
     monkeypatch.setattr(
         resume_module.DispatchOutboxEntry,
@@ -496,6 +540,7 @@ def make_service(
         fence,
         snapshot,
         grant,
+        consumption,
         outbox,
         admission,
         lease,
@@ -515,6 +560,7 @@ def test_resume_rebuilds_exact_current_context_without_writes(
         fence,
         snapshot,
         grant,
+        consumption,
         outbox,
         admission,
         lease,
@@ -538,10 +584,17 @@ def test_resume_rebuilds_exact_current_context_without_writes(
         "canonical_resume.select_snapshot_id_by_execution",
         "canonical_resume.select_grant_by_execution",
         "canonical_resume.select_outbox_by_execution",
+        "canonical_resume.select_consumption_by_id",
         "canonical_resume.select_inbox_by_execution",
         "canonical_resume.select_epoch_state_by_execution",
         "canonical_resume.select_lease_by_id",
     ]
+    consumption_reads = [
+        parameters
+        for name, _, parameters in db.executed
+        if name == "canonical_resume.select_consumption_by_id"
+    ]
+    assert consumption_reads == [(consumption.consumption_id,)]
     assert prepared.snapshot is snapshot
     assert prepared.grant is grant
     assert prepared.outbox is outbox
@@ -580,6 +633,92 @@ def test_resume_rechecks_current_database_permission_before_durable_chain(
     assert [name for name, _, _ in db.executed] == [
         "canonical_resume.select_snapshot_id_by_execution"
     ]
+
+
+def test_resume_rejects_missing_consumption_witness_before_profile_or_fence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, db, _, _, profiles, fence, *_ = make_service(monkeypatch)
+    db.rows["canonical_resume.select_consumption_by_id"] = []
+
+    with pytest.raises(CanonicalOperationResumeDenied, match="CONSUMPTION_NOT_FOUND"):
+        service.resume(actor_id="actor-1", execution_id="exec-1")
+
+    assert profiles.calls == []
+    assert fence.leases == []
+
+
+def test_resume_rejects_corrupt_consumption_projection_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, db, _, _, profiles, fence, *_ = make_service(monkeypatch)
+    db.rows["canonical_resume.select_consumption_by_id"][0]["grant_digest"] = D8
+
+    with pytest.raises(CanonicalOperationResumeDenied, match="CONSUMPTION_ROW_INVALID"):
+        service.resume(actor_id="actor-1", execution_id="exec-1")
+
+    assert profiles.calls == []
+    assert fence.leases == []
+
+
+def test_resume_rejects_consumption_grant_binding_mismatch_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (
+        service,
+        db,
+        _,
+        _,
+        profiles,
+        fence,
+        _,
+        grant,
+        consumption,
+        *_rest,
+    ) = make_service(monkeypatch)
+    consumption.live_revocation_epoch = grant.revocation_epoch + 1
+    db.rows["canonical_resume.select_consumption_by_id"][0]["live_revocation_epoch"] = (
+        consumption.live_revocation_epoch
+    )
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="GRANT_CONSUMPTION_BINDING_MISMATCH",
+    ):
+        service.resume(actor_id="actor-1", execution_id="exec-1")
+
+    assert profiles.calls == []
+    assert fence.leases == []
+
+
+def test_resume_rejects_consumption_outbox_binding_mismatch_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (
+        service,
+        db,
+        _,
+        _,
+        profiles,
+        fence,
+        _,
+        _,
+        consumption,
+        outbox,
+        *_rest,
+    ) = make_service(monkeypatch)
+    consumption.consumed_at = "2026-08-23T08:00:01.000+00:00"
+    db.rows["canonical_resume.select_consumption_by_id"][0]["consumed_at"] = consumption.consumed_at
+    assert outbox.created_at != consumption.consumed_at
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="CONSUMPTION_OUTBOX_BINDING_MISMATCH",
+    ):
+        service.resume(actor_id="actor-1", execution_id="exec-1")
+
+    assert profiles.calls == []
+    assert fence.leases == []
 
 
 def test_resume_rejects_completed_execution_before_profile_or_fence(
