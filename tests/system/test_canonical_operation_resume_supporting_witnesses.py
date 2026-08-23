@@ -29,7 +29,11 @@ def _conformance_raw(
     capability_definition_identity: str = "2" * 64,
     target_kind: str = "git_ref",
     runner_class: str = "github-actions.runner/v1",
+    precondition_enforcement_class: str = "READ_THEN_COMPARE",
 ) -> dict[str, object]:
+    atomic_provider_condition_contract_identity = (
+        "1" * 64 if precondition_enforcement_class == "ATOMIC_PROVIDER_CONDITION" else None
+    )
     claims: dict[str, object] = {
         "schema_version": 1,
         "witness_type": "execution-conformance-witness/v1",
@@ -45,9 +49,11 @@ def _conformance_raw(
         "handler_id": "handler-test-r1",
         "handler_digest": "e" * 64,
         "credential_class": "READ_ONLY",
-        "precondition_enforcement_class": "READ_THEN_COMPARE",
+        "precondition_enforcement_class": precondition_enforcement_class,
         "verification_contract_identity": "f" * 64,
-        "atomic_provider_condition_contract_identity": None,
+        "atomic_provider_condition_contract_identity": (
+            atomic_provider_condition_contract_identity
+        ),
         "conformance_authority_revision": "conformance/test-r1",
     }
     return {**claims, "witness_digest": _digest(claims)}
@@ -76,6 +82,7 @@ def _grant() -> object:
         capability_definition_identity="2" * 64,
         target_kind="git_ref",
         runner_class="github-actions.runner/v1",
+        precondition_enforcement_class="READ_THEN_COMPARE",
         environment="staging",
     )
 
@@ -130,6 +137,30 @@ def test_valid_foreign_grant_supporting_witness_is_rejected() -> None:
         )
 
 
+def test_valid_foreign_grant_precondition_class_is_rejected() -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(
+        _conformance_raw(precondition_enforcement_class="ATOMIC_PROVIDER_CONDITION")
+    )
+    clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
+    row = {
+        "issuance_conformance_witness_digest": conformance.witness_digest,
+        "store_clock_witness_digest": clock.witness_digest,
+        "stored_at": clock.observed_at,
+    }
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="GRANT_SUPPORTING_WITNESS_MISMATCH",
+    ):
+        CanonicalOperationResumeService._validate_grant_supporting_witnesses(
+            row=row,
+            grant=grant,
+            conformance_witness=conformance,
+            clock_witness=clock,
+        )
+
+
 def test_exact_consumption_supporting_witnesses_are_accepted() -> None:
     grant = _grant()
     conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
@@ -148,6 +179,26 @@ def test_valid_foreign_conformance_witness_is_rejected() -> None:
     grant = _grant()
     conformance = ExecutionConformanceWitness.from_dict(
         _conformance_raw(grant_digest="6" * 64)
+    )
+    clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
+    consumption = _consumption(conformance=conformance, clock=clock)
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="CONSUMPTION_SUPPORTING_WITNESS_MISMATCH",
+    ):
+        CanonicalOperationResumeService._validate_consumption_supporting_witnesses(
+            grant=grant,
+            consumption=consumption,
+            conformance_witness=conformance,
+            clock_witness=clock,
+        )
+
+
+def test_valid_foreign_consumption_precondition_class_is_rejected() -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(
+        _conformance_raw(precondition_enforcement_class="ATOMIC_PROVIDER_CONDITION")
     )
     clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
     consumption = _consumption(conformance=conformance, clock=clock)
