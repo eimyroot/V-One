@@ -37,7 +37,10 @@ SELECT_GRANT_BY_EXECUTION = DatabaseStatement(
     sqlite_sql="""
         SELECT jti, grant_id, execution_id, request_id, workspace_id, environment,
                authorization_snapshot_digest, execution_capsule_digest,
-               grant_digest, grant_json, issued_at, expires_at, revocation_epoch
+               grant_digest, grant_json,
+               issuance_conformance_witness_digest, issuance_conformance_witness_json,
+               store_clock_witness_digest, store_clock_witness_json,
+               issued_at, expires_at, revocation_epoch, stored_at
         FROM execution_grants_v2
         WHERE execution_id = ?
     """,
@@ -259,6 +262,18 @@ class CanonicalOperationResumeService:
             decoder=ExecutionGrantV2.from_dict,
             artifact="GRANT",
         )
+        grant_issuance_conformance = self._decode_value(
+            grant_row,
+            json_field="issuance_conformance_witness_json",
+            decoder=ExecutionConformanceWitness.from_dict,
+            artifact="GRANT_ISSUANCE_CONFORMANCE",
+        )
+        grant_store_clock = self._decode_value(
+            grant_row,
+            json_field="store_clock_witness_json",
+            decoder=self._decode_clock_witness,
+            artifact="GRANT_STORE_CLOCK",
+        )
         consumption = self._decode_value(
             consumption_row,
             json_field="consumption_json",
@@ -303,6 +318,12 @@ class CanonicalOperationResumeService:
         )
 
         self._validate_grant_row(grant_row, grant=grant)
+        self._validate_grant_supporting_witnesses(
+            row=grant_row,
+            grant=grant,
+            conformance_witness=grant_issuance_conformance,
+            clock_witness=grant_store_clock,
+        )
         self._validate_consumption_row(consumption_row, consumption=consumption)
         self._validate_consumption_supporting_witnesses(
             grant=grant,
@@ -474,6 +495,48 @@ class CanonicalOperationResumeService:
             },
             reason="GRANT_ROW_INVALID",
         )
+
+    @classmethod
+    def _validate_grant_supporting_witnesses(
+        cls,
+        *,
+        row: DatabaseRow,
+        grant: object,
+        conformance_witness: object,
+        clock_witness: object,
+    ) -> None:
+        expected = {
+            "issuance_conformance_witness_digest": conformance_witness.witness_digest,
+            "store_clock_witness_digest": clock_witness.witness_digest,
+            "stored_at": clock_witness.observed_at,
+        }
+        cls._require_row_projection(
+            row,
+            expected=expected,
+            reason="GRANT_SUPPORTING_WITNESS_ROW_INVALID",
+        )
+        binding_expected = {
+            "conformance_grant_digest": grant.grant_digest,
+            "conformance_execution_binding_digest": grant.execution_binding_digest,
+            "conformance_execution_capsule_digest": grant.execution_capsule_digest,
+            "conformance_capability_definition_identity": grant.capability_definition_identity,
+            "conformance_target_kind": grant.target_kind,
+            "conformance_runner_class": grant.runner_class,
+            "clock_environment": grant.environment,
+        }
+        binding_actual = {
+            "conformance_grant_digest": conformance_witness.grant_digest,
+            "conformance_execution_binding_digest": conformance_witness.execution_binding_digest,
+            "conformance_execution_capsule_digest": conformance_witness.execution_capsule_digest,
+            "conformance_capability_definition_identity": (
+                conformance_witness.capability_definition_identity
+            ),
+            "conformance_target_kind": conformance_witness.target_kind,
+            "conformance_runner_class": conformance_witness.runner_class,
+            "clock_environment": clock_witness.environment,
+        }
+        if binding_actual != binding_expected:
+            cls._deny("GRANT_SUPPORTING_WITNESS_MISMATCH")
 
     @classmethod
     def _validate_consumption_row(cls, row: DatabaseRow, *, consumption: object) -> None:
