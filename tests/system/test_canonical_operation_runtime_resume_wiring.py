@@ -396,3 +396,45 @@ def test_product_composition_rejects_resume_permission_authority_tampering() -> 
             service=service,
             permission_authority=permission,
         )
+
+
+def test_product_composition_rejects_resume_terminal_registry_tampering() -> None:
+    runtime, resume_service, _, _ = _runtime()
+    assert resume_service is not None
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.terminal_profile_registry = SimpleNamespace(resolve=lambda **_: object())
+
+    with pytest.raises(ValueError, match="share canonical terminal profile registry"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
+
+
+def test_product_composition_rejects_resume_envelope_revision_tampering() -> None:
+    runtime, resume_service, _, _ = _runtime()
+    assert resume_service is not None
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.envelope_revision = "dispatch-envelope/tampered-r1"
+
+    with pytest.raises(ValueError, match="share canonical envelope revision"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
+
+
+def test_product_composition_rejects_resume_current_fence_tampering() -> None:
+    runtime, resume_service, _, _ = _runtime()
+    assert resume_service is not None
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.current_fence = object()
+
+    with pytest.raises(ValueError, match="share current execution fence"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
