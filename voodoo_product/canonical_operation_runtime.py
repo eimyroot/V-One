@@ -75,6 +75,12 @@ class CanonicalOperationRuntime:
         snapshot_creator = self.pipeline.snapshot_creator
         if resume_service.db is not getattr(snapshot_creator, "db", None):
             raise ValueError("resume service must share canonical pipeline database")
+        if getattr(resume_service.snapshot_store, "db", None) is not resume_service.db:
+            raise ValueError("resume snapshot store must share canonical pipeline database")
+        if getattr(resume_service.permission_authority, "db", None) is not resume_service.db:
+            raise ValueError("resume permission authority must share canonical pipeline database")
+        if getattr(resume_service.current_fence, "db", None) is not resume_service.db:
+            raise ValueError("resume current fence must share canonical pipeline database")
         if resume_service.permission_authority is not getattr(
             snapshot_creator,
             "permission_authority",
