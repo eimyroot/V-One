@@ -222,18 +222,19 @@ authenticated HTTP request
 → transactional Outbox
 → DispatchEnvelope
 → Inbox admission
-→ ExecutionEpoch + current Lease
+→ ACTIVE ExecutionEpoch + current Lease
 → ExecutionCapsule
-→ isolated READ Runner
+→ process interruption/restart before Runner completion
+→ durable resume of the same ACTIVE execution
+→ no new prepare/grant/consume/outbox/envelope/inbox/epoch/lease
+→ current-fence + authority-continuity validation
+→ resumed isolated READ Runner
 → durable completion
-→ independent Verifier
+→ independent Verifier with separate identity/credential decision
 → VerificationResult/v1
-→ process restart
-→ durable resume of the same execution
-→ no new grant/consume/outbox/inbox/lease
-→ current-fence validation
-→ truthful same verification semantics or fail-closed result
 ```
+
+The current resume contract does not claim resumption of an already `COMPLETED` execution. Completed-execution recovery or reverification is a separate future design boundary.
 
 The sequence must be repeated and failure-injected before the WRITE eligibility gate can change.
 
