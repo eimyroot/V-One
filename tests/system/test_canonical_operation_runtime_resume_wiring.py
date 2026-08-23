@@ -372,7 +372,7 @@ def test_product_composition_rejects_resume_database_tampering() -> None:
     service = SimpleNamespace(db=resume_service.db)
     resume_service.db = object()
 
-    with pytest.raises(ValueError, match="resume service must use product database"):
+    with pytest.raises(ValueError, match="share canonical pipeline database"):
         _validate_canonical_runtime(
             runtime=runtime,
             service=service,
@@ -389,7 +389,7 @@ def test_product_composition_rejects_resume_permission_authority_tampering() -> 
 
     with pytest.raises(
         ValueError,
-        match="resume service must use product database permission authority",
+        match="share canonical pipeline permission authority",
     ):
         _validate_canonical_runtime(
             runtime=runtime,
