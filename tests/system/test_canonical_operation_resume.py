@@ -457,6 +457,7 @@ def fixture_state() -> tuple[
                         "lease_digest",
                     )
                 },
+                "clock_witness_json": resume_module.canonical_json({"kind": "lease-clock"}),
                 "lease_json": encoded(lease),
             }
         ],
@@ -515,17 +516,28 @@ def make_service(
             )
         ),
     )
-    monkeypatch.setattr(
-        CanonicalOperationResumeService,
-        "_decode_clock_witness",
-        staticmethod(
-            lambda raw: StoredValue(
+
+    def decode_clock_witness(raw: dict[str, Any]) -> StoredValue:
+        if raw.get("kind") == "clock":
+            return StoredValue(
                 raw=dict(raw),
                 witness_digest=consumption.clock_witness_digest,
                 environment=grant.environment,
                 observed_at=consumption.consumed_at,
             )
-        ),
+        if raw.get("kind") == "lease-clock":
+            return StoredValue(
+                raw=dict(raw),
+                witness_digest=lease.clock_witness_digest,
+                environment=lease.environment,
+                observed_at=lease.acquired_at,
+            )
+        raise ValueError("unexpected clock witness fixture")
+
+    monkeypatch.setattr(
+        CanonicalOperationResumeService,
+        "_decode_clock_witness",
+        staticmethod(decode_clock_witness),
     )
     monkeypatch.setattr(
         resume_module.DispatchOutboxEntry,
