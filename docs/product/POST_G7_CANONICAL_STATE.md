@@ -17,6 +17,16 @@ DEPLOYMENT: NOT_PERFORMED
 
 The retained SHA above is snapshot provenance only. Query live `main` before any consequential operation.
 
+## Authoritative truth convergence
+
+This snapshot is supplemental. The same current-state claims are reconciled in the authoritative product surfaces in this change:
+
+- `CURRENT_PRODUCT_STATE.md`;
+- `docs/product/CURRENT_CAPABILITIES.md`;
+- `ROADMAP.md`.
+
+If later live repository/runtime evidence conflicts with any document, live evidence wins and the documents must be reconciled again rather than silently upgrading a historical claim.
+
 ## Canonical G7 status
 
 G7 is no longer a candidate. PR #140 reconciled the merged canonical READ API with restart-safe durable resume and runtime resume wiring onto current main.
@@ -47,9 +57,24 @@ product image build + smoke                 = SUCCESS
 
 Historical stacked PRs #138 and #139 are superseded by canonical PR #140 and must not be used as alternate merge paths.
 
-## G0 governance
+## G0 governance — identifiable live evidence
 
-Live GitHub governance was separately verified and the G0 issue was closed with the required controls evidenced.
+G0 is bound to the retained live verifier evidence, not inferred from documentation or ordinary CI:
+
+```text
+workflow = g0-governance-verify
+run = 32553113424
+event = workflow_dispatch
+branch = main
+source_sha = 76d74d2ed62b6e78f027728c456c22da0b4a95bd
+artifact = g0-governance-evidence-32553113424-1
+artifact_id = 9470619984
+artifact_digest = sha256:6e63caee23a57613471df66ef0279c0261ed8d375e4c929accdf50eff7dc4f5f
+evidence_json_checksum = 11a99765485b63b70186037011d31c105dea8dd75b689e0036a8766d05e8137d
+verdict = VERIFIED
+```
+
+That evidence verified PR-only main, required `verify` from workflow `ci`, latest-head strict checks, force-push disabled, branch deletion disabled, conversation resolution, no ordinary admin/ruleset bypass, active rulesets, and verifier source binding.
 
 ```text
 REPO_ENFORCEMENT_CONTRACT       = VERIFIED
@@ -74,7 +99,9 @@ Canonical public READ API                  = IMPLEMENTED / MERGED
 Durable restart-safe READ resume           = IMPLEMENTED / MERGED
 Independent READ VerificationResult        = IMPLEMENTED / VERIFIED in governed pilot evidence
 Default provider runtime pack              = DISABLED / FAIL-CLOSED
+Real canonical HTTP READ E2E via G8        = NOT VERIFIED
 Canonical provider WRITE runtime           = DISABLED
+WRITE runtime gate                         = BLOCKED
 Production effects                         = DISABLED
 Release                                    = NOT PERFORMED
 Deployment                                 = NOT PERFORMED
@@ -82,7 +109,9 @@ Deployment                                 = NOT PERFORMED
 
 Without the separately governed G8 runtime pack, the product must remain fail-closed rather than use ambient provider credentials or a legacy execution path.
 
-## Hard READ-before-WRITE invariant
+## READ-before-WRITE proposal
+
+ADR-0019 is under governed adoption in this change; it is not treated as accepted authority before its adoption gate closes. The proposed safety rule is stricter than the current state: provider WRITE remains blocked regardless.
 
 No provider WRITE effect becomes eligible for activation until the same canonical path repeatedly proves a real READ end-to-end from authenticated HTTP request through independent `VerificationResult/v1`, including restart/resume behavior.
 
@@ -125,6 +154,8 @@ FAIL_CLOSED          = VERIFIED
 
 WRITE_RUNTIME_GATE   = ELIGIBLE
 ```
+
+`ELIGIBLE` is still not effect authorization.
 
 `execution.status = SUCCEEDED` is never sufficient. A valid truthful result may remain:
 
