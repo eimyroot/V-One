@@ -9,6 +9,8 @@ from voodoo_product.canonical_operation_resume import CanonicalOperationResumeSe
 from voodoo_product.canonical_operation_runtime import CanonicalOperationRuntime
 from voodoo_product.canonical_pipeline import CanonicalOperationPipeline
 from voodoo_product.canonical_read_terminal import CanonicalGitHubReadTerminal
+from voodoo_product.controlled_write import GITHUB_CREATE_REF_CAPABILITY
+from voodoo_product.github_read_provider import GITHUB_READ_REF_CAPABILITY
 from voodoo_product.terminal_profile import (
     BOUNDED_MUTATION_TERMINAL_PROFILE,
     READ_ONLY_TERMINAL_PROFILE,
@@ -102,6 +104,7 @@ def _pipeline_state() -> tuple[
 def _runtime(
     *,
     prepared_profile: str = READ_ONLY_TERMINAL_PROFILE,
+    prepared_capability: str = GITHUB_READ_REF_CAPABILITY,
     with_resume: bool = True,
 ) -> tuple[
     CanonicalOperationRuntime,
@@ -110,7 +113,10 @@ def _runtime(
     object,
 ]:
     pipeline, db, permission, registry, current_fence = _pipeline_state()
-    prepared = SimpleNamespace(terminal_profile=prepared_profile)
+    prepared = SimpleNamespace(
+        terminal_profile=prepared_profile,
+        capability=prepared_capability,
+    )
     terminal = StubReadTerminal(current_fence=current_fence)
     resume_service = (
         StubResumeService(
@@ -186,6 +192,48 @@ def test_run_resumed_read_only_rejects_non_read_profile_before_terminal() -> Non
     assert terminal.calls == []
 
 
+def test_run_resumed_read_only_rejects_non_read_capability_before_terminal() -> None:
+    runtime, resume_service, terminal, _ = _runtime(
+        prepared_capability=GITHUB_CREATE_REF_CAPABILITY
+    )
+    assert resume_service is not None
+
+    with pytest.raises(PermissionError, match="CANONICAL_RUNTIME_READ_CAPABILITY_MISMATCH"):
+        runtime.run_resumed_read_only(
+            actor_id="actor-1",
+            execution_id="exec-1",
+        )
+
+    assert resume_service.calls == [("actor-1", "exec-1")]
+    assert terminal.calls == []
+
+
+def test_run_resumed_read_only_fails_before_resume_without_read_terminal() -> None:
+    pipeline, db, permission, registry, current_fence = _pipeline_state()
+    prepared = SimpleNamespace(
+        terminal_profile=READ_ONLY_TERMINAL_PROFILE,
+        capability=GITHUB_READ_REF_CAPABILITY,
+    )
+    resume_service = StubResumeService(
+        db=db,
+        permission_authority=permission,
+        terminal_profile_registry=registry,
+        current_fence=current_fence,
+        envelope_revision=pipeline.envelope_revision,
+        prepared=prepared,
+    )
+    runtime = CanonicalOperationRuntime(
+        pipeline=pipeline,
+        read_terminal=None,
+        resume_service=resume_service,
+    )
+
+    with pytest.raises(RuntimeError, match="CANONICAL_READ_TERMINAL_NOT_CONFIGURED"):
+        runtime.run_resumed_read_only(actor_id="actor-1", execution_id="exec-1")
+
+    assert resume_service.calls == []
+
+
 def test_runtime_resume_fails_closed_when_service_not_configured() -> None:
     runtime, resume_service, terminal, _ = _runtime(with_resume=False)
     assert resume_service is None
@@ -194,6 +242,13 @@ def test_runtime_resume_fails_closed_when_service_not_configured() -> None:
         runtime.resume(actor_id="actor-1", execution_id="exec-1")
 
     assert terminal.calls == []
+
+
+def _prepared_read() -> object:
+    return SimpleNamespace(
+        terminal_profile=READ_ONLY_TERMINAL_PROFILE,
+        capability=GITHUB_READ_REF_CAPABILITY,
+    )
 
 
 def test_runtime_rejects_resume_service_from_parallel_database() -> None:
@@ -205,7 +260,7 @@ def test_runtime_rejects_resume_service_from_parallel_database() -> None:
         terminal_profile_registry=registry,
         current_fence=current_fence,
         envelope_revision=pipeline.envelope_revision,
-        prepared=SimpleNamespace(terminal_profile=READ_ONLY_TERMINAL_PROFILE),
+        prepared=_prepared_read(),
     )
 
     with pytest.raises(ValueError, match="share canonical pipeline database"):
@@ -225,7 +280,7 @@ def test_runtime_rejects_parallel_resume_permission_authority() -> None:
         terminal_profile_registry=registry,
         current_fence=current_fence,
         envelope_revision=pipeline.envelope_revision,
-        prepared=SimpleNamespace(terminal_profile=READ_ONLY_TERMINAL_PROFILE),
+        prepared=_prepared_read(),
     )
 
     with pytest.raises(ValueError, match="share canonical pipeline permission authority"):
@@ -245,7 +300,7 @@ def test_runtime_rejects_parallel_resume_terminal_profile_registry() -> None:
         terminal_profile_registry=SimpleNamespace(resolve=lambda **_: object()),
         current_fence=current_fence,
         envelope_revision=pipeline.envelope_revision,
-        prepared=SimpleNamespace(terminal_profile=READ_ONLY_TERMINAL_PROFILE),
+        prepared=_prepared_read(),
     )
 
     with pytest.raises(ValueError, match="share canonical terminal profile registry"):
@@ -265,7 +320,7 @@ def test_runtime_rejects_resume_envelope_revision_drift() -> None:
         terminal_profile_registry=registry,
         current_fence=current_fence,
         envelope_revision="dispatch-envelope/foreign-r1",
-        prepared=SimpleNamespace(terminal_profile=READ_ONLY_TERMINAL_PROFILE),
+        prepared=_prepared_read(),
     )
 
     with pytest.raises(ValueError, match="share canonical envelope revision"):
@@ -285,7 +340,7 @@ def test_runtime_rejects_resume_fence_different_from_read_terminal() -> None:
         terminal_profile_registry=registry,
         current_fence=object(),
         envelope_revision=pipeline.envelope_revision,
-        prepared=SimpleNamespace(terminal_profile=READ_ONLY_TERMINAL_PROFILE),
+        prepared=_prepared_read(),
     )
 
     with pytest.raises(ValueError, match="share current execution fence"):
