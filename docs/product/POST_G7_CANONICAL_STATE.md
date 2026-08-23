@@ -126,21 +126,19 @@ authenticated HTTP request
 → transactional Outbox
 → DispatchEnvelope
 → Inbox admission
-→ ExecutionEpoch + current Lease
+→ ACTIVE ExecutionEpoch + current Lease
 → ExecutionCapsule
-→ isolated READ Runner
+→ process interruption/restart before Runner completion
+→ durable resume of the same ACTIVE execution
+→ no new prepare/grant/consumption/outbox/envelope/inbox/epoch/lease
+→ current-fence + authority-continuity validation
+→ resumed isolated READ Runner
 → durable completion
-→ independent Verifier
+→ independent Verifier with separate identity/credential decision
 → VerificationResult/v1
-→ process restart
-→ durable resume of the same execution
-→ no new grant
-→ no second grant consumption
-→ no second outbox/inbox admission
-→ no lease reacquisition
-→ current-fence validation
-→ same truthful verification semantics or fail-closed result
 ```
+
+The current G7 resume contract does not claim resumption of an already `COMPLETED` execution. Completed-execution recovery or reverification would require a separate future contract.
 
 WRITE eligibility requires all of:
 
@@ -171,7 +169,7 @@ and must never be promoted to `VERIFIED` by execution success, receipt existence
 ```text
 1. post-G7 product-truth convergence
 2. G8 explicit READ-only provider runtime pack
-3. repeated real canonical HTTP READ E2E + restart/resume verification
+3. repeated real canonical HTTP READ E2E + ACTIVE restart/resume verification
 4. only then evaluate WRITE runtime/effect eligibility
 5. RC gates
 6. release authorization
