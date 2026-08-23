@@ -34,7 +34,7 @@ SELECT_GRANT_BY_EXECUTION = DatabaseStatement(
     sqlite_sql="""
         SELECT jti, grant_id, execution_id, request_id, workspace_id, environment,
                authorization_snapshot_digest, execution_capsule_digest,
-               grant_digest, grant_json
+               grant_digest, grant_json, issued_at, expires_at, revocation_epoch
         FROM execution_grants_v2
         WHERE execution_id = ?
     """,
@@ -379,6 +379,9 @@ class CanonicalOperationResumeService:
                 "authorization_snapshot_digest": grant.authorization_snapshot_digest,
                 "execution_capsule_digest": grant.execution_capsule_digest,
                 "grant_digest": grant.grant_digest,
+                "issued_at": grant.issued_at,
+                "expires_at": grant.expires_at,
+                "revocation_epoch": grant.revocation_epoch,
             },
             reason="GRANT_ROW_INVALID",
         )
