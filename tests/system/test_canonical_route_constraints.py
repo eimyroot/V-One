@@ -6,6 +6,7 @@ import pytest
 
 from voodoo_product.canonical_operation_runtime import CanonicalOperationRuntime
 from voodoo_product.canonical_pipeline import CanonicalOperationPipeline
+from voodoo_product.canonical_read_terminal import CanonicalGitHubReadTerminal
 from voodoo_product.github_read_provider import GITHUB_READ_REF_CAPABILITY
 from voodoo_product.terminal_profile import (
     BOUNDED_MUTATION_TERMINAL_PROFILE,
@@ -144,18 +145,20 @@ class RecordingPipeline(CanonicalOperationPipeline):
         )
 
 
-class RecordingReadTerminal:
+class RecordingReadTerminal(CanonicalGitHubReadTerminal):
+    def __init__(self) -> None:
+        pass
+
     def run(self, *, prepared: object) -> object:
         return SimpleNamespace(prepared=prepared)
 
 
 def test_runtime_supplies_read_constraints_internally() -> None:
     route_pipeline = RecordingPipeline()
-    runtime = object.__new__(CanonicalOperationRuntime)
-    object.__setattr__(runtime, "pipeline", route_pipeline)
-    object.__setattr__(runtime, "read_terminal", RecordingReadTerminal())
-    object.__setattr__(runtime, "create_ref_preparer", None)
-    object.__setattr__(runtime, "rollback_preparer", None)
+    runtime = CanonicalOperationRuntime(
+        pipeline=route_pipeline,
+        read_terminal=RecordingReadTerminal(),
+    )
 
     runtime.run_read_only(
         actor_id="usr-1",
@@ -167,3 +170,43 @@ def test_runtime_supplies_read_constraints_internally() -> None:
     assert route_pipeline.kwargs is not None
     assert route_pipeline.kwargs["required_terminal_profile"] == READ_ONLY_TERMINAL_PROFILE
     assert route_pipeline.kwargs["required_capability"] == GITHUB_READ_REF_CAPABILITY
+
+
+def test_missing_read_terminal_fails_before_pipeline_prepare() -> None:
+    route_pipeline = RecordingPipeline()
+    runtime = CanonicalOperationRuntime(pipeline=route_pipeline)
+
+    with pytest.raises(RuntimeError, match="CANONICAL_READ_TERMINAL_NOT_CONFIGURED"):
+        runtime.run_read_only(
+            actor_id="usr-1",
+            request_id="req-1",
+            idempotency_key="idem-1234",
+            correlation_id="corr-1234",
+        )
+
+    assert route_pipeline.kwargs is None
+
+
+def test_missing_write_preparers_fail_before_pipeline_prepare() -> None:
+    route_pipeline = RecordingPipeline()
+    runtime = CanonicalOperationRuntime(pipeline=route_pipeline)
+
+    with pytest.raises(RuntimeError, match="A09_CREATE_REF_PREPARER_NOT_CONFIGURED"):
+        runtime.prepare_create_ref(
+            actor_id="usr-1",
+            request_id="req-1",
+            idempotency_key="idem-1234",
+            correlation_id="corr-1234",
+        )
+    assert route_pipeline.kwargs is None
+
+    with pytest.raises(RuntimeError, match="A09_ROLLBACK_PREPARER_NOT_CONFIGURED"):
+        runtime.prepare_rollback(
+            actor_id="usr-1",
+            request_id="req-1",
+            idempotency_key="idem-1234",
+            correlation_id="corr-1234",
+            observed_ref_sha="a" * 40,
+            predelete_observation_digest="b" * 64,
+        )
+    assert route_pipeline.kwargs is None
