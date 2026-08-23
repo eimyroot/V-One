@@ -37,7 +37,8 @@ class CanonicalOperationRuntime:
     by CanonicalOperationPipeline from the exact capability allowlist. READ is the only route that can
     execute here; bounded write routes only produce A09 preflight plans and never invoke a provider
     mutation transport. Every route passes an internal expected profile/capability constraint so a
-    mismatched reviewed request fails before Grant issuance/consumption.
+    mismatched reviewed request fails before Grant issuance/consumption. A missing terminal/preparer
+    also fails before authority preparation so no Grant is issued or consumed for an unroutable call.
     """
 
     pipeline: CanonicalOperationPipeline
@@ -88,6 +89,8 @@ class CanonicalOperationRuntime:
         idempotency_key: str,
         correlation_id: str,
     ) -> CanonicalReadTerminalResult:
+        if self.read_terminal is None:
+            raise RuntimeError("CANONICAL_READ_TERMINAL_NOT_CONFIGURED")
         prepared = self._prepare(
             actor_id=actor_id,
             request_id=request_id,
@@ -100,8 +103,6 @@ class CanonicalOperationRuntime:
             raise PermissionError("CANONICAL_RUNTIME_READ_PROFILE_MISMATCH")
         if prepared.capability != GITHUB_READ_REF_CAPABILITY:
             raise PermissionError("CANONICAL_RUNTIME_READ_CAPABILITY_MISMATCH")
-        if self.read_terminal is None:
-            raise RuntimeError("CANONICAL_READ_TERMINAL_NOT_CONFIGURED")
         return self.read_terminal.run(prepared=prepared)
 
     def prepare_create_ref(
@@ -112,6 +113,8 @@ class CanonicalOperationRuntime:
         idempotency_key: str,
         correlation_id: str,
     ) -> A09PreparedCreateRef:
+        if self.create_ref_preparer is None:
+            raise RuntimeError("A09_CREATE_REF_PREPARER_NOT_CONFIGURED")
         prepared = self._prepare(
             actor_id=actor_id,
             request_id=request_id,
@@ -124,8 +127,6 @@ class CanonicalOperationRuntime:
             raise PermissionError("CANONICAL_RUNTIME_WRITE_PROFILE_MISMATCH")
         if prepared.capability != GITHUB_CREATE_REF_CAPABILITY:
             raise PermissionError("CANONICAL_RUNTIME_CREATE_REF_CAPABILITY_MISMATCH")
-        if self.create_ref_preparer is None:
-            raise RuntimeError("A09_CREATE_REF_PREPARER_NOT_CONFIGURED")
         return self.create_ref_preparer.prepare(prepared=prepared)
 
     def prepare_rollback(
@@ -138,6 +139,8 @@ class CanonicalOperationRuntime:
         observed_ref_sha: str,
         predelete_observation_digest: str,
     ) -> A09PreparedRollback:
+        if self.rollback_preparer is None:
+            raise RuntimeError("A09_ROLLBACK_PREPARER_NOT_CONFIGURED")
         prepared = self._prepare(
             actor_id=actor_id,
             request_id=request_id,
@@ -150,8 +153,6 @@ class CanonicalOperationRuntime:
             raise PermissionError("CANONICAL_RUNTIME_ROLLBACK_PROFILE_MISMATCH")
         if prepared.capability != GITHUB_DELETE_REF_CAPABILITY:
             raise PermissionError("CANONICAL_RUNTIME_ROLLBACK_CAPABILITY_MISMATCH")
-        if self.rollback_preparer is None:
-            raise RuntimeError("A09_ROLLBACK_PREPARER_NOT_CONFIGURED")
         return self.rollback_preparer.prepare(
             prepared=prepared,
             observed_ref_sha=observed_ref_sha,
