@@ -347,7 +347,11 @@ def fixture_state() -> tuple[
                 "execution_capsule_digest": consumption.execution_capsule_digest,
                 "runner_class": consumption.runner_class,
                 "conformance_witness_digest": consumption.conformance_witness_digest,
+                "conformance_witness_json": resume_module.canonical_json(
+                    {"kind": "conformance"}
+                ),
                 "clock_witness_digest": consumption.clock_witness_digest,
+                "clock_witness_json": resume_module.canonical_json({"kind": "clock"}),
                 "live_revocation_epoch": consumption.live_revocation_epoch,
                 "consumed_at": consumption.consumed_at,
                 "serialization_contract": consumption.serialization_contract,
@@ -494,6 +498,34 @@ def make_service(
         resume_module.GrantConsumptionWitness,
         "from_dict",
         staticmethod(lambda _: consumption),
+    )
+    monkeypatch.setattr(
+        resume_module.ExecutionConformanceWitness,
+        "from_dict",
+        staticmethod(
+            lambda raw: StoredValue(
+                raw=dict(raw),
+                witness_digest=consumption.conformance_witness_digest,
+                grant_digest=grant.grant_digest,
+                execution_binding_digest=grant.execution_binding_digest,
+                execution_capsule_digest=grant.execution_capsule_digest,
+                capability_definition_identity=grant.capability_definition_identity,
+                target_kind=grant.target_kind,
+                runner_class=grant.runner_class,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        CanonicalOperationResumeService,
+        "_decode_clock_witness",
+        staticmethod(
+            lambda raw: StoredValue(
+                raw=dict(raw),
+                witness_digest=consumption.clock_witness_digest,
+                environment=grant.environment,
+                observed_at=consumption.consumed_at,
+            )
+        ),
     )
     monkeypatch.setattr(
         resume_module.DispatchOutboxEntry,
