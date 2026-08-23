@@ -20,15 +20,18 @@ Provider WRITE remains disabled until a canonical READ acceptance gate proves al
 3. AuthorizationSnapshot and `ExecutionGrant/v2` issuance;
 4. exactly-once `GrantConsumptionWitness/v1` consumption;
 5. durable Outbox, DispatchEnvelope and Inbox admission;
-6. ExecutionEpoch / current Lease / ExecutionCapsule binding;
-7. isolated provider READ Runner execution;
-8. durable completion;
-9. independent Verifier execution with separate identity/credential decision;
-10. truthful `VerificationResult/v1`;
-11. process restart followed by durable resume of the same execution;
-12. no second prepare, grant, grant consumption, dispatch admission, or lease acquisition during resume;
-13. current-fence and authority-continuity validation after restart;
-14. fail-closed behavior for missing, stale, corrupt, ambiguous, expired, revoked, or mismatched durable evidence.
+6. an `ACTIVE` ExecutionEpoch with current Lease / ExecutionCapsule binding;
+7. process interruption/restart while that durable execution is still `ACTIVE`, before Runner completion;
+8. durable resume of the same execution from the persisted snapshot/grant/consumption/outbox/envelope/inbox/lease/capsule chain;
+9. no second prepare, grant, grant consumption, outbox/envelope/inbox admission, epoch allocation, or lease acquisition during resume;
+10. current-fence and authority-continuity validation after restart;
+11. resumed isolated provider READ Runner execution;
+12. durable completion of that resumed execution;
+13. independent Verifier execution with separate identity/credential decision;
+14. truthful `VerificationResult/v1`;
+15. fail-closed behavior for missing, stale, corrupt, ambiguous, expired, revoked, or mismatched durable evidence.
+
+The gate does **not** require resuming an already `COMPLETED` execution. Completed-execution recovery or reverification would be a separate future contract and is outside this ADR.
 
 The proposed gate is:
 
