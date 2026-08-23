@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document status | Current-state inventory |
-| Inventory audit date | `2026-08-21` |
+| Inventory audit date | `2026-08-23` |
 | Reconciliation base Git baseline | `main@71a931b561faa93c8dd2e062b83559401143b1df` |
 | Exact live Git identity | Query live Git directly; never self-embed a commit as "current" |
 | Reconciliation merge | PR #128 / `d9e27ff17b76f29daba4a3421b11cc396826fe12` |
@@ -35,7 +35,8 @@ Is it released/deployed?
 
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|
-| FastAPI `/api/v1` product surface | VERIFIED | system/product-composition tests | canonical VOP operation endpoint not yet public |
+| FastAPI `/api/v1` product surface | VERIFIED | system/product-composition tests | canonical READ Operation API is a PR #137 candidate; G8 provider pack remains off |
+| Canonical public READ Operation API | IMPLEMENTED CANDIDATE | PR #137 HTTP/OpenAPI/adversarial tests | exact-head closure + merge pending; no canonical WRITE route |
 | Static command-center console | IMPLEMENTED | product HTTP/static surface | product/release hardening still open |
 | Local bootstrap, login and sessions | VERIFIED | authentication/bootstrap/session tests | no released OIDC/MFA enterprise identity path |
 | RBAC and approval separation | VERIFIED | governance/service tests | not full organization/tenant policy |
@@ -48,7 +49,7 @@ Is it released/deployed?
 | Change-request lifecycle | VERIFIED | change-request/product tests | legacy API compatibility surface remains |
 | VOP canonical vocabulary R2 | IMPLEMENTED | machine registry + terminology tests + merged PR #128 closure | current semantic baseline; release/deploy separate |
 | Capability→terminal profile registry | IMPLEMENTED | terminal-profile tests | immutable current registry; not caller selectable |
-| Terminal-strength escalation prevention | IMPLEMENTED | pipeline/profile negative tests | no claim about future unregistered capabilities |
+| Terminal-strength escalation prevention | IMPLEMENTED | pipeline/profile negative tests | G7 additionally rejects public profile injection and route mismatch before Grant issuance |
 | Provider semantic translation/equivalence | VERIFIED | deterministic translation tests | translation does not create authority |
 | AuthorizationSnapshot contract | VERIFIED | contract/source tests | component proof does not imply provider effect |
 | AuthoritativeSnapshotCreator | IMPLEMENTED | source/focused tests | canonical runtime factory dependency |
@@ -60,45 +61,76 @@ Is it released/deployed?
 | DispatchInboxAdmission/v1 dedup | IMPLEMENTED | schema 0012 + tests | bounded to coordinator scope |
 | ExecutionEpoch + ExecutionLease/v1 | IMPLEMENTED | schema 0013 + fencing tests | lease is not provider effect |
 | DurableCoordinator / current fence | IMPLEMENTED | source/tests | required again at effect/preflight boundaries |
-| CanonicalOperationPipeline | IMPLEMENTED | merged PR #128 system tests | intentionally stops before Runner/provider effect |
+| CanonicalOperationPipeline | IMPLEMENTED | merged PR #128 + PR #137 route-constraint tests | intentionally stops before Runner/provider effect; route constraints only narrow derived authority |
 | ProductComposition canonical runtime seam | IMPLEMENTED | merged PR #128 composition tests | explicit runtime factory required; default remains fail-closed |
-| CanonicalOperationRuntime router | IMPLEMENTED | merged PR #128 routing tests | routes only registered profile/capability paths |
+| CanonicalOperationRuntime router | IMPLEMENTED | merged PR #128 + PR #137 routing tests | no generic caller-selected profile; missing route component fails before authority preparation |
 | ExecutionCapsule/v1 | IMPLEMENTED | contract/tests | exact capability definition binding required |
 | RunnerIdentity / RunnerBoundary | IMPLEMENTED | source/tests + pilot evidence | bounded execution only, never grant authority |
 | CredentialAccessDecision | IMPLEMENTED | source/tests | metadata/authorization scope, not credential bytes |
 | Isolated READ runtime activation | IMPLEMENTED | source/tests + D4b | bounded GitHub runtime profile |
 | GitHub READ observation | VERIFIED | D4b live governed read | bounded GitHub pilot scope |
-| CanonicalGitHubReadTerminal | IMPLEMENTED | merged PR #128 terminal tests + exact-head closure | canonical public API/provider pack still separate |
+| CanonicalGitHubReadTerminal | IMPLEMENTED | merged PR #128 terminal tests + D4b/E3/E4b | G7 surfaces it; G8 default provider pack still separate |
 | Independent Verifier identity/boundary | VERIFIED | E3 live independent verifier | bounded GitHub pilot scope |
 | Separate verifier credential decision | IMPLEMENTED | E3/E4b contracts/tests | must remain distinct from Runner credential path |
-| VerificationResult/v1 | VERIFIED | E4b + historical F6b | READ terminal current stopping point |
+| VerificationResult/v1 | VERIFIED | E4b + historical F6b | READ terminal current stopping point; G7 exposes verdict separately from execution |
 | ExecutionReceipt/v2 | VERIFIED | contract/tests + historical F6b | execution claim only; not independent verification |
 | GitHub CREATE_REF bounded write contract/runtime | VERIFIED | historical F4b effect evidence | historical execution is not new current effect authority |
-| A09 reusable CREATE_REF preparation | IMPLEMENTED | merged PR #128 tests | ends at `WriteEffectPreflight/v1`; no transport/effect |
+| A09 reusable CREATE_REF preparation | IMPLEMENTED | merged PR #128 tests | ends at `WriteEffectPreflight/v1`; no transport/effect; no G7 HTTP route |
 | GitHub DELETE_REF rollback contract/runtime | VERIFIED | historical F6b effect evidence | historical execution is not reusable current authorization |
-| A09 reusable rollback preparation | IMPLEMENTED | merged PR #128 tests | ends at `RollbackWriteEffectPreflight/v2`; no DELETE call |
+| A09 reusable rollback preparation | IMPLEMENTED | merged PR #128 tests | ends at `RollbackWriteEffectPreflight/v2`; no DELETE call; no G7 HTTP route |
 | A09 historical PR120/SHA independence | IMPLEMENTED | source-negative tests | only A09 seam; historical pilot files remain historical |
 | OperationProof/v1 | IMPLEMENTED | historical deterministic proof contract | historical lineage; not reinterpreted as v2 |
 | OperationProof/v2 | VERIFIED | current contract/tests + historical F6b digest | mutation-only post-verification lineage |
 | OperationCell/v1 | VERIFIED | current contract/tests + historical F6b digest | mutation-only stable operation atom |
-| Unified authority→profile runtime composition | IMPLEMENTED | ProductComposition + canonical runtime tests | default provider pack off; canonical public API later |
+| Unified authority→profile runtime composition | IMPLEMENTED | ProductComposition + canonical runtime tests | public READ API candidate exists; default provider pack still off |
 | Receipt/audit hash-chain integrity | VERIFIED | ledger verification tests | chain integrity != independent provider verification |
 | SQLite migrations | VERIFIED | migrations 0001–0014 + integrity tests | single-node released backend |
 | PostgreSQL backend | BLOCKED | fail-closed startup contract | adapter/concurrency/operations gates not released |
 | OIDC identity provider | BLOCKED | fail-closed configuration tests | no released external identity runtime |
 | Security Intelligence R-SI1.1 | IMPLEMENTED | metadata + tests | intelligence-only; no execution/proof authority |
-| CyberCore integration | BLOCKED | product/release-governance hardening | reconciliation is merged; CyberCore still cannot bypass V-One gates |
-| Main GitHub governance policy | IMPLEMENTED | repository policy | live modern ruleset enforcement not verified |
-| Main required latest-head enforcement | UNKNOWN | branch endpoint shows classic required checks off; modern ruleset evidence unavailable | explicit release blocker |
+| Security Intelligence R-SI1.2 normalization | IMPLEMENTED | merged PR #135 | descriptive/context-only; no authority/runtime/effect widening |
+| CyberCore integration | BLOCKED | product/release-governance hardening | cannot bypass V-One gates |
+| Main GitHub governance policy | IMPLEMENTED | repository baseline + merged PR #134 verifier | automation is not live Settings evidence |
+| Main required latest-head enforcement | UNKNOWN/BLOCKED | fresh G0 live verifier must return `VERIFIED` | explicit release blocker |
 | Release-candidate build | VERIFIED | fail-closed workflow + historical image/SBOM checks | build candidate != deployment |
-| Unrestricted production release | BLOCKED | production effects default disabled | separate security/legal/ops/release authorization required |
+| Unrestricted production release | BLOCKED | production effects default disabled | G0 + G7 + G8 + security/legal/ops/release gates remain |
 | Public commercial distribution | BLOCKED | no distribution authorization | licensing/EULA/privacy/support and production gates remain separate |
 
-## Verified command surfaces
+## Canonical public command surface — G7 candidate
 
-The current HTTP surface still exposes the established product endpoints. It does **not** yet claim a
-new public endpoint for the full canonical VOP runtime. ProductComposition wiring and public product
-surfacing are separate truth dimensions.
+PR #137 adds only:
+
+```text
+GET  /api/v1/operations/status
+POST /api/v1/operations/{request_id}/read
+```
+
+The READ route requires an authenticated principal with the outer `execution.run` permission, a
+bounded `Idempotency-Key` and correlation id. The canonical runtime independently revalidates current
+DB-backed role, active state, environment and workspace membership. The request model rejects unknown
+fields, so callers cannot inject a terminal profile.
+
+The READ route is internally narrowed to:
+
+```text
+terminal_profile = READ_ONLY_VERIFIED
+capability       = github.read-ref/v1
+```
+
+A mismatch fails before Grant issuance/consumption. Missing READ terminal/runtime also fails before
+canonical authority preparation. OpenAPI contains no canonical CREATE_REF, DELETE_REF or rollback
+route.
+
+The response keeps execution and independent verification separate. The following is valid and must
+not be promoted to VERIFIED:
+
+```text
+execution.status      = SUCCEEDED
+verification.verdict  = NOT_VERIFIED
+```
+
+Without G8, the default `canonical_operation_runtime` remains `None`; surfacing the endpoint does not
+activate a provider runtime or ambient credentials.
 
 ## Canonical ProductComposition shape
 
@@ -155,12 +187,16 @@ This is historical evidence for one real atom. It does not execute or verify a n
 
 ```text
 VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+NEW_G7_PROVIDER_WRITE=NO
 NEW_A09_PROVIDER_MUTATION=NO
+G0_LIVE_ENFORCEMENT_VERIFIED=NO/UNKNOWN_UNTIL_FRESH_EVIDENCE
+G8_DEFAULT_PROVIDER_RUNTIME=OFF
 RELEASE_VERIFIED=NO
 DEPLOYMENT_VERIFIED=NO
 ```
 
-No merge, CI pass, preflight, historical pilot, proof or cell changes those values by inference.
+No merge, CI pass, public API surface, preflight, historical pilot, proof or cell changes those values
+by inference.
 
 ## Reconciliation closure evidence
 
