@@ -7,6 +7,7 @@ import pytest
 
 from voodoo_product.canonical_operation_resume import (
     SELECT_CONSUMPTION_BY_ID,
+    SELECT_GRANT_BY_EXECUTION,
     SELECT_LEASE_BY_ID,
     CanonicalOperationResumeDenied,
     CanonicalOperationResumeService,
@@ -87,7 +88,49 @@ def _consumption(*, conformance: object, clock: object) -> object:
     )
 
 
-def test_exact_supporting_witnesses_are_accepted() -> None:
+def test_exact_grant_supporting_witnesses_are_accepted() -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
+    clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
+    row = {
+        "issuance_conformance_witness_digest": conformance.witness_digest,
+        "store_clock_witness_digest": clock.witness_digest,
+        "stored_at": clock.observed_at,
+    }
+
+    CanonicalOperationResumeService._validate_grant_supporting_witnesses(
+        row=row,
+        grant=grant,
+        conformance_witness=conformance,
+        clock_witness=clock,
+    )
+
+
+def test_valid_foreign_grant_supporting_witness_is_rejected() -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(
+        _conformance_raw(grant_digest="6" * 64)
+    )
+    clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
+    row = {
+        "issuance_conformance_witness_digest": conformance.witness_digest,
+        "store_clock_witness_digest": clock.witness_digest,
+        "stored_at": clock.observed_at,
+    }
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="GRANT_SUPPORTING_WITNESS_MISMATCH",
+    ):
+        CanonicalOperationResumeService._validate_grant_supporting_witnesses(
+            row=row,
+            grant=grant,
+            conformance_witness=conformance,
+            clock_witness=clock,
+        )
+
+
+def test_exact_consumption_supporting_witnesses_are_accepted() -> None:
     grant = _grant()
     conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
     clock = CanonicalOperationResumeService._decode_clock_witness(_clock_raw())
@@ -197,6 +240,9 @@ def test_conformance_witness_content_digest_tampering_is_rejected() -> None:
 
 
 def test_resume_queries_load_supporting_json_read_only() -> None:
+    assert SELECT_GRANT_BY_EXECUTION.mode == "read"
+    assert "issuance_conformance_witness_json" in SELECT_GRANT_BY_EXECUTION.sqlite_sql
+    assert "store_clock_witness_json" in SELECT_GRANT_BY_EXECUTION.sqlite_sql
     assert SELECT_CONSUMPTION_BY_ID.mode == "read"
     assert "conformance_witness_json" in SELECT_CONSUMPTION_BY_ID.sqlite_sql
     assert "clock_witness_json" in SELECT_CONSUMPTION_BY_ID.sqlite_sql
