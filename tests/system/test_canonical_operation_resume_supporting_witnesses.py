@@ -84,14 +84,21 @@ def _grant() -> object:
         runner_class="github-actions.runner/v1",
         precondition_enforcement_class="READ_THEN_COMPARE",
         environment="staging",
+        issued_at="2026-08-23T08:00:00.000+00:00",
+        expires_at="2026-08-23T08:01:00.000+00:00",
     )
 
 
-def _consumption(*, conformance: object, clock: object) -> object:
+def _consumption(
+    *,
+    conformance: object,
+    clock: object,
+    consumed_at: str = "2026-08-23T08:00:00.000+00:00",
+) -> object:
     return SimpleNamespace(
         conformance_witness_digest=conformance.witness_digest,
         clock_witness_digest=clock.witness_digest,
-        consumed_at="2026-08-23T08:00:00.000+00:00",
+        consumed_at=consumed_at,
     )
 
 
@@ -161,6 +168,37 @@ def test_valid_foreign_grant_precondition_class_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "observed_at",
+    [
+        "2026-08-23T07:59:59.999+00:00",
+        "2026-08-23T08:01:00.000+00:00",
+    ],
+)
+def test_grant_store_clock_outside_validity_is_rejected(observed_at: str) -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
+    clock = CanonicalOperationResumeService._decode_clock_witness(
+        _clock_raw(observed_at=observed_at)
+    )
+    row = {
+        "issuance_conformance_witness_digest": conformance.witness_digest,
+        "store_clock_witness_digest": clock.witness_digest,
+        "stored_at": clock.observed_at,
+    }
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="GRANT_STORE_CLOCK_OUTSIDE_VALIDITY",
+    ):
+        CanonicalOperationResumeService._validate_grant_supporting_witnesses(
+            row=row,
+            grant=grant,
+            conformance_witness=conformance,
+            clock_witness=clock,
+        )
+
+
 def test_exact_consumption_supporting_witnesses_are_accepted() -> None:
     grant = _grant()
     conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
@@ -206,6 +244,37 @@ def test_valid_foreign_consumption_precondition_class_is_rejected() -> None:
     with pytest.raises(
         CanonicalOperationResumeDenied,
         match="CONSUMPTION_SUPPORTING_WITNESS_MISMATCH",
+    ):
+        CanonicalOperationResumeService._validate_consumption_supporting_witnesses(
+            grant=grant,
+            consumption=consumption,
+            conformance_witness=conformance,
+            clock_witness=clock,
+        )
+
+
+@pytest.mark.parametrize(
+    "observed_at",
+    [
+        "2026-08-23T07:59:59.999+00:00",
+        "2026-08-23T08:01:00.000+00:00",
+    ],
+)
+def test_consumption_clock_outside_grant_validity_is_rejected(observed_at: str) -> None:
+    grant = _grant()
+    conformance = ExecutionConformanceWitness.from_dict(_conformance_raw())
+    clock = CanonicalOperationResumeService._decode_clock_witness(
+        _clock_raw(observed_at=observed_at)
+    )
+    consumption = _consumption(
+        conformance=conformance,
+        clock=clock,
+        consumed_at=clock.observed_at,
+    )
+
+    with pytest.raises(
+        CanonicalOperationResumeDenied,
+        match="CONSUMPTION_CLOCK_OUTSIDE_GRANT_VALIDITY",
     ):
         CanonicalOperationResumeService._validate_consumption_supporting_witnesses(
             grant=grant,
