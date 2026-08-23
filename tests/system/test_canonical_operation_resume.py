@@ -522,6 +522,7 @@ def make_service(
                 capability_definition_identity=grant.capability_definition_identity,
                 target_kind=grant.target_kind,
                 runner_class=grant.runner_class,
+                precondition_enforcement_class=grant.precondition_enforcement_class,
             )
         ),
     )
