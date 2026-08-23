@@ -167,7 +167,9 @@ class CanonicalOperationPipeline:
 
     Terminal semantics are not caller-controlled. After the authoritative snapshot resolves the exact
     capability definition identity, this pipeline resolves one immutable terminal-profile allowlist
-    binding and carries it forward. The pipeline still stops before any Runner/provider effect.
+    binding and carries it forward. Internal runtime routes may additionally require one exact profile
+    and capability; those requirements are checked before Grant issuance/consumption. The pipeline
+    still stops before any Runner/provider effect.
     """
 
     def __init__(
@@ -218,13 +220,32 @@ class CanonicalOperationPipeline:
         request_id: str,
         idempotency_key: str,
         correlation_id: str,
+        required_terminal_profile: str | None = None,
+        required_capability: str | None = None,
     ) -> CanonicalPreparedExecution:
-        """Prepare one operation through durable lease acquisition, then stop pre-effect."""
+        """Prepare one operation through durable lease acquisition, then stop pre-effect.
+
+        `required_terminal_profile` and `required_capability` are internal route constraints. They do
+        not select authority. The canonical snapshot/allowlist still derives the actual values, and a
+        mismatch fails before Grant issuance/consumption.
+        """
 
         actor_id = _require_text(actor_id, field="actor_id")
         request_id = _require_text(request_id, field="request_id")
         idempotency_key = _require_text(idempotency_key, field="idempotency_key")
         correlation_id = _require_text(correlation_id, field="correlation_id")
+        if required_terminal_profile is not None:
+            required_terminal_profile = _require_text(
+                required_terminal_profile,
+                field="required_terminal_profile",
+            )
+            if required_terminal_profile not in OPERATION_TERMINAL_PROFILES:
+                raise ValueError("required_terminal_profile is unsupported")
+        if required_capability is not None:
+            required_capability = _require_text(
+                required_capability,
+                field="required_capability",
+            )
 
         snapshot = self.snapshot_creator.create_snapshot(
             actor_id=actor_id,
@@ -261,6 +282,10 @@ class CanonicalOperationPipeline:
             _attribute(profile_binding, "binding_digest"),
             field="terminal_profile_binding_digest",
         )
+        if required_terminal_profile is not None and terminal_profile != required_terminal_profile:
+            raise PermissionError("CANONICAL_PIPELINE_REQUIRED_TERMINAL_PROFILE_MISMATCH")
+        if required_capability is not None and capability != required_capability:
+            raise PermissionError("CANONICAL_PIPELINE_REQUIRED_CAPABILITY_MISMATCH")
 
         scope = AuthorityScope.from_snapshot(snapshot)  # type: ignore[arg-type]
         authority = AuthorityConstraint.from_scope(scope)
