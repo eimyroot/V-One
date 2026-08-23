@@ -14,6 +14,7 @@ from .durable_current_fence import DurableCurrentExecutionFence
 from .evidence_primitives import canonical_json
 from .execution_contract import REQUIRED_EXECUTION_PERMISSION
 from .execution_lease import ExecutionLease
+from .grant_consumption import GrantConsumptionWitness
 from .permission_authority import DatabasePermissionAuthority, PermissionQuery
 from .persistence import DatabaseConnection, DatabaseRow, DatabaseStatement, ProductDatabaseAdapter
 
@@ -37,6 +38,19 @@ SELECT_GRANT_BY_EXECUTION = DatabaseStatement(
                grant_digest, grant_json, issued_at, expires_at, revocation_epoch
         FROM execution_grants_v2
         WHERE execution_id = ?
+    """,
+)
+SELECT_CONSUMPTION_BY_ID = DatabaseStatement(
+    name="canonical_resume.select_consumption_by_id",
+    mode="read",
+    sqlite_sql="""
+        SELECT consumption_id, jti, grant_digest, execution_id,
+               authorization_snapshot_digest, execution_capsule_digest, runner_class,
+               conformance_witness_digest, clock_witness_digest, live_revocation_epoch,
+               consumed_at, serialization_contract, authority_revision,
+               consumption_digest, consumption_json
+        FROM grant_consumptions_v1
+        WHERE consumption_id = ?
     """,
 )
 SELECT_OUTBOX_BY_EXECUTION = DatabaseStatement(
@@ -94,6 +108,7 @@ SELECT_LEASE_BY_ID = DatabaseStatement(
 RESUME_READ_STATEMENTS = (
     SELECT_SNAPSHOT_ID_BY_EXECUTION,
     SELECT_GRANT_BY_EXECUTION,
+    SELECT_CONSUMPTION_BY_ID,
     SELECT_OUTBOX_BY_EXECUTION,
     SELECT_INBOX_BY_EXECUTION,
     SELECT_EPOCH_STATE_BY_EXECUTION,
@@ -202,6 +217,19 @@ class CanonicalOperationResumeService:
                 value=execution_id,
                 artifact="OUTBOX",
             )
+            try:
+                consumption_id = _require_text(
+                    str(outbox_row["consumption_id"]),
+                    field="consumption_id",
+                )
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                self._deny("OUTBOX_ROW_INVALID", cause=exc)
+            consumption_row = self._one_row(
+                connection,
+                statement=SELECT_CONSUMPTION_BY_ID,
+                value=consumption_id,
+                artifact="CONSUMPTION",
+            )
             inbox_row = self._one_row(
                 connection,
                 statement=SELECT_INBOX_BY_EXECUTION,
@@ -228,6 +256,12 @@ class CanonicalOperationResumeService:
             decoder=ExecutionGrantV2.from_dict,
             artifact="GRANT",
         )
+        consumption = self._decode_value(
+            consumption_row,
+            json_field="consumption_json",
+            decoder=GrantConsumptionWitness.from_dict,
+            artifact="CONSUMPTION",
+        )
         outbox = self._decode_value(
             outbox_row,
             json_field="entry_json",
@@ -248,12 +282,14 @@ class CanonicalOperationResumeService:
         )
 
         self._validate_grant_row(grant_row, grant=grant)
+        self._validate_consumption_row(consumption_row, consumption=consumption)
         self._validate_outbox_row(outbox_row, outbox=outbox)
         self._validate_inbox_row(inbox_row, admission=admission)
         self._validate_lease_row(lease_row, lease=lease)
         self._validate_chain(
             snapshot=snapshot,
             grant=grant,
+            consumption=consumption,
             outbox=outbox,
             admission=admission,
             lease=lease,
@@ -362,7 +398,7 @@ class CanonicalOperationResumeService:
             if not callable(to_dict) or canonical_json(to_dict()) != encoded:
                 raise ValueError("decoded object does not match stored JSON")
             return value
-        except (TypeError, ValueError) as exc:
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             cls._deny(f"{artifact}_ROW_INVALID", cause=exc)
 
     @classmethod
@@ -384,6 +420,29 @@ class CanonicalOperationResumeService:
                 "revocation_epoch": grant.revocation_epoch,
             },
             reason="GRANT_ROW_INVALID",
+        )
+
+    @classmethod
+    def _validate_consumption_row(cls, row: DatabaseRow, *, consumption: object) -> None:
+        cls._require_row_projection(
+            row,
+            expected={
+                "consumption_id": consumption.consumption_id,
+                "jti": consumption.jti,
+                "grant_digest": consumption.grant_digest,
+                "execution_id": consumption.execution_id,
+                "authorization_snapshot_digest": consumption.authorization_snapshot_digest,
+                "execution_capsule_digest": consumption.execution_capsule_digest,
+                "runner_class": consumption.runner_class,
+                "conformance_witness_digest": consumption.conformance_witness_digest,
+                "clock_witness_digest": consumption.clock_witness_digest,
+                "live_revocation_epoch": consumption.live_revocation_epoch,
+                "consumed_at": consumption.consumed_at,
+                "serialization_contract": consumption.serialization_contract,
+                "authority_revision": consumption.authority_revision,
+                "consumption_digest": consumption.witness_digest,
+            },
+            reason="CONSUMPTION_ROW_INVALID",
         )
 
     @classmethod
@@ -472,6 +531,7 @@ class CanonicalOperationResumeService:
         *,
         snapshot: object,
         grant: object,
+        consumption: object,
         outbox: object,
         admission: object,
         lease: object,
@@ -512,6 +572,33 @@ class CanonicalOperationResumeService:
             cls._deny("SNAPSHOT_GRANT_BINDING_MISMATCH")
         if grant.required_permission != REQUIRED_EXECUTION_PERMISSION:
             cls._deny("GRANT_PERMISSION_MISMATCH")
+
+        consumption_expected = {
+            "jti": grant.jti,
+            "grant_id": grant.grant_id,
+            "grant_digest": grant.grant_digest,
+            "execution_id": grant.execution_id,
+            "authorization_snapshot_digest": grant.authorization_snapshot_digest,
+            "execution_capsule_digest": grant.execution_capsule_digest,
+            "runner_class": grant.runner_class,
+            "live_revocation_epoch": grant.revocation_epoch,
+        }
+        consumption_actual = {
+            key: getattr(consumption, key) for key in consumption_expected
+        }
+        if consumption_actual != consumption_expected:
+            cls._deny("GRANT_CONSUMPTION_BINDING_MISMATCH")
+
+        outbox_consumption_expected = {
+            "consumption_id": consumption.consumption_id,
+            "consumption_witness_digest": consumption.witness_digest,
+            "created_at": consumption.consumed_at,
+        }
+        outbox_consumption_actual = {
+            key: getattr(outbox, key) for key in outbox_consumption_expected
+        }
+        if outbox_consumption_actual != outbox_consumption_expected:
+            cls._deny("CONSUMPTION_OUTBOX_BINDING_MISMATCH")
 
         grant_expected = {
             "jti": grant.jti,
