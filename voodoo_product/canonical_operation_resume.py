@@ -543,6 +543,8 @@ class CanonicalOperationResumeService:
         }
         if binding_actual != binding_expected:
             cls._deny("GRANT_SUPPORTING_WITNESS_MISMATCH")
+        if not (grant.issued_at <= clock_witness.observed_at < grant.expires_at):
+            cls._deny("GRANT_STORE_CLOCK_OUTSIDE_VALIDITY")
 
     @classmethod
     def _validate_consumption_row(cls, row: DatabaseRow, *, consumption: object) -> None:
@@ -610,6 +612,8 @@ class CanonicalOperationResumeService:
         }
         if actual != expected:
             cls._deny("CONSUMPTION_SUPPORTING_WITNESS_MISMATCH")
+        if not (grant.issued_at <= clock_witness.observed_at < grant.expires_at):
+            cls._deny("CONSUMPTION_CLOCK_OUTSIDE_GRANT_VALIDITY")
 
     @classmethod
     def _validate_outbox_row(cls, row: DatabaseRow, *, outbox: object) -> None:
