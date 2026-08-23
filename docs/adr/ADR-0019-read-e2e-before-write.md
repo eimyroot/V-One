@@ -50,7 +50,7 @@ Anything less keeps `WRITE_RUNTIME_GATE = BLOCKED`.
 
 ## Adoption gate
 
-This ADR becomes `Accepted` only after all of the following are true on one unchanged PR head:
+This candidate becomes effective only after all of the following are true for its exact immutable bytes:
 
 ```text
 owner adoption decision recorded     = YES
@@ -59,11 +59,14 @@ product/documentation truth gates     = SUCCESS
 fresh independent review              = CLEAN
 blocking review threads               = 0
 merge through protected main          = SUCCESS
+external adoption record              = RECORDED
 ```
 
 Until that adoption gate closes, this document creates no authority. The pre-existing fail-closed state remains stronger than the proposal: provider WRITE stays disabled and blocked.
 
-After merge, a separate documentation-only change may update the ADR status from `PROPOSED` to `Accepted` only when the merge/adoption evidence is recorded. No runtime or provider effect may depend on an unmerged ADR status.
+V-One uses the non-self-referential adoption protocol in `docs/governance/AUTHORITY_AND_ADOPTION_REGISTER.md`. Therefore the exact reviewed ADR bytes remain `PROPOSED`; after merge, a separate governance-only adoption record must bind the exact candidate content commit and SHA-256 as `EFFECTIVE_STATUS: ADOPTED`. The adoption-record change must not modify this ADR. Repository presence, merge, or this document's self-declared status does not create adoption by itself.
+
+No runtime or provider effect may depend on this candidate before that external adoption record is merged and effective.
 
 ## Non-conflation rule
 
@@ -78,7 +81,7 @@ is a valid truthful terminal state and must not be promoted to `VERIFIED` by rec
 
 ## G8 consequence
 
-The first default provider runtime pack is READ-only. It must:
+Once the decision is effectively adopted, the first default provider runtime pack is READ-only. It must:
 
 - bind to the exact ProductComposition database and permission authority;
 - reuse the canonical terminal-profile registry and current execution fence;
@@ -91,7 +94,7 @@ The first default provider runtime pack is READ-only. It must:
 
 ## WRITE consequence
 
-WRITE implementation may be designed and tested pre-effect, but provider mutation activation is not eligible until the READ gate above is VERIFIED. A future WRITE activation requires its own ADR/gate, independent review, effect-specific credential scoping, post-state verification, rollback semantics, release authorization, and deployment authorization.
+WRITE implementation may be designed and tested pre-effect, but provider mutation activation is not eligible until this decision is effectively adopted and the READ gate above is VERIFIED. A future WRITE activation requires its own ADR/gate, independent review, effect-specific credential scoping, post-state verification, rollback semantics, release authorization, and deployment authorization.
 
 ## Evidence and rollback
 
