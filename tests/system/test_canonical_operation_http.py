@@ -15,6 +15,7 @@ D3 = "3" * 64
 D4 = "4" * 64
 D5 = "5" * 64
 D6 = "6" * 64
+SECRET_MARKER = "provider-target-secret-marker"
 
 
 class FakeIdentityProvider:
@@ -25,7 +26,7 @@ class FakeIdentityProvider:
             return Principal(user_id="usr-developer", username="developer", role="developer")
         if token == "viewer-token":
             return Principal(user_id="usr-viewer", username="viewer", role="viewer")
-        raise PermissionError("invalid session")
+        raise PermissionError(f"invalid session contains {SECRET_MARKER}")
 
 
 class FakeRuntime:
@@ -106,6 +107,16 @@ def test_status_requires_authentication_and_reports_no_write_surface() -> None:
     }
 
 
+def test_authentication_error_does_not_leak_identity_provider_detail() -> None:
+    api = client(FakeRuntime())
+
+    response = api.get("/api/v1/operations/status", headers=auth("bad-token"))
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "invalid authentication token"
+    assert SECRET_MARKER not in response.text
+
+
 def test_read_fails_closed_when_runtime_is_not_configured() -> None:
     api = client(None)
 
@@ -160,6 +171,20 @@ def test_read_requires_idempotency_key() -> None:
     assert runtime.calls == []
 
 
+def test_unsafe_request_id_is_rejected_before_runtime() -> None:
+    runtime = FakeRuntime()
+    api = client(runtime)
+
+    response = api.post(
+        "/api/v1/operations/req%20unsafe/read",
+        headers=read_headers(),
+        json=read_body(),
+    )
+
+    assert response.status_code == 422
+    assert runtime.calls == []
+
+
 def test_execution_success_and_independent_verification_remain_separate() -> None:
     runtime = FakeRuntime(verdict="NOT_VERIFIED")
     api = client(runtime)
@@ -187,8 +212,12 @@ def test_execution_success_and_independent_verification_remain_separate() -> Non
     ]
 
 
-def test_runtime_permission_failure_is_not_translated_to_execution_success() -> None:
-    runtime = FakeRuntime(error=PermissionError("CANONICAL_PIPELINE_REQUIRED_CAPABILITY_MISMATCH"))
+def test_runtime_permission_failure_is_sanitized_and_not_execution_success() -> None:
+    runtime = FakeRuntime(
+        error=PermissionError(
+            f"CANONICAL_PIPELINE_REQUIRED_CAPABILITY_MISMATCH target={SECRET_MARKER}"
+        )
+    )
     api = client(runtime)
 
     response = api.post(
@@ -198,7 +227,24 @@ def test_runtime_permission_failure_is_not_translated_to_execution_success() -> 
     )
 
     assert response.status_code == 403
-    assert "REQUIRED_CAPABILITY_MISMATCH" in response.text
+    assert response.json()["detail"] == "canonical operation denied"
+    assert SECRET_MARKER not in response.text
+    assert "REQUIRED_CAPABILITY_MISMATCH" not in response.text
+
+
+def test_unknown_runtime_error_does_not_leak_internal_detail() -> None:
+    runtime = FakeRuntime(error=Exception(f"unexpected provider state: {SECRET_MARKER}"))
+    api = client(runtime)
+
+    response = api.post(
+        "/api/v1/operations/req-12345/read",
+        headers=read_headers(),
+        json=read_body(),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "canonical operation failed"
+    assert SECRET_MARKER not in response.text
 
 
 def test_openapi_exposes_read_only_canonical_operation_surface() -> None:
@@ -208,4 +254,5 @@ def test_openapi_exposes_read_only_canonical_operation_surface() -> None:
     assert "/api/v1/operations/status" in paths
     assert "/api/v1/operations/{request_id}/read" in paths
     assert all("create-ref" not in path for path in paths)
+    assert all("delete" not in path.casefold() for path in paths)
     assert all("rollback" not in path for path in paths)
