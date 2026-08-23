@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document status | Living delivery plan |
-| Reconciled | `2026-08-21` |
+| Reconciled | `2026-08-23` |
 | Reconciliation base | historical `main@71a931b561faa93c8dd2e062b83559401143b1df` |
 | Reconciliation merge | PR #128 / `d9e27ff17b76f29daba4a3421b11cc396826fe12` |
 | VOP semantic revision | `vop-terminology-freeze-r2` / ADR-0018 |
@@ -73,6 +73,7 @@ terminates at `VerificationResult/v1`. No diagram or compatibility path may wide
 | Reusable CREATE_REF A09 preflight orchestration | IMPLEMENTED | merged PR #128 tests; no provider effect |
 | Reusable rollback A09 preflight orchestration | IMPLEMENTED | merged PR #128 tests; no provider effect |
 | Security Intelligence R-SI1.1 | IMPLEMENTED | intelligence-only metadata/tests |
+| Security Intelligence R-SI1.2 normalization | IMPLEMENTED | merged PR #135; descriptive/context-only |
 
 These rows do not authorize new provider mutation or release.
 
@@ -105,24 +106,24 @@ standing bypass for future high-risk changes.
 
 ## Gate G0 — GitHub main enforcement
 
-**Status: BLOCKED / live modern ruleset evidence UNKNOWN.**
+**Status: BLOCKED until fresh live verifier evidence returns `VERIFIED`.**
 
 Required release baseline:
 
 ```text
 PR-only main
-required latest-head ci / verify
+required latest-head check = verify / workflow ci
 force push disabled
 branch deletion disabled
 conversation resolution required
-ordinary admin bypass disabled
+ordinary admin/ruleset bypass disabled
 ```
 
-The live branch endpoint reports `protected=true`, while classic required status checks report
-enforcement `off`. The available connector cannot inspect the full modern ruleset configuration.
-Successful CI therefore does not prove Settings/ruleset enforcement.
+Merged PR #134 provides the fail-closed live verifier and evidence workflow. Repository automation is
+not GitHub Settings enforcement: G0 becomes PASS only from a fresh live verifier result proving every
+required control. Historical branch metadata or successful CI cannot substitute for that evidence.
 
-**This is the highest-priority remaining release-governance blocker.**
+**G0 remains a release-governance blocker until that live result is VERIFIED.**
 
 ## Gate G1 — Canonical ProductComposition
 
@@ -156,7 +157,8 @@ Properties enforced:
 - default app remains fail-closed unless an explicit canonical runtime factory/provider pack is supplied;
 - legacy `ExecutionService` remains an explicit compatibility API surface, not hidden fallback authority.
 
-The canonical public HTTP operation endpoint remains a separate product-surface gate.
+The canonical public HTTP operation endpoint is implemented as the G7 candidate below; default provider
+runtime activation remains a separate G8 gate.
 
 ## Gate G2 — Profile-specific terminal composition
 
@@ -234,7 +236,7 @@ A preflight is not a provider effect and cannot be presented as `VERIFIED`.
 
 ## Gate G4 — Product readiness baseline
 
-**Status: VERIFIED for merged PR #128 baseline.**
+**Status: VERIFIED for merged PR #128 baseline; every later head requires fresh evidence.**
 
 The PR #128 exact-head CI covered:
 
@@ -251,8 +253,8 @@ The PR #128 exact-head CI covered:
 - supply-chain/dependency/image gates;
 - production effects disabled.
 
-Every later product-hardening change must obtain a fresh exact-head CI/readiness result; the historical
-PR #128 gate is not reusable proof for future heads.
+Current readiness inventory also requires the merged G0 verifier/workflow/baseline and the G7 canonical
+HTTP surface plus its adversarial tests. A historical PASS is never reused for a later candidate head.
 
 ## Gate G5 — R3 adversarial review baseline
 
@@ -287,17 +289,35 @@ GitHub enforcement retained as explicit release blocker
 
 ## Gate G7 — Canonical public operation API
 
-**Status: NOT YET SURFACED / NEXT PRODUCT GATE.**
+**Status: IMPLEMENTED CANDIDATE / PR #137 / exact-head closure pending.**
 
-Requirements:
+Candidate public surface:
 
-- expose canonical operation preparation/READ lifecycle through versioned FastAPI endpoints;
-- preserve existing authorization, membership, profile and evidence semantics;
-- no endpoint may accept a caller-selected stronger terminal profile;
-- READ response must distinguish execution success from independent VerificationResult;
-- WRITE endpoints, if introduced later, must stop at preflight unless separately authorized;
-- legacy `ExecutionService` compatibility must be explicit and non-authoritative for canonical flow;
-- API contracts, OpenAPI schema, HTTP tests and product truth docs must converge.
+```text
+GET  /api/v1/operations/status
+POST /api/v1/operations/{request_id}/read
+```
+
+Properties implemented in the candidate:
+
+- versioned FastAPI request/response schemas;
+- same product IdentityProvider at the HTTP boundary;
+- outer `execution.run` permission plus authoritative database-backed role/active/membership revalidation in the canonical runtime;
+- mandatory `Idempotency-Key` and bounded correlation id;
+- request body rejects unknown fields, including caller-supplied `terminal_profile`;
+- READ route internally requires exactly `READ_ONLY_VERIFIED + github.read-ref/v1`;
+- route/profile/capability mismatch fails before Grant issuance/consumption;
+- missing READ terminal fails before canonical authority preparation;
+- response separates `execution.status` from independent `verification.verdict`, including the truthful state `SUCCEEDED + NOT_VERIFIED`;
+- OpenAPI exposes no canonical CREATE_REF, DELETE_REF or rollback route;
+- legacy `ExecutionService` remains an explicit compatibility surface and is not canonical fallback authority.
+
+This candidate does **not** activate a provider runtime pack. With no explicit G8 runtime factory,
+`/operations/status` reports the fail-closed state and READ execution returns service unavailable rather
+than falling back to ambient credentials or legacy execution.
+
+G7 exits only after fresh exact-head CI/readiness plus final adversarial review. Merge remains a separate
+owner gate.
 
 ## Gate G8 — Explicit provider runtime pack
 
@@ -320,8 +340,9 @@ Mutation runtime remains a later, separately authorized gate.
 
 Before release/deploy:
 
-- G0 GitHub enforcement evidence/fix;
-- canonical public API and READ runtime pack gates;
+- G0 GitHub enforcement live evidence;
+- merged/verified G7 canonical public API;
+- G8 READ runtime pack;
 - fresh security/adversarial review;
 - dependency/SBOM/image/provenance gates;
 - secrets/credential rotation and operational runbooks;
