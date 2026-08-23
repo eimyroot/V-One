@@ -102,7 +102,7 @@ SELECT_LEASE_BY_ID = DatabaseStatement(
         SELECT lease_id, admission_id, dispatch_id, admission_digest, execution_id,
                workspace_id, environment, execution_capsule_digest, runner_class,
                execution_epoch, acquired_at, expires_at, clock_witness_digest,
-               lease_revision, lease_digest, lease_json
+               clock_witness_json, lease_revision, lease_digest, lease_json
         FROM execution_leases_v1
         WHERE lease_id = ?
     """,
@@ -295,6 +295,12 @@ class CanonicalOperationResumeService:
             decoder=ExecutionLease.from_dict,
             artifact="LEASE",
         )
+        lease_clock_witness = self._decode_value(
+            lease_row,
+            json_field="clock_witness_json",
+            decoder=self._decode_clock_witness,
+            artifact="LEASE_CLOCK",
+        )
 
         self._validate_grant_row(grant_row, grant=grant)
         self._validate_consumption_row(consumption_row, consumption=consumption)
@@ -307,6 +313,10 @@ class CanonicalOperationResumeService:
         self._validate_outbox_row(outbox_row, outbox=outbox)
         self._validate_inbox_row(inbox_row, admission=admission)
         self._validate_lease_row(lease_row, lease=lease)
+        self._validate_lease_supporting_clock_witness(
+            lease=lease,
+            clock_witness=lease_clock_witness,
+        )
         self._validate_chain(
             snapshot=snapshot,
             grant=grant,
@@ -605,6 +615,26 @@ class CanonicalOperationResumeService:
             },
             reason="LEASE_ROW_INVALID",
         )
+
+    @classmethod
+    def _validate_lease_supporting_clock_witness(
+        cls,
+        *,
+        lease: object,
+        clock_witness: object,
+    ) -> None:
+        expected = {
+            "clock_witness_digest": lease.clock_witness_digest,
+            "clock_environment": lease.environment,
+            "clock_observed_at": lease.acquired_at,
+        }
+        actual = {
+            "clock_witness_digest": clock_witness.witness_digest,
+            "clock_environment": clock_witness.environment,
+            "clock_observed_at": clock_witness.observed_at,
+        }
+        if actual != expected:
+            cls._deny("LEASE_CLOCK_WITNESS_MISMATCH")
 
     @classmethod
     def _validate_chain(
