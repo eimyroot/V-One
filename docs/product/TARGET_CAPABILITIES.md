@@ -197,17 +197,20 @@ authenticated HTTP READ
 → Snapshot
 → Grant/v2
 → one-time consumption
-→ Dispatch
-→ Epoch/Lease/Capsule
-→ isolated READ Runner
+→ Outbox/Envelope/Inbox
+→ ACTIVE Epoch/current Lease/Capsule
+→ process interruption/restart before Runner completion
+→ resume the same ACTIVE execution
+→ no new prepare/grant/consume/outbox/envelope/inbox/epoch/lease
+→ current-fence + authority-continuity validation
+→ resumed isolated READ Runner
 → durable completion
-→ independent Verifier
+→ independent Verifier with separate identity/credential decision
 → VerificationResult/v1
-→ process restart
-→ resume same execution
-→ no new grant/consume/outbox/inbox/lease
-→ current-fence validation
 ```
+
+The current resume target is explicitly an `ACTIVE` execution. Resuming an already `COMPLETED` execution
+or performing completed-execution reverification is outside T13 and requires a separate future contract.
 
 Repeated successful and failure-injected evidence is required before provider WRITE may become merely
 eligible under the governed READ-before-WRITE decision.
