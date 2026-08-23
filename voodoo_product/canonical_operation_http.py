@@ -12,6 +12,7 @@ from .security import Principal
 
 CANONICAL_OPERATION_READ_RESPONSE = "vone.canonical-operation-read/v1"
 CANONICAL_OPERATION_API_STATUS = "vone.canonical-operation-api-status/v1"
+SAFE_OPERATION_ID_PATTERN = r"^[A-Za-z0-9._:-]+$"
 
 
 class CanonicalReadOperationRequest(BaseModel):
@@ -20,7 +21,7 @@ class CanonicalReadOperationRequest(BaseModel):
     correlation_id: str = Field(
         min_length=8,
         max_length=128,
-        pattern=r"^[A-Za-z0-9._:-]+$",
+        pattern=SAFE_OPERATION_ID_PATTERN,
     )
 
 
@@ -114,18 +115,30 @@ def _response_from_read_result(result: CanonicalReadTerminalResult) -> Canonical
 
 def _translate_runtime_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PermissionError):
-        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="canonical operation denied",
+        )
     if isinstance(exc, LookupError):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="canonical operation resource not found",
+        )
     if isinstance(exc, ValueError):
-        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="canonical operation rejected",
+        )
     if isinstance(exc, RuntimeError):
         if str(exc) == "CANONICAL_READ_TERMINAL_NOT_CONFIGURED":
             return HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="canonical READ runtime is not configured",
             )
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="canonical operation conflict",
+        )
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="canonical operation failed",
@@ -141,14 +154,18 @@ def create_canonical_operation_router(
 
     Authentication uses the same product IdentityProvider. The HTTP permission check is only an outer
     product boundary; the canonical runtime still performs the authoritative database-backed
-    permission/membership revalidation inside the trust-plane pipeline.
+    permission/membership revalidation inside the trust-plane pipeline. Internal runtime/provider
+    exception text is not part of the public API contract.
     """
 
     router = APIRouter(prefix="/api/v1/operations", tags=["VOODOO One Canonical Operations"])
 
     def bearer_token(authorization: str | None = Header(default=None)) -> str:
         if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="authentication required",
+            )
         if len(authorization) > 4096:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -166,7 +183,10 @@ def create_canonical_operation_router(
         try:
             return identity_provider.authenticate_bearer(token)
         except (PermissionError, ValueError) as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid authentication token",
+            ) from exc
 
     def require_permission(permission: str):
         def dependency(principal: Principal = Depends(current_principal)) -> Principal:
@@ -195,13 +215,17 @@ def create_canonical_operation_router(
     )
     def run_read_operation(
         body: CanonicalReadOperationRequest,
-        request_id: str = Path(min_length=5, max_length=80),
+        request_id: str = Path(
+            min_length=5,
+            max_length=80,
+            pattern=SAFE_OPERATION_ID_PATTERN,
+        ),
         principal: Principal = Depends(require_permission("execution.run")),
         idempotency_key: str = Header(
             alias="Idempotency-Key",
             min_length=8,
             max_length=128,
-            pattern=r"^[A-Za-z0-9._:-]+$",
+            pattern=SAFE_OPERATION_ID_PATTERN,
         ),
     ) -> CanonicalReadOperationResponse:
         if runtime is None:
