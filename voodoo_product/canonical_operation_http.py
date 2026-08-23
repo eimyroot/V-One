@@ -58,18 +58,24 @@ class CanonicalVerificationSummary(BaseModel):
 
 
 class CanonicalReadOperationResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema: Literal["vone.canonical-operation-read/v1"] = CANONICAL_OPERATION_READ_RESPONSE
+    schema_id: Literal["vone.canonical-operation-read/v1"] = Field(
+        default=CANONICAL_OPERATION_READ_RESPONSE,
+        alias="schema",
+    )
     operation: CanonicalOperationSummary
     execution: CanonicalExecutionSummary
     verification: CanonicalVerificationSummary
 
 
 class CanonicalOperationApiStatus(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema: Literal["vone.canonical-operation-api-status/v1"] = CANONICAL_OPERATION_API_STATUS
+    schema_id: Literal["vone.canonical-operation-api-status/v1"] = Field(
+        default=CANONICAL_OPERATION_API_STATUS,
+        alias="schema",
+    )
     configured: bool
     read_terminal_configured: bool
     write_routes_exposed: Literal[False] = False
