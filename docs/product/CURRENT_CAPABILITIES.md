@@ -36,7 +36,7 @@ Is it released/deployed?
 | Capability | Status | Current evidence | Current limitation |
 |---|---|---|---|
 | FastAPI `/api/v1` product surface | VERIFIED | system/product-composition tests | canonical READ Operation API is a PR #137 candidate; G8 provider pack remains off |
-| Canonical public READ Operation API | IMPLEMENTED CANDIDATE | PR #137 HTTP/OpenAPI/adversarial tests | exact-head closure + merge pending; no canonical WRITE route |
+| Canonical public READ Operation API | IMPLEMENTED | PR #137 candidate HTTP/OpenAPI/adversarial tests | exact-head closure + merge pending; no canonical WRITE route |
 | Static command-center console | IMPLEMENTED | product HTTP/static surface | product/release hardening still open |
 | Local bootstrap, login and sessions | VERIFIED | authentication/bootstrap/session tests | no released OIDC/MFA enterprise identity path |
 | RBAC and approval separation | VERIFIED | governance/service tests | not full organization/tenant policy |
@@ -91,12 +91,14 @@ Is it released/deployed?
 | Security Intelligence R-SI1.2 normalization | IMPLEMENTED | merged PR #135 | descriptive/context-only; no authority/runtime/effect widening |
 | CyberCore integration | BLOCKED | product/release-governance hardening | cannot bypass V-One gates |
 | Main GitHub governance policy | IMPLEMENTED | repository baseline + merged PR #134 verifier | automation is not live Settings evidence |
-| Main required latest-head enforcement | UNKNOWN/BLOCKED | fresh G0 live verifier must return `VERIFIED` | explicit release blocker |
+| Main required latest-head enforcement | UNKNOWN | fresh G0 live verifier must return `VERIFIED` | explicit release blocker until then |
 | Release-candidate build | VERIFIED | fail-closed workflow + historical image/SBOM checks | build candidate != deployment |
 | Unrestricted production release | BLOCKED | production effects default disabled | G0 + G7 + G8 + security/legal/ops/release gates remain |
 | Public commercial distribution | BLOCKED | no distribution authorization | licensing/EULA/privacy/support and production gates remain separate |
 
-## Canonical public command surface — G7 candidate
+## Verified command surfaces
+
+### Canonical public Operation API — G7 candidate
 
 PR #137 adds only:
 
