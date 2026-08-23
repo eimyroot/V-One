@@ -6,7 +6,7 @@
 ## Snapshot identity
 
 ```text
-AS_OF: 2026-08-21
+AS_OF: 2026-08-23
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
 RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
 RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
@@ -56,7 +56,7 @@ RELEASED / DEPLOYED       = separately governed states
 | Historical bounded-mutation operation atom | **VERIFIED** in F6b staging scope |
 | Canonical ProductComposition trust-plane seam | **IMPLEMENTED / MERGED via PR #128** |
 | Default provider runtime pack | **DISABLED / FAIL-CLOSED** |
-| Canonical public operation API | **NOT YET SURFACED** |
+| Canonical public operation API | **IMPLEMENTED CANDIDATE / PR #137 / READ-only; exact-head closure pending** |
 | Capability→terminal profile authority | **IMPLEMENTED / MERGED; caller cannot strengthen profile** |
 | Runtime/database-backed permission authority | **IMPLEMENTED / MERGED; current role + active state + workspace membership** |
 | Workspace membership scope | **IMPLEMENTED / MERGED; schema 14, no legacy inference/backfill** |
@@ -69,7 +69,9 @@ RELEASED / DEPLOYED       = separately governed states
 | OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; historical F6b instance VERIFIED** |
 | OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; historical F6b instance VERIFIED** |
 | Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
-| GitHub main ruleset enforcement | **UNKNOWN / RELEASE BLOCKER** |
+| Security Intelligence R-SI1.2 normalization | **IMPLEMENTED / MERGED via PR #135; descriptive/context-only** |
+| GitHub G0 automation | **IMPLEMENTED / MERGED via PR #134; live enforcement still requires VERIFIED evidence** |
+| GitHub main ruleset enforcement | **UNKNOWN/BLOCKED until fresh G0 verifier result is VERIFIED** |
 | Production release/effects | **BLOCKED** |
 | CyberCore | **BLOCKED pending product/release-governance hardening** |
 
@@ -95,9 +97,14 @@ ReviewedOperation
 runtime objects for the terminal router. Grant consumption remains control-plane-before-Dispatch;
 Runner never issues or consumes ExecutionGrant.
 
+G7 additionally allows an internal route constraint (`required_terminal_profile` +
+`required_capability`). This does not create/select authority: the snapshot and immutable capability
+allowlist still derive the actual values. A mismatch only narrows the accepted route and now fails
+before Grant issuance/consumption.
+
 ## Capability-bound terminal selection
 
-Terminal strength is no longer a caller-selected argument. An immutable registry binds the exact
+Terminal strength is not a caller-selected argument. An immutable registry binds the exact
 `capability_definition_identity` and capability name to one allowed terminal profile.
 
 ```text
@@ -107,7 +114,8 @@ capability_definition_identity
 ```
 
 A caller cannot request `BOUNDED_MUTATION_VERIFIED` for a READ capability or otherwise strengthen the
-profile by supplying a stronger string to `CanonicalOperationPipeline.prepare()`.
+profile. The G7 HTTP body uses `extra=forbid`, so a caller-supplied `terminal_profile` is rejected before
+the canonical runtime is invoked.
 
 ## Runtime permission authority
 
@@ -151,8 +159,37 @@ ProductService database and permission authority. Without that explicit provider
 `canonical_operation_runtime` remains `None`. This is intentional fail-closed behavior, not a hidden
 fallback to legacy authority or ambient GitHub credentials.
 
-Legacy `ExecutionService` remains an explicit existing API compatibility surface. The canonical VOP
-runtime is product-composable, but a new public HTTP operation endpoint has not yet been surfaced.
+Legacy `ExecutionService` remains an explicit existing API compatibility surface. G7 exposes the
+canonical READ operation surface separately; the legacy execute route is not treated as canonical
+fallback authority.
+
+## G7 canonical public Operation API candidate
+
+PR #137 adds the candidate public surface:
+
+```text
+GET  /api/v1/operations/status
+POST /api/v1/operations/{request_id}/read
+```
+
+The candidate has these boundaries:
+
+- same configured product `IdentityProvider` at the HTTP boundary;
+- `execution.run` is required before entering the READ route;
+- authoritative current role/active/workspace/membership permission is still revalidated inside the
+  canonical trust-plane runtime;
+- `Idempotency-Key` is mandatory and correlation id is bounded;
+- unknown body fields are forbidden, including any attempted terminal-profile injection;
+- READ internally requires `READ_ONLY_VERIFIED + github.read-ref/v1` before Grant issuance;
+- missing READ terminal fails before snapshot/grant preparation;
+- successful execution and independent verification are separate response objects;
+- `execution.status=SUCCEEDED` may truthfully coexist with `verification.verdict=NOT_VERIFIED`;
+- no canonical CREATE_REF, DELETE_REF or rollback HTTP route exists;
+- no provider WRITE transport/effect is added by G7.
+
+The API being surfaced does not mean a provider runtime is active. Without the separately governed G8
+runtime pack, status reports unconfigured/fail-closed state and READ execution is unavailable rather
+than using ambient credentials or the legacy path.
 
 ## Canonical terminal profiles — R2
 
@@ -164,11 +201,12 @@ Runner Observation
 → independent Verifier Observation
 → ObservedPostState/v1
 → VerificationStrength/v1
-→ VerificationResult/v1 = VERIFIED
+→ VerificationResult/v1
 ```
 
 `CanonicalGitHubReadTerminal` composes the accepted D4b Runner and E3/E4b independent-verifier
-contracts. READ terminates at `VerificationResult/v1`.
+contracts. READ terminates at `VerificationResult/v1`. A real result may be `VERIFIED` or
+`NOT_VERIFIED`; execution success alone never sets that verdict.
 
 ```text
 ExecutionReceipt/v2 = NOT_APPLICABLE
@@ -239,6 +277,7 @@ OperationProof != OperationCell
 Evidence-chain integrity != independent verification
 Preflight != provider effect
 Prepared rollback != rollback execution
+Public API != active provider runtime
 Release != Deploy
 ```
 
@@ -258,6 +297,7 @@ Release != Deploy
 | Capsule / Runner identity/boundary | IMPLEMENTED | profile terminals | pilot/tests |
 | READ runtime activation | IMPLEMENTED | CanonicalGitHubReadTerminal | D4b |
 | Independent verifier / VerificationResult | IMPLEMENTED | CanonicalGitHubReadTerminal | E3/E4b/F6b |
+| Canonical public READ API | IMPLEMENTED CANDIDATE | ProductComposition router / PR #137 | candidate tests; G8 runtime inactive |
 | Bounded CREATE_REF | IMPLEMENTED | A09 pre-effect preparer | historical F4b; no new execution |
 | Bounded DELETE_REF rollback | IMPLEMENTED | A09 pre-effect preparer | historical F6b; no new execution |
 | ExecutionReceipt/v2 | IMPLEMENTED | post-effect mutation lineage only | historical F6b |
@@ -296,32 +336,33 @@ R3 self/adversarial review = PASS WITH OWNER-ACCEPTED INDEPENDENCE RISK
 unresolved review threads = 0
 ```
 
-CI #839 included lint, compile, migrations, documentation/VOP truth gates, auth/governance,
-execution/persistence, full tests, Product Readiness, dependency audit, product image build and smoke.
 Those exact-head results are historical merge evidence; later repository state must still be queried and
 re-tested for later changes.
 
-The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
-authority, workspace membership boundary and A09 modules/tests so those layers cannot silently fall
-outside future readiness checks.
+The current product-readiness inventory requires the canonical runtime, terminal allowlist, DB
+permission authority, workspace membership boundary, A09 modules/tests, merged G0 governance verifier
+artifacts and the G7 canonical HTTP surface/adversarial tests. PR #137 still requires its own fresh
+exact-head closure before any merge claim.
 
 ## UI truth
 
 Merged PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
 verification is `UNKNOWN` unless an actual VerificationResult binding is exposed. Receipt existence
-must never render `VERIFIED` by itself.
+must never render `VERIFIED` by itself. G7 applies the same rule at the HTTP boundary by keeping
+execution and verification in separate response objects.
 
 ## GitHub governance
 
-Repository policy requires PR-only `main`, latest-head checks, no force push/delete and conversation
-resolution. The live branch endpoint currently reports `protected=true` but classic
-`required_status_checks.enforcement_level=off`; available connector evidence cannot inspect the full
-modern ruleset configuration. Therefore successful CI is not Settings/ruleset evidence.
+Merged PR #134 provides the fail-closed G0 live verifier and evidence workflow. That is automation,
+not proof that GitHub Settings currently satisfy the baseline.
 
 ```text
-GITHUB_SETTINGS_ENFORCED = UNKNOWN
+GITHUB_SETTINGS_ENFORCED = UNKNOWN/BLOCKED UNTIL FRESH VERIFIER RESULT = VERIFIED
 RELEASE_BLOCKER = YES
 ```
+
+Successful CI, branch metadata or repository documents are not a substitute for fresh live G0
+evidence.
 
 ## Governance history
 
@@ -339,13 +380,14 @@ CyberCore remains intelligence/context/proposal only and is still blocked from i
 product/release-governance hardening. It cannot issue ExecutionGrant, consume grants, become
 Runner/Verifier, execute provider effects or become proof evidence by inference.
 
-Reconciliation itself is complete and merged. CyberCore may only proceed after the remaining product
-quality gates are deliberately resolved or explicitly accepted without weakening V-One authority.
+Security Intelligence R-SI1.2 from merged PR #135 remains a descriptive normalization/context layer.
+Open PR #136 is not part of the G7 critical path and is not treated as authority or runtime evidence.
 
 ## Release boundary
 
 ```text
 VOODOO_ALLOW_PRODUCTION_EFFECTS=false
+NEW_G7_PROVIDER_WRITE=NO
 RELEASED=NO
 DEPLOYED=NO
 UNRESTRICTED_PRODUCTION=BLOCKED
@@ -354,10 +396,9 @@ UNRESTRICTED_PRODUCTION=BLOCKED
 ## Next governed sequence
 
 ```text
-post-merge source-of-truth convergence
-→ GitHub main enforcement G0 evidence/fix
-→ canonical public operation API design + governed implementation
-→ explicit provider runtime pack, READ-first and fail-closed
+fresh G0 live-enforcement evidence/fix
+→ close G7 exact-head CI + adversarial review + separate merge gate
+→ G8 explicit READ-first provider runtime pack, fail-closed
 → release-candidate/security/operations gates
 → deployment authorization only after release readiness
 → CyberCore integration only after V-One product baseline is stable
