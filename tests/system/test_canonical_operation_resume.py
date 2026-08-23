@@ -227,6 +227,9 @@ def fixture_state() -> tuple[
         runner_class="github-actions.runner/v1",
         precondition_enforcement_class="READ_THEN_COMPARE",
         use_semantics="ONE_TIME",
+        issued_at="2026-08-23T08:00:00.000+00:00",
+        expires_at="2026-08-23T08:01:00.000+00:00",
+        revocation_epoch=7,
     )
     outbox = StoredValue(
         raw={"kind": "outbox"},
@@ -310,6 +313,9 @@ def fixture_state() -> tuple[
                 "execution_capsule_digest": grant.execution_capsule_digest,
                 "grant_digest": grant.grant_digest,
                 "grant_json": encoded(grant),
+                "issued_at": grant.issued_at,
+                "expires_at": grant.expires_at,
+                "revocation_epoch": grant.revocation_epoch,
             }
         ],
         "canonical_resume.select_outbox_by_execution": [
