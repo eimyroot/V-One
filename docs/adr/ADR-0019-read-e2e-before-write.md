@@ -1,6 +1,6 @@
 # ADR-0019 — Canonical READ E2E Before Provider WRITE
 
-- Status: Proposed — governed adoption pending
+- Status: PROPOSED — governed adoption pending
 - Date: 2026-08-24
 - Scope: V-One provider-effect eligibility
 - Decision class: Security / authority / release governance
@@ -60,7 +60,7 @@ merge through protected main          = SUCCESS
 
 Until that adoption gate closes, this document creates no authority. The pre-existing fail-closed state remains stronger than the proposal: provider WRITE stays disabled and blocked.
 
-After merge, a separate documentation-only change may update the ADR status from `Proposed` to `Accepted` only when the merge/adoption evidence is recorded. No runtime or provider effect may depend on an unmerged ADR status.
+After merge, a separate documentation-only change may update the ADR status from `PROPOSED` to `Accepted` only when the merge/adoption evidence is recorded. No runtime or provider effect may depend on an unmerged ADR status.
 
 ## Non-conflation rule
 
