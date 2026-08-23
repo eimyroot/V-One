@@ -30,6 +30,7 @@ class StubResumeService(CanonicalOperationResumeService):
         prepared: object,
     ) -> None:
         self.db = db
+        self.snapshot_store = SimpleNamespace(db=db)
         self.permission_authority = permission_authority
         self.terminal_profile_registry = terminal_profile_registry
         self.current_fence = current_fence
@@ -56,6 +57,14 @@ def _unexpected_prepare(**_: object) -> object:
     raise AssertionError("pipeline.prepare path must not be used by durable resume")
 
 
+def _permission_authority(*, db: object) -> object:
+    return SimpleNamespace(db=db, decide=lambda **_: object())
+
+
+def _current_fence(*, db: object) -> object:
+    return SimpleNamespace(db=db, assert_current=lambda **_: None)
+
+
 def _pipeline_state() -> tuple[
     CanonicalOperationPipeline,
     object,
@@ -64,8 +73,8 @@ def _pipeline_state() -> tuple[
     object,
 ]:
     db = object()
-    permission_authority = object()
-    current_fence = object()
+    permission_authority = _permission_authority(db=db)
+    current_fence = _current_fence(db=db)
     terminal_profile_registry = SimpleNamespace(resolve=lambda **_: object())
     snapshot_creator = SimpleNamespace(
         db=db,
@@ -255,13 +264,14 @@ def _prepared_read() -> object:
 
 
 def test_runtime_rejects_resume_service_from_parallel_database() -> None:
-    pipeline, _, permission, registry, current_fence = _pipeline_state()
+    pipeline, db, _, registry, current_fence = _pipeline_state()
     terminal = StubReadTerminal(current_fence=current_fence)
+    resume_db = object()
     resume_service = StubResumeService(
-        db=object(),
-        permission_authority=permission,
+        db=resume_db,
+        permission_authority=_permission_authority(db=resume_db),
         terminal_profile_registry=registry,
-        current_fence=current_fence,
+        current_fence=_current_fence(db=resume_db),
         envelope_revision=pipeline.envelope_revision,
         prepared=_prepared_read(),
     )
@@ -273,13 +283,15 @@ def test_runtime_rejects_resume_service_from_parallel_database() -> None:
             resume_service=resume_service,
         )
 
+    assert resume_service.db is not db
+
 
 def test_runtime_rejects_parallel_resume_permission_authority() -> None:
     pipeline, db, _, registry, current_fence = _pipeline_state()
     terminal = StubReadTerminal(current_fence=current_fence)
     resume_service = StubResumeService(
         db=db,
-        permission_authority=object(),
+        permission_authority=_permission_authority(db=db),
         terminal_profile_registry=registry,
         current_fence=current_fence,
         envelope_revision=pipeline.envelope_revision,
@@ -336,12 +348,14 @@ def test_runtime_rejects_resume_envelope_revision_drift() -> None:
 
 def test_runtime_rejects_resume_fence_different_from_read_terminal() -> None:
     pipeline, db, permission, registry, _ = _pipeline_state()
-    terminal = StubReadTerminal(current_fence=object())
+    terminal_fence = _current_fence(db=db)
+    resume_fence = _current_fence(db=db)
+    terminal = StubReadTerminal(current_fence=terminal_fence)
     resume_service = StubResumeService(
         db=db,
         permission_authority=permission,
         terminal_profile_registry=registry,
-        current_fence=object(),
+        current_fence=resume_fence,
         envelope_revision=pipeline.envelope_revision,
         prepared=_prepared_read(),
     )
@@ -385,7 +399,7 @@ def test_product_composition_rejects_resume_permission_authority_tampering() -> 
     assert resume_service is not None
     permission = resume_service.permission_authority
     service = SimpleNamespace(db=resume_service.db)
-    resume_service.permission_authority = object()
+    resume_service.permission_authority = _permission_authority(db=resume_service.db)
 
     with pytest.raises(
         ValueError,
@@ -430,9 +444,52 @@ def test_product_composition_rejects_resume_current_fence_tampering() -> None:
     runtime, resume_service, _, _ = _runtime()
     assert resume_service is not None
     service = SimpleNamespace(db=resume_service.db)
-    resume_service.current_fence = object()
+    resume_service.current_fence = _current_fence(db=resume_service.db)
 
     with pytest.raises(ValueError, match="share current execution fence"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
+
+
+def test_product_composition_rejects_resume_snapshot_store_db_tampering() -> None:
+    runtime, resume_service, _, _ = _runtime()
+    assert resume_service is not None
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.snapshot_store.db = object()
+
+    with pytest.raises(ValueError, match="resume snapshot store must share canonical pipeline database"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
+
+
+def test_product_composition_rejects_resume_permission_authority_db_tampering() -> None:
+    runtime, resume_service, _, _ = _runtime()
+    assert resume_service is not None
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.permission_authority.db = object()
+
+    with pytest.raises(ValueError, match="resume permission authority must share canonical pipeline database"):
+        _validate_canonical_runtime(
+            runtime=runtime,
+            service=service,
+            permission_authority=runtime.pipeline.snapshot_creator.permission_authority,
+        )
+
+
+def test_product_composition_rejects_resume_current_fence_db_tampering() -> None:
+    runtime, resume_service, terminal, _ = _runtime()
+    assert resume_service is not None
+    assert resume_service.current_fence is terminal.runner_adapter.current_fence
+    service = SimpleNamespace(db=resume_service.db)
+    resume_service.current_fence.db = object()
+
+    with pytest.raises(ValueError, match="resume current fence must share canonical pipeline database"):
         _validate_canonical_runtime(
             runtime=runtime,
             service=service,
