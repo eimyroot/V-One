@@ -85,6 +85,14 @@ def _validate_canonical_runtime(
         raise ValueError(
             "canonical runtime snapshot creator must use product database permission authority"
         )
+    resume_service = runtime.resume_service
+    if resume_service is not None:
+        if resume_service.db is not service.db:
+            raise ValueError("canonical runtime resume service must use product database")
+        if resume_service.permission_authority is not permission_authority:
+            raise ValueError(
+                "canonical runtime resume service must use product database permission authority"
+            )
 
 
 def install_composed_product_platform(
