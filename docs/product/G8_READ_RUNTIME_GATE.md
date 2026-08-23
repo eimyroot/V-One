@@ -2,7 +2,7 @@
 
 ## Purpose
 
-G8 productizes the first default provider runtime pack without widening provider-effect authority. The first pack is READ-only and exists to prove the canonical HTTP → trust-plane → Runner → independent Verifier → `VerificationResult/v1` lifecycle as one real operational path.
+G8 productizes the first default provider runtime pack without widening provider-effect authority. The first pack is READ-only and exists to prove the canonical HTTP → trust-plane → restart-safe Runner → independent Verifier → `VerificationResult/v1` lifecycle as one real operational path.
 
 ## Preconditions
 
@@ -55,15 +55,21 @@ A G8 candidate is not product-ready until one exact candidate head demonstrates:
 2. product readiness = SUCCESS
 3. dependency audit = SUCCESS
 4. image build + smoke = SUCCESS
-5. governed real READ Runner = SUCCESS
-6. independent Verifier observation = SUCCESS
-7. VerificationResult/v1 evaluation = SUCCESS
-8. authenticated canonical HTTP READ E2E = SUCCESS
-9. process restart + durable resume = SUCCESS
-10. no duplicate grant/consume/outbox/inbox/lease = VERIFIED
-11. failure injection / corrupt durable evidence = FAIL-CLOSED
-12. fresh independent R3 review = CLEAN
+5. authenticated canonical HTTP admission = SUCCESS
+6. durable canonical preparation/admission reaches ACTIVE epoch + current lease/capsule = VERIFIED
+7. process interruption/restart occurs before Runner completion = VERIFIED
+8. durable resume reconstructs the same execution while ACTIVE = SUCCESS
+9. no duplicate prepare/grant/consume/outbox/envelope/inbox/epoch/lease = VERIFIED
+10. resumed governed real READ Runner = SUCCESS
+11. durable completion of resumed execution = SUCCESS
+12. independent Verifier observation with separate identity/credential decision = SUCCESS
+13. VerificationResult/v1 evaluation = SUCCESS
+14. authenticated canonical HTTP READ E2E = SUCCESS
+15. failure injection / corrupt or revoked durable evidence = FAIL-CLOSED
+16. fresh independent R3 review = CLEAN
 ```
+
+The restart gate explicitly exercises the existing `ACTIVE`-execution resume contract. It does not require or claim resumption of an already `COMPLETED` execution.
 
 Repeated READ E2E evidence must be retained before ADR-0019 can make WRITE runtime merely `ELIGIBLE`.
 
@@ -74,6 +80,7 @@ Repeated READ E2E evidence must be retained before ADR-0019 can make WRITE runti
 - no rollback effect;
 - no generic provider mutation client;
 - no production WRITE;
+- no completed-execution recovery/reverification contract;
 - no release;
 - no deployment;
 - no weakening of ADR-0019.
