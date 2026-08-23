@@ -1,6 +1,6 @@
 # ADR-0019 — Canonical READ E2E Before Provider WRITE
 
-- Status: Accepted
+- Status: Proposed — governed adoption pending
 - Date: 2026-08-24
 - Scope: V-One provider-effect eligibility
 - Decision class: Security / authority / release governance
@@ -11,7 +11,7 @@ V-One now has a merged canonical READ API, canonical trust-plane composition, in
 
 Activating provider WRITE before the same canonical route has repeatedly demonstrated real READ execution and recovery would create an unjustified authority asymmetry: the system would be allowed to mutate external state before its end-to-end read, continuity, and independent verification path had been proven as one operational unit.
 
-## Decision
+## Proposed decision
 
 Provider WRITE remains disabled until a canonical READ acceptance gate proves all of the following on the same product path:
 
@@ -30,7 +30,7 @@ Provider WRITE remains disabled until a canonical READ acceptance gate proves al
 13. current-fence and authority-continuity validation after restart;
 14. fail-closed behavior for missing, stale, corrupt, ambiguous, expired, revoked, or mismatched durable evidence.
 
-The gate is:
+The proposed gate is:
 
 ```text
 READ_E2E             = VERIFIED
@@ -44,6 +44,23 @@ WRITE_RUNTIME_GATE   = ELIGIBLE
 ```
 
 Anything less keeps `WRITE_RUNTIME_GATE = BLOCKED`.
+
+## Adoption gate
+
+This ADR becomes `Accepted` only after all of the following are true on one unchanged PR head:
+
+```text
+owner adoption decision recorded     = YES
+exact-head ci / verify                = SUCCESS
+product/documentation truth gates     = SUCCESS
+fresh independent review              = CLEAN
+blocking review threads               = 0
+merge through protected main          = SUCCESS
+```
+
+Until that adoption gate closes, this document creates no authority. The pre-existing fail-closed state remains stronger than the proposal: provider WRITE stays disabled and blocked.
+
+After merge, a separate documentation-only change may update the ADR status from `Proposed` to `Accepted` only when the merge/adoption evidence is recorded. No runtime or provider effect may depend on an unmerged ADR status.
 
 ## Non-conflation rule
 
@@ -75,4 +92,4 @@ WRITE implementation may be designed and tested pre-effect, but provider mutatio
 
 ## Evidence and rollback
 
-This ADR creates no provider effect and no release/deployment authority. It can be superseded only by a later explicit ADR that preserves or strengthens the safety properties above; silent weakening is forbidden.
+This proposed ADR creates no provider effect and no release/deployment authority. If adopted, it can be superseded only by a later explicit ADR that preserves or strengthens the safety properties above; silent weakening is forbidden.
