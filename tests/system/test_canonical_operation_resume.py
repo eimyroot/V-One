@@ -332,9 +332,18 @@ def fixture_state() -> tuple[
                 "execution_capsule_digest": grant.execution_capsule_digest,
                 "grant_digest": grant.grant_digest,
                 "grant_json": encoded(grant),
+                "issuance_conformance_witness_digest": DC,
+                "issuance_conformance_witness_json": resume_module.canonical_json(
+                    {"kind": "grant-conformance"}
+                ),
+                "store_clock_witness_digest": DD,
+                "store_clock_witness_json": resume_module.canonical_json(
+                    {"kind": "grant-store-clock"}
+                ),
                 "issued_at": grant.issued_at,
                 "expires_at": grant.expires_at,
                 "revocation_epoch": grant.revocation_epoch,
+                "stored_at": grant.issued_at,
             }
         ],
         "canonical_resume.select_consumption_by_id": [
@@ -506,7 +515,7 @@ def make_service(
         staticmethod(
             lambda raw: StoredValue(
                 raw=dict(raw),
-                witness_digest=consumption.conformance_witness_digest,
+                witness_digest=DC,
                 grant_digest=grant.grant_digest,
                 execution_binding_digest=grant.execution_binding_digest,
                 execution_capsule_digest=grant.execution_capsule_digest,
@@ -518,6 +527,13 @@ def make_service(
     )
 
     def decode_clock_witness(raw: dict[str, Any]) -> StoredValue:
+        if raw.get("kind") == "grant-store-clock":
+            return StoredValue(
+                raw=dict(raw),
+                witness_digest=DD,
+                environment=grant.environment,
+                observed_at=grant.issued_at,
+            )
         if raw.get("kind") == "clock":
             return StoredValue(
                 raw=dict(raw),
