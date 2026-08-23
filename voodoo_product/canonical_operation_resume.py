@@ -522,6 +522,9 @@ class CanonicalOperationResumeService:
             "conformance_capability_definition_identity": grant.capability_definition_identity,
             "conformance_target_kind": grant.target_kind,
             "conformance_runner_class": grant.runner_class,
+            "conformance_precondition_enforcement_class": (
+                grant.precondition_enforcement_class
+            ),
             "clock_environment": grant.environment,
         }
         binding_actual = {
@@ -533,6 +536,9 @@ class CanonicalOperationResumeService:
             ),
             "conformance_target_kind": conformance_witness.target_kind,
             "conformance_runner_class": conformance_witness.runner_class,
+            "conformance_precondition_enforcement_class": (
+                conformance_witness.precondition_enforcement_class
+            ),
             "clock_environment": clock_witness.environment,
         }
         if binding_actual != binding_expected:
@@ -578,6 +584,9 @@ class CanonicalOperationResumeService:
             "conformance_capability_definition_identity": grant.capability_definition_identity,
             "conformance_target_kind": grant.target_kind,
             "conformance_runner_class": grant.runner_class,
+            "conformance_precondition_enforcement_class": (
+                grant.precondition_enforcement_class
+            ),
             "clock_witness_digest": consumption.clock_witness_digest,
             "clock_environment": grant.environment,
             "clock_observed_at": consumption.consumed_at,
@@ -592,6 +601,9 @@ class CanonicalOperationResumeService:
             ),
             "conformance_target_kind": conformance_witness.target_kind,
             "conformance_runner_class": conformance_witness.runner_class,
+            "conformance_precondition_enforcement_class": (
+                conformance_witness.precondition_enforcement_class
+            ),
             "clock_witness_digest": clock_witness.witness_digest,
             "clock_environment": clock_witness.environment,
             "clock_observed_at": clock_witness.observed_at,
