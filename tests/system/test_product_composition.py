@@ -196,7 +196,14 @@ def test_composed_installer_preserves_routes_and_middleware(tmp_path: Path) -> N
     composed_paths = {
         path: tuple(sorted(methods)) for path, methods in composed_app.openapi()["paths"].items()
     }
-    assert composed_paths == legacy_paths
+    for path, methods in legacy_paths.items():
+        assert composed_paths[path] == methods
+    assert set(composed_paths) - set(legacy_paths) == {
+        "/api/v1/operations/status",
+        "/api/v1/operations/{request_id}/read",
+    }
+    assert composed_paths["/api/v1/operations/status"] == ("get",)
+    assert composed_paths["/api/v1/operations/{request_id}/read"] == ("post",)
     assert [middleware.cls for middleware in composed_app.user_middleware] == [
         middleware.cls for middleware in legacy_app.user_middleware
     ]

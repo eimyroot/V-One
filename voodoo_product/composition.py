@@ -14,6 +14,7 @@ from .api import create_product_router
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService
 from .bootstrap import BootstrapService
+from .canonical_operation_http import create_canonical_operation_router
 from .canonical_operation_runtime import CanonicalOperationRuntime
 from .change_request import ChangeRequestService
 from .config import ProductConfig
@@ -190,6 +191,12 @@ def install_composed_product_platform(
             identity_provider=resolved_identity_provider,
             service=service,
             repository_root=root,
+        )
+    )
+    app.include_router(
+        create_canonical_operation_router(
+            identity_provider=resolved_identity_provider,
+            runtime=canonical_operation_runtime,
         )
     )
 
