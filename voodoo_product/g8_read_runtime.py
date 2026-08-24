@@ -17,6 +17,7 @@ from .capability_registry import ImmutableCapabilityRegistry
 from .credential_broker import CredentialBrokerPolicy, ImmutableCredentialBroker
 from .durable_current_fence import DurableCurrentExecutionFence
 from .execution_capsule import ImmutableExecutionCapsuleRegistry
+from .execution_contract import ExecutionTarget
 from .github_actions_runtime import (
     GITHUB_API_SOURCE_IDENTITY,
     GitHubActionsIsolatedRuntimeProvider,
@@ -25,15 +26,24 @@ from .github_actions_runtime import (
 from .github_read_provider import (
     GITHUB_READ_REF_CAPABILITY,
     GITHUB_REF_TARGET_KIND,
+    GitHubRefObservation,
     GitHubRefReadHandler,
 )
-from .isolated_runner import IsolatedRunnerAdapter
+from .isolated_runner import (
+    IsolatedRunnerAdapter,
+    PreparedIsolatedRuntime,
+    ReadOnlyRuntimeActivation,
+)
 from .permission_authority import DatabasePermissionAuthority
 from .runner_identity import READ_ONLY_EFFECT_CLASS
 from .service import ProductService
 from .trusted_clock import TrustedClockAuthority
-from .verifier_credential import VerifierCredentialPolicy
-from .verifier_observation import VerifierGitHubRefReadHandler
+from .verifier_credential import VerifierCredentialDecision, VerifierCredentialPolicy
+from .verifier_identity import IndependentVerificationBoundary, VerifierIdentity
+from .verifier_observation import (
+    VerifierGitHubRefObservation,
+    VerifierGitHubRefReadHandler,
+)
 
 GITHUB_API_AUDIENCE: Final = "api.github.com"
 _GITHUB_API_HOST: Final = "api.github.com"
@@ -418,6 +428,68 @@ class _G8IndependentCredentialPairTransport(NamedTuple):
         )
 
 
+class _G8RoleBoundRunnerReadHandler(GitHubRefReadHandler):
+    """Runner handler that re-attests the selected credential role immediately before READ."""
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "transport" and hasattr(self, "transport"):
+            raise AttributeError("G8 Runner handler transport binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        prepared: PreparedIsolatedRuntime,
+        activation: ReadOnlyRuntimeActivation,
+        target: ExecutionTarget,
+    ) -> GitHubRefObservation:
+        transport = self.transport
+        if type(transport) is not _G8IndependentCredentialPairTransport:
+            raise PermissionError("G8 Runner handler transport is not canonical")
+        if transport.role != "runner":
+            raise PermissionError("G8 Runner handler credential role mismatch")
+        if prepared.decision.credential_class != transport.runner_pin.credential_class:
+            raise PermissionError("G8 Runner handler credential decision mismatch")
+        return super().observe_ref(
+            prepared=prepared,
+            activation=activation,
+            target=target,
+        )
+
+
+class _G8RoleBoundVerifierReadHandler(VerifierGitHubRefReadHandler):
+    """Verifier handler that re-attests its independently selected role before READ."""
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "transport" and hasattr(self, "transport"):
+            raise AttributeError("G8 Verifier handler transport binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        verifier: VerifierIdentity,
+        boundary: IndependentVerificationBoundary,
+        decision: VerifierCredentialDecision,
+        target: ExecutionTarget,
+    ) -> VerifierGitHubRefObservation:
+        transport = self.transport
+        if type(transport) is not _G8IndependentCredentialPairTransport:
+            raise PermissionError("G8 Verifier handler transport is not canonical")
+        if transport.role != "verifier":
+            raise PermissionError("G8 Verifier handler credential role mismatch")
+        if verifier.credential_class != transport.verifier_pin.credential_class:
+            raise PermissionError("G8 Verifier handler identity credential class mismatch")
+        if decision.credential_class != transport.verifier_pin.credential_class:
+            raise PermissionError("G8 Verifier handler credential decision mismatch")
+        return super().observe_ref(
+            verifier=verifier,
+            boundary=boundary,
+            decision=decision,
+            target=target,
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class G8ReadRuntimePack:
     """Assemble the first default provider runtime without creating a second trust graph.
@@ -637,13 +709,13 @@ class G8ReadRuntimePack:
             boundary_revision=self.runner_boundary_revision,
             activation_revision=self.runner_activation_revision,
         )
-        runner_handler = GitHubRefReadHandler(
+        runner_handler = _G8RoleBoundRunnerReadHandler(
             transport=runner_effect_transport,
             current_fence=runtime_fence,
             trusted_clock=self.runner_clock,
             observation_revision=self.runner_observation_revision,
         )
-        verifier_handler = VerifierGitHubRefReadHandler(
+        verifier_handler = _G8RoleBoundVerifierReadHandler(
             transport=verifier_effect_transport,
             trusted_clock=self.verifier_clock,
             observation_revision=self.verifier_observation_revision,
