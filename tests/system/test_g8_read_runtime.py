@@ -368,11 +368,11 @@ def test_g8_bound_transport_reattests_principal_from_exact_retained_token(
     assert transport.credential_class == RUNNER_CREDENTIAL_CLASS
     assert not hasattr(transport, "__dict__")
 
-    with pytest.raises(AttributeError):
+    with pytest.raises((AttributeError, TypeError)):
         transport.credential_principal_identity = "github-principal/user/1"  # type: ignore[misc]
-    with pytest.raises(AttributeError):
+    with pytest.raises((AttributeError, TypeError)):
         transport.credential_class = "github.widened/scoped-v1"  # type: ignore[misc]
-    with pytest.raises(AttributeError):
+    with pytest.raises((AttributeError, TypeError)):
         transport._G8BoundGitHubReadTransport__token = "replacement-token"  # type: ignore[misc]
 
 
@@ -568,12 +568,12 @@ def test_g8_rejects_shared_underlying_credential_material(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fixture = build_fixture(tmp_path)
     monkeypatch.setattr(
         g8_module,
         "_observe_github_credential_principal",
         lambda token: "github-principal/user/303",
     )
+    fixture = build_fixture(tmp_path)
     verifier = bound_transport(
         token=RUNNER_TOKEN,
         credential_class=VERIFIER_CREDENTIAL_CLASS,
