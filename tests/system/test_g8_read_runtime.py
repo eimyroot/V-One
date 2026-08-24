@@ -920,7 +920,7 @@ def test_g8_role_bound_handlers_reject_direct_transport_rebinding(tmp_path: Path
     assert verifier_handler.transport is verifier_effect_transport
 
 
-def test_g8_role_bound_handlers_fail_closed_after_object_setattr_role_swap(
+def test_g8_role_bound_handlers_closure_pin_effective_transport_after_object_setattr_swap(
     tmp_path: Path,
 ) -> None:
     fixture = build_fixture(tmp_path)
@@ -935,18 +935,11 @@ def test_g8_role_bound_handlers_fail_closed_after_object_setattr_role_swap(
     verifier_effect_transport = verifier_handler.transport
 
     object.__setattr__(runner_handler, "transport", verifier_effect_transport)
-    with pytest.raises(PermissionError, match="Runner handler credential role mismatch"):
-        runner_handler.observe_ref(
-            prepared=object(),  # type: ignore[arg-type]
-            activation=object(),  # type: ignore[arg-type]
-            target=object(),  # type: ignore[arg-type]
-        )
-
     object.__setattr__(verifier_handler, "transport", runner_effect_transport)
-    with pytest.raises(PermissionError, match="Verifier handler credential role mismatch"):
-        verifier_handler.observe_ref(
-            verifier=object(),  # type: ignore[arg-type]
-            boundary=object(),  # type: ignore[arg-type]
-            decision=object(),  # type: ignore[arg-type]
-            target=object(),  # type: ignore[arg-type]
-        )
+
+    assert vars(runner_handler)["transport"] is verifier_effect_transport
+    assert vars(verifier_handler)["transport"] is runner_effect_transport
+    assert runner_handler.transport is runner_effect_transport
+    assert verifier_handler.transport is verifier_effect_transport
+    assert runner_handler.transport.role == "runner"
+    assert verifier_handler.transport.role == "verifier"
