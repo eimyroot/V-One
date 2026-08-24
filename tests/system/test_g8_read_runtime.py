@@ -14,11 +14,12 @@ from voodoo_product.config import ProductConfig
 from voodoo_product.credential_broker import CredentialBrokerPolicy
 from voodoo_product.durable_current_fence import DurableCurrentExecutionFence
 from voodoo_product.execution_capsule import ImmutableExecutionCapsuleRegistry
-from voodoo_product.g8_read_runtime import G8ReadRuntimePack, create_g8_read_runtime_factory
-from voodoo_product.github_actions_runtime import (
-    GitHubActionsIsolatedRuntimeProvider,
-    GitHubApiRefReadTransport,
+from voodoo_product.g8_read_runtime import (
+    G8BoundGitHubReadTransport,
+    G8ReadRuntimePack,
+    create_g8_read_runtime_factory,
 )
+from voodoo_product.github_actions_runtime import GitHubActionsIsolatedRuntimeProvider
 from voodoo_product.permission_authority import DatabasePermissionAuthority
 from voodoo_product.service import ProductService
 from voodoo_product.trusted_clock import TrustedClockAuthority
@@ -31,6 +32,8 @@ NETWORK_DIGEST = "3" * 64
 RUNNER_CREDENTIAL_CLASS = "github.runner-read/scoped-v1"
 VERIFIER_CREDENTIAL_CLASS = "github.verifier-read/scoped-v1"
 RUNNER_CLASS = "github-actions.docker-isolated/v1"
+RUNNER_TOKEN = "runner-g8-test-token"
+VERIFIER_TOKEN = "verifier-g8-test-token"
 
 
 class FixedClockSource:
@@ -38,7 +41,7 @@ class FixedClockSource:
         return datetime(2026, 8, 24, 0, 0, tzinfo=UTC)
 
 
-class MutationTransport(GitHubApiRefReadTransport):
+class MutationTransport(G8BoundGitHubReadTransport):
     def create_ref(self, **_: object) -> None:
         raise AssertionError("must never be reachable")
 
@@ -145,9 +148,9 @@ class ProfileRegistry:
         raise AssertionError("G8 composition test must not resolve a live request")
 
 
-def config(tmp_path: Path) -> ProductConfig:
+def config(tmp_path: Path, *, environment: str = "staging") -> ProductConfig:
     return ProductConfig(
-        environment="staging",
+        environment=environment,
         database_path=tmp_path / "product.sqlite3",
         sandbox_root=tmp_path / "sandboxes",
         session_signing_secret="s" * 64,
@@ -161,6 +164,19 @@ def clock(name: str) -> TrustedClockAuthority:
         authority_revision=f"trusted-clock/{name}-r1",
         source=FixedClockSource(),
         allowed_environments=frozenset({"staging"}),
+    )
+
+
+def bound_transport(
+    *,
+    token: str,
+    credential_class: str,
+    credential_identity: str,
+) -> G8BoundGitHubReadTransport:
+    return G8BoundGitHubReadTransport(
+        token=token,
+        credential_class=credential_class,
+        credential_identity=credential_identity,
     )
 
 
@@ -264,8 +280,16 @@ def build_fixture(tmp_path: Path) -> SimpleNamespace:
         runner_policy=runner_policy,
         verifier_profile=verifier_profile,
         verifier_policy=verifier_policy,
-        runner_transport=GitHubApiRefReadTransport(token="runner-g8-test-token"),
-        verifier_transport=GitHubApiRefReadTransport(token="verifier-g8-test-token"),
+        runner_transport=bound_transport(
+            token=RUNNER_TOKEN,
+            credential_class=RUNNER_CREDENTIAL_CLASS,
+            credential_identity="github-app-installation:g8-runner",
+        ),
+        verifier_transport=bound_transport(
+            token=VERIFIER_TOKEN,
+            credential_class=VERIFIER_CREDENTIAL_CLASS,
+            credential_identity="github-app-installation:g8-verifier",
+        ),
     )
 
 
@@ -365,24 +389,65 @@ def test_g8_rejects_shared_runner_and_verifier_transport(tmp_path: Path) -> None
     fixture = build_fixture(tmp_path)
 
     with pytest.raises(ValueError, match="distinct instances"):
-        pack(
-            fixture,
-            verifier_transport=fixture.runner_transport,
-        )
+        pack(fixture, verifier_transport=fixture.runner_transport)
+
+
+def test_g8_rejects_shared_credential_identity(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    verifier = bound_transport(
+        token=VERIFIER_TOKEN,
+        credential_class=VERIFIER_CREDENTIAL_CLASS,
+        credential_identity=fixture.runner_transport.credential_identity,
+    )
+
+    with pytest.raises(ValueError, match="credential identities must be distinct"):
+        pack(fixture, verifier_transport=verifier)
+
+
+def test_g8_rejects_shared_underlying_credential_material(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    verifier = bound_transport(
+        token=RUNNER_TOKEN,
+        credential_class=VERIFIER_CREDENTIAL_CLASS,
+        credential_identity="github-app-installation:g8-verifier-different-label",
+    )
+
+    with pytest.raises(ValueError, match="credential material must be distinct"):
+        pack(fixture, verifier_transport=verifier)
 
 
 def test_g8_rejects_structural_transport_even_if_interface_looks_read_only(tmp_path: Path) -> None:
     fixture = build_fixture(tmp_path)
 
-    with pytest.raises(ValueError, match="exact GitHubApiRefReadTransport"):
+    with pytest.raises(ValueError, match="exact G8BoundGitHubReadTransport"):
         pack(fixture, runner_transport=StructuralReadTransport())
 
 
 def test_g8_rejects_subclass_that_can_add_mutation_surface(tmp_path: Path) -> None:
     fixture = build_fixture(tmp_path)
+    mutating = MutationTransport(
+        token="mutating-g8-test-token",
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+        credential_identity="github-app-installation:g8-mutating",
+    )
 
-    with pytest.raises(ValueError, match="exact GitHubApiRefReadTransport"):
-        pack(fixture, runner_transport=MutationTransport(token="mutating-g8-test-token"))
+    with pytest.raises(ValueError, match="exact G8BoundGitHubReadTransport"):
+        pack(fixture, runner_transport=mutating)
+
+
+def test_g8_rejects_transport_credential_class_mismatch(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    wrong = bound_transport(
+        token="wrong-class-g8-test-token",
+        credential_class="github.wrong-read/scoped-v1",
+        credential_identity="github-app-installation:g8-wrong",
+    )
+
+    with pytest.raises(PermissionError, match="transport is not bound to Runner credential class"):
+        pack(fixture, runner_transport=wrong).build_runtime(
+            service=fixture.service,
+            permission_authority=fixture.permission,
+        )
 
 
 def test_g8_rejects_runner_verifier_credential_class_collapse(tmp_path: Path) -> None:
@@ -408,19 +473,25 @@ def test_g8_rejects_runner_verifier_credential_class_collapse(tmp_path: Path) ->
         max_ttl_seconds=60,
         policy_revision="verifier-policy/g8-collapse-r1",
     )
+    collapsed_transport = bound_transport(
+        token="collapsed-verifier-token",
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+        credential_identity="github-app-installation:g8-collapsed-verifier",
+    )
 
     with pytest.raises(PermissionError, match="credential classes must be distinct"):
         pack(
             fixture,
             verifier_profile=collapsed_profile,
             verifier_policy=collapsed_policy,
+            verifier_transport=collapsed_transport,
         ).build_runtime(
             service=fixture.service,
             permission_authority=fixture.permission,
         )
 
 
-def test_g8_rejects_production_widening(tmp_path: Path) -> None:
+def test_g8_rejects_production_policy_widening(tmp_path: Path) -> None:
     fixture = build_fixture(tmp_path)
     fixture.definition.supported_environments = ("staging", "production")
     runner_policy = CredentialBrokerPolicy.create(
@@ -448,6 +519,40 @@ def test_g8_rejects_production_widening(tmp_path: Path) -> None:
         ).build_runtime(
             service=fixture.service,
             permission_authority=fixture.permission,
+        )
+
+
+def test_g8_rejects_production_product_service_before_runtime_binding(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path / "fixture")
+    production_service = ProductService(
+        config(tmp_path / "production", environment="production")
+    )
+    production_permission = DatabasePermissionAuthority(
+        database=production_service.db,
+        authority_revision="database-permission/g8-production-test-r1",
+    )
+
+    with pytest.raises(PermissionError, match="cannot install into a production ProductService"):
+        pack(fixture).build_runtime(
+            service=production_service,
+            permission_authority=production_permission,
+        )
+
+
+def test_g8_rejects_product_runner_environment_mismatch(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path / "fixture")
+    development_service = ProductService(
+        config(tmp_path / "development", environment="development")
+    )
+    development_permission = DatabasePermissionAuthority(
+        database=development_service.db,
+        authority_revision="database-permission/g8-development-test-r1",
+    )
+
+    with pytest.raises(PermissionError, match="product and Runner environments must match"):
+        pack(fixture).build_runtime(
+            service=development_service,
+            permission_authority=development_permission,
         )
 
 
