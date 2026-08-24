@@ -15,7 +15,10 @@ from voodoo_product.credential_broker import CredentialBrokerPolicy
 from voodoo_product.durable_current_fence import DurableCurrentExecutionFence
 from voodoo_product.execution_capsule import ImmutableExecutionCapsuleRegistry
 from voodoo_product.g8_read_runtime import G8ReadRuntimePack, create_g8_read_runtime_factory
-from voodoo_product.github_actions_runtime import GitHubActionsIsolatedRuntimeProvider
+from voodoo_product.github_actions_runtime import (
+    GitHubActionsIsolatedRuntimeProvider,
+    GitHubApiRefReadTransport,
+)
 from voodoo_product.permission_authority import DatabasePermissionAuthority
 from voodoo_product.service import ProductService
 from voodoo_product.trusted_clock import TrustedClockAuthority
@@ -35,18 +38,18 @@ class FixedClockSource:
         return datetime(2026, 8, 24, 0, 0, tzinfo=UTC)
 
 
-class ReadTransport:
-    source_identity = "github-api/git-ref/g8-test-v1"
+class MutationTransport(GitHubApiRefReadTransport):
+    def create_ref(self, **_: object) -> None:
+        raise AssertionError("must never be reachable")
+
+
+class StructuralReadTransport:
+    source_identity = "github-api/structural-only/g8-test-v1"
 
     def read_ref(self, *, repository: str, ref: str) -> str:
         assert repository
         assert ref
         return "a" * 40
-
-
-class MutationTransport(ReadTransport):
-    def create_ref(self, **_: object) -> None:
-        raise AssertionError("must never be reachable")
 
 
 class FakeCapabilityRegistry(ImmutableCapabilityRegistry):
@@ -261,8 +264,8 @@ def build_fixture(tmp_path: Path) -> SimpleNamespace:
         runner_policy=runner_policy,
         verifier_profile=verifier_profile,
         verifier_policy=verifier_policy,
-        runner_transport=ReadTransport(),
-        verifier_transport=ReadTransport(),
+        runner_transport=GitHubApiRefReadTransport(token="runner-g8-test-token"),
+        verifier_transport=GitHubApiRefReadTransport(token="verifier-g8-test-token"),
     )
 
 
@@ -368,11 +371,18 @@ def test_g8_rejects_shared_runner_and_verifier_transport(tmp_path: Path) -> None
         )
 
 
-def test_g8_rejects_mutation_shaped_transport(tmp_path: Path) -> None:
+def test_g8_rejects_structural_transport_even_if_interface_looks_read_only(tmp_path: Path) -> None:
     fixture = build_fixture(tmp_path)
 
-    with pytest.raises(ValueError, match="forbidden provider methods"):
-        pack(fixture, runner_transport=MutationTransport())
+    with pytest.raises(ValueError, match="exact GitHubApiRefReadTransport"):
+        pack(fixture, runner_transport=StructuralReadTransport())
+
+
+def test_g8_rejects_subclass_that_can_add_mutation_surface(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="exact GitHubApiRefReadTransport"):
+        pack(fixture, runner_transport=MutationTransport(token="mutating-g8-test-token"))
 
 
 def test_g8_rejects_runner_verifier_credential_class_collapse(tmp_path: Path) -> None:
