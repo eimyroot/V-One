@@ -23,6 +23,7 @@ existing CanonicalOperationPipeline
 + exact G8-owned Runner credential source
 + separately credentialed exact G8-owned Verifier credential source
 + immutable independently pinned credential-pair READ transports
++ role-bound G8 Runner / Verifier READ handlers
 + exact pinned GET-only GitHub provider effect implementation
 + CanonicalGitHubReadTerminal
 + CanonicalOperationResumeService
@@ -39,6 +40,8 @@ The closure registry is **not** treated as a sufficient trust anchor. The raw cr
 
 The runtime also pins the exact credential-source unbound `_pin_snapshot` / `_read_ref_with_pin` implementations and the exact released `GitHubApiRefReadTransport` type, initializer, `read_ref` method, and source identity. Provider effect execution therefore uses the runtime-retained GET-only implementation rather than resolving a mutable module-global transport symbol at effect time.
 
+The immutable pair transports are retained only behind G8 role-bound Runner and Verifier handler subclasses. A normal post-build reassignment of either handler's `transport` is rejected. Immediately before delegating to the canonical observation handler, the Runner path requires the exact G8 pair transport with literal `runner` role and binds the current `CredentialAccessDecision` credential class to the immutable Runner pin. The Verifier path similarly requires literal `verifier` role and binds both current Verifier identity and `VerifierCredentialDecision` credential classes to the immutable Verifier pin. A forced `object.__setattr__` Runner↔Verifier transport swap therefore fails closed before the provider READ.
+
 Before every provider READ the immutable pair transport:
 
 1. revalidates the current Runner binding and performs a fresh GitHub `/user` principal observation through the pinned source implementation;
@@ -48,7 +51,7 @@ Before every provider READ the immutable pair transport:
 5. invokes only the selected source through the pinned unbound source method with its immutable pin; and
 6. the selected source captures one binding snapshot, re-attests that exact local token, compares it to the runtime pin, and passes that same local token to the pinned GET-only provider implementation.
 
-Therefore changing an introspectable closure-registry entry after composition cannot silently replace the Verifier with the Runner credential; reinvoking `__init__` cannot replace a successful binding; post-build rebinding of the module-global provider transport cannot widen the effect implementation; and validation/provider use cannot diverge through a post-check instance-state change or check/use race.
+Therefore changing an introspectable closure-registry entry after composition cannot silently replace the Verifier with the Runner credential; reinvoking `__init__` cannot replace a successful binding; post-build rebinding of the module-global provider transport cannot widen the effect implementation; post-build handler transport rebinding cannot change the credential role; and validation/provider use cannot diverge through a post-check instance-state change or check/use race.
 
 The pack rejects:
 
@@ -73,7 +76,7 @@ production       = REJECTED
 ambient token    = NOT LOADED BY ASSEMBLER
 ```
 
-R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, foreign current fences, subclasses or instance-level overrides that can replace the durable current-fence implementation, shared Runner/Verifier provider authority, mutation-capable/generic provider transports, collapsed Runner/Verifier credential classes, product↔Runner environment mismatch, and production widening.
+R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, foreign current fences, subclasses or instance-level overrides that can replace the durable current-fence implementation, shared Runner/Verifier provider authority, mutation-capable/generic provider transports, collapsed Runner/Verifier credential classes, post-build Runner/Verifier handler-role swaps, product↔Runner environment mismatch, and production widening.
 
 The caller-supplied fence is validated only as canonical provenance. The runtime retains a newly constructed exact `DurableCurrentExecutionFence` over the canonical ProductService DB and Runner trusted clock, shared by resume, activation, and the final pre-READ check.
 
