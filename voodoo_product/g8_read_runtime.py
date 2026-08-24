@@ -147,16 +147,75 @@ class _CredentialPin(NamedTuple):
     attested_principal: str
 
 
+class _ProviderReadEffectPin(NamedTuple):
+    transport_type: type
+    init_method: Callable[..., None]
+    read_ref_method: Callable[..., str]
+    source_identity: str
+
+
+_IMPORT_PROVIDER_READ_EFFECT_PIN: Final = _ProviderReadEffectPin(
+    transport_type=GitHubApiRefReadTransport,
+    init_method=GitHubApiRefReadTransport.__init__,
+    read_ref_method=GitHubApiRefReadTransport.read_ref,
+    source_identity=GITHUB_API_SOURCE_IDENTITY,
+)
+
+
+def _current_provider_read_effect_pin() -> _ProviderReadEffectPin:
+    """Pin the exact released GET-only provider implementation before runtime retention."""
+
+    pin = _IMPORT_PROVIDER_READ_EFFECT_PIN
+    if GitHubApiRefReadTransport is not pin.transport_type:
+        raise PermissionError("G8 GitHub provider transport type changed after import")
+    if pin.transport_type.__init__ is not pin.init_method:
+        raise PermissionError("G8 GitHub provider transport initializer changed after import")
+    if pin.transport_type.read_ref is not pin.read_ref_method:
+        raise PermissionError("G8 GitHub provider READ implementation changed after import")
+    if GITHUB_API_SOURCE_IDENTITY != pin.source_identity:
+        raise PermissionError("G8 GitHub provider source identity changed after import")
+    return pin
+
+
+def _new_provider_transport(*, pin: _ProviderReadEffectPin, token: str) -> object:
+    if type(pin) is not _ProviderReadEffectPin:
+        raise ValueError("G8 provider READ effect pin is invalid")
+    instance = object.__new__(pin.transport_type)
+    pin.init_method(instance, token=token)
+    if type(instance) is not pin.transport_type:
+        raise PermissionError("G8 provider READ transport instance type mismatch")
+    return instance
+
+
+def _provider_read_with_pin(
+    *,
+    pin: _ProviderReadEffectPin,
+    token: str,
+    repository: str,
+    ref: str,
+) -> str:
+    transport = _new_provider_transport(pin=pin, token=token)
+    return pin.read_ref_method(
+        transport,
+        repository=repository,
+        ref=ref,
+    )
+
+
 def _build_g8_bound_github_read_transport_type() -> type:
     """Create the credential source with binding state outside caller-retained instances."""
 
-    bindings: WeakKeyDictionary[object, _CredentialBinding] = WeakKeyDictionary()
+    bindings: WeakKeyDictionary[object, object] = WeakKeyDictionary()
+    initializing = object()
 
     def binding_for(instance: object) -> _CredentialBinding:
         try:
-            return bindings[instance]
+            binding = bindings[instance]
         except KeyError as exc:
             raise RuntimeError("G8 credential binding is unavailable") from exc
+        if type(binding) is not _CredentialBinding:
+            raise RuntimeError("G8 credential binding is not initialized")
+        return binding
 
     def validated_binding(instance: object) -> _CredentialBinding:
         binding = binding_for(instance)
@@ -187,19 +246,28 @@ def _build_g8_bound_github_read_transport_type() -> type:
             token: str,
             credential_class: str,
         ) -> None:
-            token = _require_text(token, field="token")
-            GitHubApiRefReadTransport(token=token)
-            credential_class = _require_text(
-                credential_class,
-                field="credential_class",
-            )
-            principal = _observe_github_credential_principal(token)
-            bindings[self] = _CredentialBinding(
-                token=token,
-                token_fingerprint=_token_fingerprint(token),
-                credential_class=credential_class,
-                attested_principal=principal,
-            )
+            if self in bindings:
+                raise RuntimeError("G8 credential source is already initialized")
+            bindings[self] = initializing
+            try:
+                token = _require_text(token, field="token")
+                provider_effect_pin = _current_provider_read_effect_pin()
+                _new_provider_transport(pin=provider_effect_pin, token=token)
+                credential_class = _require_text(
+                    credential_class,
+                    field="credential_class",
+                )
+                principal = _observe_github_credential_principal(token)
+                binding = _CredentialBinding(
+                    token=token,
+                    token_fingerprint=_token_fingerprint(token),
+                    credential_class=credential_class,
+                    attested_principal=principal,
+                )
+            except Exception:
+                bindings.pop(self, None)
+                raise
+            bindings[self] = binding
 
         @property
         def credential_class(self) -> str:
@@ -225,11 +293,14 @@ def _build_g8_bound_github_read_transport_type() -> type:
             self,
             *,
             pin: _CredentialPin,
+            provider_effect_pin: _ProviderReadEffectPin,
             repository: str,
             ref: str,
         ) -> str:
             if type(pin) is not _CredentialPin:
                 raise ValueError("G8 credential pin is invalid")
+            if type(provider_effect_pin) is not _ProviderReadEffectPin:
+                raise ValueError("G8 provider READ effect pin is invalid")
             binding = validated_binding(self)
             current_pin = _CredentialPin(
                 token_fingerprint=binding.token_fingerprint,
@@ -239,7 +310,9 @@ def _build_g8_bound_github_read_transport_type() -> type:
             if current_pin != pin:
                 raise PermissionError("G8 credential binding changed after runtime pinning")
             token = binding.token
-            return GitHubApiRefReadTransport(token=token).read_ref(
+            return _provider_read_with_pin(
+                pin=provider_effect_pin,
+                token=token,
                 repository=repository,
                 ref=ref,
             )
@@ -259,6 +332,26 @@ def _build_g8_bound_github_read_transport_type() -> type:
 
 
 G8BoundGitHubReadTransport = _build_g8_bound_github_read_transport_type()
+_G8_SOURCE_PIN_SNAPSHOT: Final = G8BoundGitHubReadTransport._pin_snapshot
+_G8_SOURCE_READ_REF_WITH_PIN: Final = G8BoundGitHubReadTransport._read_ref_with_pin
+
+
+class _CredentialSourceImplementationPin(NamedTuple):
+    transport_type: type
+    pin_snapshot_method: Callable[..., _CredentialPin]
+    read_ref_with_pin_method: Callable[..., str]
+
+
+def _current_credential_source_implementation_pin() -> _CredentialSourceImplementationPin:
+    if G8BoundGitHubReadTransport._pin_snapshot is not _G8_SOURCE_PIN_SNAPSHOT:
+        raise PermissionError("G8 credential source pin implementation changed")
+    if G8BoundGitHubReadTransport._read_ref_with_pin is not _G8_SOURCE_READ_REF_WITH_PIN:
+        raise PermissionError("G8 credential source READ implementation changed")
+    return _CredentialSourceImplementationPin(
+        transport_type=G8BoundGitHubReadTransport,
+        pin_snapshot_method=_G8_SOURCE_PIN_SNAPSHOT,
+        read_ref_with_pin_method=_G8_SOURCE_READ_REF_WITH_PIN,
+    )
 
 
 class _G8IndependentCredentialPairTransport(NamedTuple):
@@ -269,23 +362,31 @@ class _G8IndependentCredentialPairTransport(NamedTuple):
     role: str
     runner_pin: _CredentialPin
     verifier_pin: _CredentialPin
+    source_implementation_pin: _CredentialSourceImplementationPin
+    provider_effect_pin: _ProviderReadEffectPin
 
     @property
     def source_identity(self) -> str:
-        return GITHUB_API_SOURCE_IDENTITY
+        return self.provider_effect_pin.source_identity
 
     def read_ref(self, *, repository: str, ref: str) -> str:
         runner_transport = self.runner_transport
         verifier_transport = self.verifier_transport
-        if type(runner_transport) is not G8BoundGitHubReadTransport:
+        source_implementation_pin = self.source_implementation_pin
+        provider_effect_pin = self.provider_effect_pin
+        if type(source_implementation_pin) is not _CredentialSourceImplementationPin:
+            raise PermissionError("G8 credential source implementation pin is invalid")
+        if type(provider_effect_pin) is not _ProviderReadEffectPin:
+            raise PermissionError("G8 provider effect pin is invalid")
+        if type(runner_transport) is not source_implementation_pin.transport_type:
             raise PermissionError("G8 Runner credential source type changed")
-        if type(verifier_transport) is not G8BoundGitHubReadTransport:
+        if type(verifier_transport) is not source_implementation_pin.transport_type:
             raise PermissionError("G8 Verifier credential source type changed")
         if self.role not in {"runner", "verifier"}:
             raise PermissionError("G8 credential pair role is invalid")
 
-        runner_now = runner_transport._pin_snapshot()
-        verifier_now = verifier_transport._pin_snapshot()
+        runner_now = source_implementation_pin.pin_snapshot_method(runner_transport)
+        verifier_now = source_implementation_pin.pin_snapshot_method(verifier_transport)
         if runner_now != self.runner_pin:
             raise PermissionError("G8 Runner credential changed after runtime pinning")
         if verifier_now != self.verifier_pin:
@@ -301,13 +402,17 @@ class _G8IndependentCredentialPairTransport(NamedTuple):
             raise PermissionError("G8 Runner and Verifier credential classes collapsed")
 
         if self.role == "runner":
-            return runner_transport._read_ref_with_pin(
+            return source_implementation_pin.read_ref_with_pin_method(
+                runner_transport,
                 pin=self.runner_pin,
+                provider_effect_pin=provider_effect_pin,
                 repository=repository,
                 ref=ref,
             )
-        return verifier_transport._read_ref_with_pin(
+        return source_implementation_pin.read_ref_with_pin_method(
+            verifier_transport,
             pin=self.verifier_pin,
+            provider_effect_pin=provider_effect_pin,
             repository=repository,
             ref=ref,
         )
@@ -485,8 +590,10 @@ class G8ReadRuntimePack:
 
         self._validate_runtime_ceiling(definition=definition, capsule=capsule)
 
-        runner_pin = self.runner_transport._pin_snapshot()
-        verifier_pin = self.verifier_transport._pin_snapshot()
+        source_implementation_pin = _current_credential_source_implementation_pin()
+        provider_effect_pin = _current_provider_read_effect_pin()
+        runner_pin = source_implementation_pin.pin_snapshot_method(self.runner_transport)
+        verifier_pin = source_implementation_pin.pin_snapshot_method(self.verifier_transport)
         if runner_pin.credential_class != self.runner_credential_policy.credential_class:
             raise PermissionError("G8 Runner runtime pin credential class mismatch")
         if verifier_pin.credential_class != self.verifier_policy.credential_class:
@@ -505,6 +612,8 @@ class G8ReadRuntimePack:
             role="runner",
             runner_pin=runner_pin,
             verifier_pin=verifier_pin,
+            source_implementation_pin=source_implementation_pin,
+            provider_effect_pin=provider_effect_pin,
         )
         verifier_effect_transport = _G8IndependentCredentialPairTransport(
             runner_transport=self.runner_transport,
@@ -512,6 +621,8 @@ class G8ReadRuntimePack:
             role="verifier",
             runner_pin=runner_pin,
             verifier_pin=verifier_pin,
+            source_implementation_pin=source_implementation_pin,
+            provider_effect_pin=provider_effect_pin,
         )
 
         broker = ImmutableCredentialBroker(
