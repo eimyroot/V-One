@@ -402,7 +402,24 @@ def test_g8_bound_transport_exposes_no_caller_mutable_credential_slots() -> None
         transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
 
 
-def test_g8_runtime_pair_uses_same_re_attested_token_for_provider_read(
+def test_g8_bound_transport_initialization_is_one_shot() -> None:
+    transport = G8BoundGitHubReadTransport(
+        token="one-shot-original-token",
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+    )
+    original_principal = transport.credential_principal_identity
+
+    with pytest.raises(RuntimeError, match="already initialized"):
+        transport.__init__(
+            token=RUNNER_TOKEN,
+            credential_class=VERIFIER_CREDENTIAL_CLASS,
+        )
+
+    assert transport.credential_class == RUNNER_CREDENTIAL_CLASS
+    assert transport.credential_principal_identity == original_principal
+
+
+def test_g8_runtime_pair_uses_pinned_get_only_provider_after_module_rebind(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -413,7 +430,7 @@ def test_g8_runtime_pair_uses_same_re_attested_token_for_provider_read(
     )
     runner_effect_transport = runtime.read_terminal.runner_handler.transport
     observed_tokens: list[str] = []
-    provider_tokens: list[str] = []
+    requests: list[tuple[str, str, dict[str, str]]] = []
 
     def observe(candidate: str) -> str:
         observed_tokens.append(candidate)
@@ -423,18 +440,39 @@ def test_g8_runtime_pair_uses_same_re_attested_token_for_provider_read(
             return VERIFIER_PRINCIPAL
         raise AssertionError("unexpected credential")
 
-    class CapturingReadTransport:
+    class Response:
+        status = 200
+
+        @staticmethod
+        def read() -> bytes:
+            return (b'{"object":{"sha":"' + (b"a" * 40) + b'"}}')
+
+    class Connection:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            assert (host, port, timeout) == ("api.github.com", 443, 15)
+
+        def request(self, method: str, path: str, *, headers: dict[str, str]) -> None:
+            requests.append((method, path, headers))
+
+        @staticmethod
+        def getresponse() -> Response:
+            return Response()
+
+        @staticmethod
+        def close() -> None:
+            return None
+
+    class ReplacementTransport:
         def __init__(self, *, token: str) -> None:
-            provider_tokens.append(token)
+            raise AssertionError(f"module-global replacement must not receive {token!r}")
 
         @staticmethod
         def read_ref(*, repository: str, ref: str) -> str:
-            assert repository == "nulleimy/V-One"
-            assert ref == "refs/heads/main"
-            return "a" * 40
+            raise AssertionError(f"replacement must not read {repository}:{ref}")
 
     monkeypatch.setattr(g8_module, "_observe_github_credential_principal", observe)
-    monkeypatch.setattr(g8_module, "GitHubApiRefReadTransport", CapturingReadTransport)
+    monkeypatch.setattr(g8_module.http.client, "HTTPSConnection", Connection)
+    monkeypatch.setattr(g8_module, "GitHubApiRefReadTransport", ReplacementTransport)
 
     result = runner_effect_transport.read_ref(
         repository="nulleimy/V-One",
@@ -443,8 +481,11 @@ def test_g8_runtime_pair_uses_same_re_attested_token_for_provider_read(
 
     assert result == "a" * 40
     assert observed_tokens == [RUNNER_TOKEN, VERIFIER_TOKEN, RUNNER_TOKEN]
-    assert provider_tokens == [RUNNER_TOKEN]
-    assert observed_tokens[-1] == provider_tokens[0]
+    assert len(requests) == 1
+    method, path, headers = requests[0]
+    assert method == "GET"
+    assert path == "/repos/nulleimy/V-One/git/ref/heads/main"
+    assert headers["Authorization"] == f"Bearer {RUNNER_TOKEN}"
 
 
 def test_g8_runtime_pair_rejects_introspective_closure_registry_rewrite(
@@ -550,8 +591,15 @@ def test_g8_builds_only_read_runtime_over_exact_canonical_authority(tmp_path: Pa
     assert verifier_effect_transport.verifier_transport is fixture.verifier_transport
     assert runner_effect_transport.runner_pin == verifier_effect_transport.runner_pin
     assert runner_effect_transport.verifier_pin == verifier_effect_transport.verifier_pin
+    assert (
+        runner_effect_transport.source_implementation_pin
+        == verifier_effect_transport.source_implementation_pin
+    )
+    assert runner_effect_transport.provider_effect_pin == verifier_effect_transport.provider_effect_pin
     with pytest.raises(AttributeError):
         runner_effect_transport.runner_pin = verifier_effect_transport.verifier_pin  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        runner_effect_transport.provider_effect_pin = object()  # type: ignore[misc]
 
     assert runtime.create_ref_preparer is None
     assert runtime.rollback_preparer is None
