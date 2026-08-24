@@ -7,6 +7,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar, Final
+from weakref import WeakKeyDictionary
 
 from .canonical_operation_resume import CanonicalOperationResumeService
 from .canonical_operation_runtime import CanonicalOperationRuntime
@@ -132,83 +133,96 @@ def _assert_pristine_durable_fence(fence: object) -> DurableCurrentExecutionFenc
     return fence
 
 
-@dataclass(frozen=True, slots=True, init=False)
-class G8BoundGitHubReadTransport:
-    """Closed immutable GitHub READ port with provider-attested credential provenance.
+@dataclass(frozen=True, slots=True)
+class _CredentialBinding:
+    token: str
+    token_fingerprint: str
+    credential_class: str
+    attested_principal: str
 
-    The exact token, its fingerprint, credential class and initial provider attestation are retained
-    only in frozen private slots. The credential fingerprint and provider principal are revalidated
-    immediately before every provider READ, so credential substitution after composition fails closed
-    at the effect boundary rather than silently collapsing Runner and Verifier authority.
-    """
 
-    __token: str
-    __token_fingerprint: str
-    __credential_class: str
-    __attested_principal: str
+def _build_g8_bound_github_read_transport_type() -> type:
+    """Create the closed transport with credential state outside caller-retained instances."""
 
-    source_identity: ClassVar[str] = GITHUB_API_SOURCE_IDENTITY
+    bindings: WeakKeyDictionary[object, _CredentialBinding] = WeakKeyDictionary()
 
-    def __init__(
-        self,
-        *,
-        token: str,
-        credential_class: str,
-    ) -> None:
-        token = _require_text(token, field="token")
-        GitHubApiRefReadTransport(token=token)
-        credential_class = _require_text(
-            credential_class,
-            field="credential_class",
-        )
-        principal = _observe_github_credential_principal(token)
-        object.__setattr__(self, "_G8BoundGitHubReadTransport__token", token)
-        object.__setattr__(
-            self,
-            "_G8BoundGitHubReadTransport__token_fingerprint",
-            _token_fingerprint(token),
-        )
-        object.__setattr__(
-            self,
-            "_G8BoundGitHubReadTransport__credential_class",
-            credential_class,
-        )
-        object.__setattr__(
-            self,
-            "_G8BoundGitHubReadTransport__attested_principal",
-            principal,
-        )
+    def binding_for(instance: object) -> _CredentialBinding:
+        try:
+            return bindings[instance]
+        except KeyError as exc:
+            raise RuntimeError("G8 credential binding is unavailable") from exc
 
-    @property
-    def credential_class(self) -> str:
-        return self.__credential_class
-
-    @property
-    def credential_principal_identity(self) -> str:
-        return self._assert_credential_current()
-
-    def _assert_credential_current(self) -> str:
-        current_fingerprint = _token_fingerprint(self.__token)
-        if not secrets.compare_digest(current_fingerprint, self.__token_fingerprint):
+    def validated_binding(instance: object) -> _CredentialBinding:
+        binding = binding_for(instance)
+        token = binding.token
+        current_fingerprint = _token_fingerprint(token)
+        if not secrets.compare_digest(current_fingerprint, binding.token_fingerprint):
             raise PermissionError("G8 credential material changed after attestation")
-        current_principal = _observe_github_credential_principal(self.__token)
-        if current_principal != self.__attested_principal:
+        current_principal = _observe_github_credential_principal(token)
+        if current_principal != binding.attested_principal:
             raise PermissionError("G8 credential principal changed after attestation")
-        return current_principal
+        return binding
 
-    def read_ref(self, *, repository: str, ref: str) -> str:
-        self._assert_credential_current()
-        return GitHubApiRefReadTransport(token=self.__token).read_ref(
-            repository=repository,
-            ref=ref,
-        )
+    class G8BoundGitHubReadTransport:
+        """Closed GitHub READ port whose credential binding is closure-owned.
 
-    def _shares_credential_material(self, other: G8BoundGitHubReadTransport) -> bool:
-        if type(other) is not G8BoundGitHubReadTransport:
-            raise ValueError("credential comparison requires closed G8 transport")
-        self._assert_credential_current()
-        other._assert_credential_current()
-        return secrets.compare_digest(self.__token, other.__token)
+        The caller-retained transport instance has no token, fingerprint, credential-class, or
+        provider-attestation slot. Those values live in a private closure-owned registry. Each READ
+        captures one immutable binding snapshot, re-attests the exact local token, then passes that
+        same local token to the provider transport so validation and use cannot diverge.
+        """
+
+        __slots__ = ("__weakref__",)
+
+        source_identity: ClassVar[str] = GITHUB_API_SOURCE_IDENTITY
+
+        def __init__(
+            self,
+            *,
+            token: str,
+            credential_class: str,
+        ) -> None:
+            token = _require_text(token, field="token")
+            GitHubApiRefReadTransport(token=token)
+            credential_class = _require_text(
+                credential_class,
+                field="credential_class",
+            )
+            principal = _observe_github_credential_principal(token)
+            bindings[self] = _CredentialBinding(
+                token=token,
+                token_fingerprint=_token_fingerprint(token),
+                credential_class=credential_class,
+                attested_principal=principal,
+            )
+
+        @property
+        def credential_class(self) -> str:
+            return binding_for(self).credential_class
+
+        @property
+        def credential_principal_identity(self) -> str:
+            return validated_binding(self).attested_principal
+
+        def read_ref(self, *, repository: str, ref: str) -> str:
+            binding = validated_binding(self)
+            token = binding.token
+            return GitHubApiRefReadTransport(token=token).read_ref(
+                repository=repository,
+                ref=ref,
+            )
+
+        def _shares_credential_material(self, other: object) -> bool:
+            if type(other) is not G8BoundGitHubReadTransport:
+                raise ValueError("credential comparison requires closed G8 transport")
+            self_binding = validated_binding(self)
+            other_binding = validated_binding(other)
+            return secrets.compare_digest(self_binding.token, other_binding.token)
+
+    return G8BoundGitHubReadTransport
+
+
+G8BoundGitHubReadTransport = _build_g8_bound_github_read_transport_type()
 
 
 @dataclass(frozen=True, slots=True)
