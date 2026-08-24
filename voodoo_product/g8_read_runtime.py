@@ -11,8 +11,12 @@ from weakref import WeakKeyDictionary
 
 from .canonical_operation_resume import CanonicalOperationResumeService
 from .canonical_operation_runtime import CanonicalOperationRuntime
-from .canonical_pipeline import CanonicalOperationPipeline
-from .canonical_read_terminal import CanonicalGitHubReadTerminal, VerifierRuntimeProfile
+from .canonical_pipeline import CanonicalOperationPipeline, CanonicalPreparedExecution
+from .canonical_read_terminal import (
+    CanonicalGitHubReadTerminal,
+    CanonicalReadTerminalResult,
+    VerifierRuntimeProfile,
+)
 from .capability_registry import ImmutableCapabilityRegistry
 from .credential_broker import CredentialBrokerPolicy, ImmutableCredentialBroker
 from .durable_current_fence import DurableCurrentExecutionFence
@@ -50,6 +54,12 @@ _GITHUB_API_HOST: Final = "api.github.com"
 _GITHUB_API_VERSION: Final = "2022-11-28"
 _DURABLE_FENCE_ASSERT_CURRENT: Final = DurableCurrentExecutionFence.assert_current
 _EXPECTED_DURABLE_FENCE_INSTANCE_FIELDS: Final = frozenset({"db", "trusted_clock"})
+_GITHUB_REF_READ_HANDLER_INIT: Final = GitHubRefReadHandler.__init__
+_GITHUB_REF_READ_HANDLER_OBSERVE: Final = GitHubRefReadHandler.observe_ref
+_VERIFIER_GITHUB_REF_READ_HANDLER_INIT: Final = VerifierGitHubRefReadHandler.__init__
+_VERIFIER_GITHUB_REF_READ_HANDLER_OBSERVE: Final = VerifierGitHubRefReadHandler.observe_ref
+_CANONICAL_READ_TERMINAL_INIT: Final = CanonicalGitHubReadTerminal.__init__
+_CANONICAL_READ_TERMINAL_RUN: Final = CanonicalGitHubReadTerminal.run
 
 
 def _require_text(value: object, *, field: str) -> str:
@@ -450,7 +460,8 @@ class _G8RoleBoundRunnerReadHandler(GitHubRefReadHandler):
             raise PermissionError("G8 Runner handler credential role mismatch")
         if prepared.decision.credential_class != transport.runner_pin.credential_class:
             raise PermissionError("G8 Runner handler credential decision mismatch")
-        return super().observe_ref(
+        return _GITHUB_REF_READ_HANDLER_OBSERVE(
+            self,
             prepared=prepared,
             activation=activation,
             target=target,
@@ -482,12 +493,249 @@ class _G8RoleBoundVerifierReadHandler(VerifierGitHubRefReadHandler):
             raise PermissionError("G8 Verifier handler identity credential class mismatch")
         if decision.credential_class != transport.verifier_pin.credential_class:
             raise PermissionError("G8 Verifier handler credential decision mismatch")
-        return super().observe_ref(
+        return _VERIFIER_GITHUB_REF_READ_HANDLER_OBSERVE(
+            self,
             verifier=verifier,
             boundary=boundary,
             decision=decision,
             target=target,
         )
+
+
+_G8_ROLE_BOUND_RUNNER_OBSERVE: Final = _G8RoleBoundRunnerReadHandler.observe_ref
+_G8_ROLE_BOUND_VERIFIER_OBSERVE: Final = _G8RoleBoundVerifierReadHandler.observe_ref
+
+
+def _build_pinned_runner_handler(
+    *,
+    transport: _G8IndependentCredentialPairTransport,
+    current_fence: DurableCurrentExecutionFence,
+    trusted_clock: TrustedClockAuthority,
+    observation_revision: str,
+) -> GitHubRefReadHandler:
+    """Return a handler whose execution-time critical attributes are closure-pinned."""
+
+    expected_transport = transport
+    expected_fence = current_fence
+    expected_clock = trusted_clock
+    expected_revision = observation_revision
+    critical_fields = frozenset(
+        {"transport", "current_fence", "trusted_clock", "observation_revision"}
+    )
+
+    class _PinnedRunnerHandler(_G8RoleBoundRunnerReadHandler):
+        __slots__ = ()
+
+        def __getattribute__(self, name: str) -> object:
+            if name == "transport":
+                return expected_transport
+            if name == "current_fence":
+                return expected_fence
+            if name == "trusted_clock":
+                return expected_clock
+            if name == "observation_revision":
+                return expected_revision
+            return super().__getattribute__(name)
+
+        def __setattr__(self, name: str, value: object) -> None:
+            if name in critical_fields:
+                state = object.__getattribute__(self, "__dict__")
+                if name in state:
+                    raise AttributeError(f"G8 Runner handler {name} binding is immutable")
+                object.__setattr__(self, name, value)
+                return
+            super().__setattr__(name, value)
+
+        def observe_ref(
+            self,
+            *,
+            prepared: PreparedIsolatedRuntime,
+            activation: ReadOnlyRuntimeActivation,
+            target: ExecutionTarget,
+        ) -> GitHubRefObservation:
+            return _G8_ROLE_BOUND_RUNNER_OBSERVE(
+                self,
+                prepared=prepared,
+                activation=activation,
+                target=target,
+            )
+
+    handler = object.__new__(_PinnedRunnerHandler)
+    _GITHUB_REF_READ_HANDLER_INIT(
+        handler,
+        transport=transport,
+        current_fence=current_fence,
+        trusted_clock=trusted_clock,
+        observation_revision=observation_revision,
+    )
+    return handler
+
+
+def _build_pinned_verifier_handler(
+    *,
+    transport: _G8IndependentCredentialPairTransport,
+    trusted_clock: TrustedClockAuthority,
+    observation_revision: str,
+) -> VerifierGitHubRefReadHandler:
+    """Return a verifier handler whose effect-critical attributes are closure-pinned."""
+
+    expected_transport = transport
+    expected_clock = trusted_clock
+    expected_revision = observation_revision
+    critical_fields = frozenset({"transport", "trusted_clock", "observation_revision"})
+
+    class _PinnedVerifierHandler(_G8RoleBoundVerifierReadHandler):
+        __slots__ = ()
+
+        def __getattribute__(self, name: str) -> object:
+            if name == "transport":
+                return expected_transport
+            if name == "trusted_clock":
+                return expected_clock
+            if name == "observation_revision":
+                return expected_revision
+            return super().__getattribute__(name)
+
+        def __setattr__(self, name: str, value: object) -> None:
+            if name in critical_fields:
+                state = object.__getattribute__(self, "__dict__")
+                if name in state:
+                    raise AttributeError(f"G8 Verifier handler {name} binding is immutable")
+                object.__setattr__(self, name, value)
+                return
+            super().__setattr__(name, value)
+
+        def observe_ref(
+            self,
+            *,
+            verifier: VerifierIdentity,
+            boundary: IndependentVerificationBoundary,
+            decision: VerifierCredentialDecision,
+            target: ExecutionTarget,
+        ) -> VerifierGitHubRefObservation:
+            return _G8_ROLE_BOUND_VERIFIER_OBSERVE(
+                self,
+                verifier=verifier,
+                boundary=boundary,
+                decision=decision,
+                target=target,
+            )
+
+    handler = object.__new__(_PinnedVerifierHandler)
+    _VERIFIER_GITHUB_REF_READ_HANDLER_INIT(
+        handler,
+        transport=transport,
+        trusted_clock=trusted_clock,
+        observation_revision=observation_revision,
+    )
+    return handler
+
+
+def _build_pinned_read_terminal(
+    *,
+    capability_registry: ImmutableCapabilityRegistry,
+    capsule_registry: ImmutableExecutionCapsuleRegistry,
+    runner_adapter: IsolatedRunnerAdapter,
+    runner_handler: GitHubRefReadHandler,
+    completion_coordinator: object,
+    verifier_profile: VerifierRuntimeProfile,
+    verifier_policy: VerifierCredentialPolicy,
+    verifier_handler: VerifierGitHubRefReadHandler,
+    verifier_clock: TrustedClockAuthority,
+    observed_post_state_revision: str,
+    strength_revision: str,
+    result_revision: str,
+) -> CanonicalGitHubReadTerminal:
+    """Expose canonical terminal semantics through closure-pinned G8 assembly bindings."""
+
+    expected_capability_registry = capability_registry
+    expected_capsule_registry = capsule_registry
+    expected_runner_adapter = runner_adapter
+    expected_runner_handler = runner_handler
+    expected_completion_coordinator = completion_coordinator
+    expected_verifier_profile = verifier_profile
+    expected_verifier_policy = verifier_policy
+    expected_verifier_handler = verifier_handler
+    expected_verifier_clock = verifier_clock
+    expected_observed_post_state_revision = observed_post_state_revision
+    expected_strength_revision = strength_revision
+    expected_result_revision = result_revision
+    critical_fields = frozenset(
+        {
+            "capability_registry",
+            "capsule_registry",
+            "runner_adapter",
+            "runner_handler",
+            "completion_coordinator",
+            "verifier_profile",
+            "verifier_policy",
+            "verifier_handler",
+            "verifier_clock",
+            "observed_post_state_revision",
+            "strength_revision",
+            "result_revision",
+        }
+    )
+
+    class _PinnedCanonicalGitHubReadTerminal(CanonicalGitHubReadTerminal):
+        __slots__ = ()
+
+        def __getattribute__(self, name: str) -> object:
+            if name == "capability_registry":
+                return expected_capability_registry
+            if name == "capsule_registry":
+                return expected_capsule_registry
+            if name == "runner_adapter":
+                return expected_runner_adapter
+            if name == "runner_handler":
+                return expected_runner_handler
+            if name == "completion_coordinator":
+                return expected_completion_coordinator
+            if name == "verifier_profile":
+                return expected_verifier_profile
+            if name == "verifier_policy":
+                return expected_verifier_policy
+            if name == "verifier_handler":
+                return expected_verifier_handler
+            if name == "verifier_clock":
+                return expected_verifier_clock
+            if name == "observed_post_state_revision":
+                return expected_observed_post_state_revision
+            if name == "strength_revision":
+                return expected_strength_revision
+            if name == "result_revision":
+                return expected_result_revision
+            return super().__getattribute__(name)
+
+        def __setattr__(self, name: str, value: object) -> None:
+            if name in critical_fields:
+                state = object.__getattribute__(self, "__dict__")
+                if name in state:
+                    raise AttributeError(f"G8 READ terminal {name} binding is immutable")
+                object.__setattr__(self, name, value)
+                return
+            super().__setattr__(name, value)
+
+        def run(self, *, prepared: CanonicalPreparedExecution) -> CanonicalReadTerminalResult:
+            return _CANONICAL_READ_TERMINAL_RUN(self, prepared=prepared)
+
+    terminal = object.__new__(_PinnedCanonicalGitHubReadTerminal)
+    _CANONICAL_READ_TERMINAL_INIT(
+        terminal,
+        capability_registry=capability_registry,
+        capsule_registry=capsule_registry,
+        runner_adapter=runner_adapter,
+        runner_handler=runner_handler,
+        completion_coordinator=completion_coordinator,
+        verifier_profile=verifier_profile,
+        verifier_policy=verifier_policy,
+        verifier_handler=verifier_handler,
+        verifier_clock=verifier_clock,
+        observed_post_state_revision=observed_post_state_revision,
+        strength_revision=strength_revision,
+        result_revision=result_revision,
+    )
+    return terminal
 
 
 @dataclass(frozen=True, slots=True)
@@ -709,18 +957,18 @@ class G8ReadRuntimePack:
             boundary_revision=self.runner_boundary_revision,
             activation_revision=self.runner_activation_revision,
         )
-        runner_handler = _G8RoleBoundRunnerReadHandler(
+        runner_handler = _build_pinned_runner_handler(
             transport=runner_effect_transport,
             current_fence=runtime_fence,
             trusted_clock=self.runner_clock,
             observation_revision=self.runner_observation_revision,
         )
-        verifier_handler = _G8RoleBoundVerifierReadHandler(
+        verifier_handler = _build_pinned_verifier_handler(
             transport=verifier_effect_transport,
             trusted_clock=self.verifier_clock,
             observation_revision=self.verifier_observation_revision,
         )
-        read_terminal = CanonicalGitHubReadTerminal(
+        read_terminal = _build_pinned_read_terminal(
             capability_registry=capability_registry,
             capsule_registry=self.capsule_registry,
             runner_adapter=runner_adapter,
