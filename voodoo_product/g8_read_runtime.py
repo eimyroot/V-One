@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
@@ -13,6 +14,7 @@ from .credential_broker import CredentialBrokerPolicy, ImmutableCredentialBroker
 from .durable_current_fence import DurableCurrentExecutionFence
 from .execution_capsule import ImmutableExecutionCapsuleRegistry
 from .github_actions_runtime import (
+    GITHUB_API_SOURCE_IDENTITY,
     GitHubActionsIsolatedRuntimeProvider,
     GitHubApiRefReadTransport,
 )
@@ -30,26 +32,6 @@ from .verifier_credential import VerifierCredentialPolicy
 from .verifier_observation import VerifierGitHubRefReadHandler
 
 GITHUB_API_AUDIENCE: Final = "api.github.com"
-
-# The default G8 pack intentionally accepts only the concrete transport whose implementation is
-# hard-coded to GitHub's HTTPS GET ref endpoint. A structural GitHubReadTransport implementation is
-# insufficient proof: a custom ``read_ref`` method could hide a mutation internally while satisfying
-# the narrow Protocol. Exact type checking also prevents a subclass from overriding ``read_ref``.
-_FORBIDDEN_TRANSPORT_METHODS: Final = frozenset(
-    {
-        "create_ref",
-        "delete_ref",
-        "update_ref",
-        "write",
-        "mutate",
-        "execute",
-        "request",
-        "post",
-        "put",
-        "patch",
-        "delete",
-    }
-)
 
 
 def _require_text(value: object, *, field: str) -> str:
@@ -74,22 +56,56 @@ def _require_digest(value: object, *, field: str) -> str:
     return text
 
 
-def _assert_narrow_read_transport(
-    transport: object,
-    *,
-    field: str,
-) -> GitHubApiRefReadTransport:
-    if type(transport) is not GitHubApiRefReadTransport:
-        raise ValueError(f"{field} must be exact GitHubApiRefReadTransport")
-    _require_text(transport.source_identity, field=f"{field}.source_identity")
-    widened = sorted(
-        name
-        for name in _FORBIDDEN_TRANSPORT_METHODS
-        if callable(getattr(transport, name, None))
-    )
-    if widened:
-        raise ValueError(f"{field} exposes forbidden provider methods: {widened}")
-    return transport
+class G8BoundGitHubReadTransport:
+    """Closed G8-owned GitHub READ port bound to one configured credential identity.
+
+    The object exposes only ``read_ref`` plus non-secret credential metadata required by the
+    composition gate. It has no ``__dict__`` and the default pack requires the exact class, so a
+    caller cannot subclass it or attach a second provider method to widen the retained runtime
+    surface. The token remains in one private slot and is never returned or serialized.
+
+    ``credential_identity`` is the configured provider-principal identity (for example a dedicated
+    GitHub App installation identity). R1 binds that identity and credential class to the transport
+    actually retained by Runner/Verifier and additionally rejects identical credential material.
+    Provider-side identity observation remains part of the later live G8 E2E evidence gate.
+    """
+
+    __slots__ = ("__token", "credential_class", "credential_identity")
+
+    source_identity: Final = GITHUB_API_SOURCE_IDENTITY
+
+    def __init__(
+        self,
+        *,
+        token: str,
+        credential_class: str,
+        credential_identity: str,
+    ) -> None:
+        token = _require_text(token, field="token")
+        # Reuse the concrete transport constructor as the canonical validation of provider config.
+        GitHubApiRefReadTransport(token=token)
+        self.__token = token
+        self.credential_class = _require_text(
+            credential_class,
+            field="credential_class",
+        )
+        self.credential_identity = _require_text(
+            credential_identity,
+            field="credential_identity",
+        )
+
+    def read_ref(self, *, repository: str, ref: str) -> str:
+        # The delegated implementation is hard-coded to HTTPS GET against api.github.com and exposes
+        # no mutation operation. A new instance keeps the private token out of any returned object.
+        return GitHubApiRefReadTransport(token=self.__token).read_ref(
+            repository=repository,
+            ref=ref,
+        )
+
+    def _shares_credential_material(self, other: G8BoundGitHubReadTransport) -> bool:
+        if type(other) is not G8BoundGitHubReadTransport:
+            raise ValueError("credential comparison requires closed G8 transport")
+        return secrets.compare_digest(self.__token, other.__token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,18 +115,18 @@ class G8ReadRuntimePack:
     G8 owns only provider/runtime composition. G1-G7 authority, durable dispatch, terminal-profile
     selection, and lease allocation are supplied by one already-canonical ``CanonicalOperationPipeline``.
     This pack refuses parallel databases, permission authorities, capability/capsule registries,
-    current fences, coordinators, or mutation-shaped provider transports.
+    current fences, coordinators, or mutation-capable provider transports.
 
-    Credential bytes are intentionally outside V-One evidence. The two concrete GET-only transports
-    privately retain explicitly supplied credentials, while this assembler never reads ambient
-    environment variables and never serializes credential material into V-One evidence.
+    Credential bytes are confined to closed transport private slots. The assembler never reads
+    ambient credential environment variables and never serializes credential material into V-One
+    evidence.
     """
 
     pipeline: CanonicalOperationPipeline
     capsule_registry: ImmutableExecutionCapsuleRegistry
     current_fence: DurableCurrentExecutionFence
     runner_provider: GitHubActionsIsolatedRuntimeProvider
-    runner_transport: GitHubApiRefReadTransport
+    runner_transport: G8BoundGitHubReadTransport
     runner_clock: TrustedClockAuthority
     runner_credential_policy: CredentialBrokerPolicy
     runner_credential_decision_revision: str
@@ -120,7 +136,7 @@ class G8ReadRuntimePack:
     runner_observation_revision: str
     verifier_profile: VerifierRuntimeProfile
     verifier_policy: VerifierCredentialPolicy
-    verifier_transport: GitHubApiRefReadTransport
+    verifier_transport: G8BoundGitHubReadTransport
     verifier_clock: TrustedClockAuthority
     verifier_observation_revision: str
     observed_post_state_revision: str
@@ -148,10 +164,16 @@ class G8ReadRuntimePack:
         if not isinstance(self.verifier_clock, TrustedClockAuthority):
             raise ValueError("verifier_clock must be TrustedClockAuthority")
 
-        _assert_narrow_read_transport(self.runner_transport, field="runner_transport")
-        _assert_narrow_read_transport(self.verifier_transport, field="verifier_transport")
+        if type(self.runner_transport) is not G8BoundGitHubReadTransport:
+            raise ValueError("runner_transport must be exact G8BoundGitHubReadTransport")
+        if type(self.verifier_transport) is not G8BoundGitHubReadTransport:
+            raise ValueError("verifier_transport must be exact G8BoundGitHubReadTransport")
         if self.runner_transport is self.verifier_transport:
             raise ValueError("runner and verifier transports must be distinct instances")
+        if self.runner_transport.credential_identity == self.verifier_transport.credential_identity:
+            raise ValueError("runner and verifier credential identities must be distinct")
+        if self.runner_transport._shares_credential_material(self.verifier_transport):
+            raise ValueError("runner and verifier credential material must be distinct")
 
         for field in (
             "runner_credential_decision_revision",
@@ -182,6 +204,10 @@ class G8ReadRuntimePack:
             raise ValueError("service must be ProductService")
         if not isinstance(permission_authority, DatabasePermissionAuthority):
             raise ValueError("permission_authority must be DatabasePermissionAuthority")
+        if service.config.environment == "production":
+            raise PermissionError("G8 R1 cannot install into a production ProductService")
+        if service.config.environment != self.runner_provider.environment:
+            raise PermissionError("G8 product and Runner environments must match")
         if permission_authority.db is not service.db:
             raise ValueError("G8 permission authority must use the product database")
 
@@ -314,6 +340,8 @@ class G8ReadRuntimePack:
             raise PermissionError("G8 Runner credential policy must target GitHub API READ")
         if runner_policy.provider_mutation_allowed is not False:
             raise PermissionError("G8 Runner policy allows provider mutation")
+        if self.runner_transport.credential_class != runner_policy.credential_class:
+            raise PermissionError("G8 Runner transport is not bound to Runner credential class")
 
         if verifier_policy.provider != "github" or verifier_policy.audience != GITHUB_API_AUDIENCE:
             raise PermissionError("G8 Verifier credential policy must target GitHub API READ")
@@ -323,6 +351,8 @@ class G8ReadRuntimePack:
             raise PermissionError("G8 Verifier profile provider must be github")
         if verifier_profile.credential_class != verifier_policy.credential_class:
             raise PermissionError("G8 Verifier profile/policy credential class mismatch")
+        if self.verifier_transport.credential_class != verifier_policy.credential_class:
+            raise PermissionError("G8 Verifier transport is not bound to Verifier credential class")
         if verifier_profile.credential_class == runner_policy.credential_class:
             raise PermissionError("G8 Runner and Verifier credential classes must be distinct")
         if verifier_profile.provider_instance_id == self.runner_provider.provider_instance_id:
