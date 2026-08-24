@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import http.client
+import json
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +34,8 @@ from .verifier_credential import VerifierCredentialPolicy
 from .verifier_observation import VerifierGitHubRefReadHandler
 
 GITHUB_API_AUDIENCE: Final = "api.github.com"
+_GITHUB_API_HOST: Final = "api.github.com"
+_GITHUB_API_VERSION: Final = "2022-11-28"
 
 
 def _require_text(value: object, *, field: str) -> str:
@@ -56,21 +60,65 @@ def _require_digest(value: object, *, field: str) -> str:
     return text
 
 
+def _observe_github_credential_principal(token: str) -> str:
+    """Resolve the provider principal authenticated by the exact credential material.
+
+    R1 deliberately supports only credentials for which GitHub's authenticated-user READ endpoint
+    returns a stable numeric principal id. Installation credentials that cannot prove a principal
+    through this endpoint fail closed rather than being labeled by caller input. This is a READ-only
+    provider observation and does not serialize the token or provider response into V-One evidence.
+    """
+
+    connection = http.client.HTTPSConnection(_GITHUB_API_HOST, 443, timeout=15)
+    try:
+        connection.request(
+            "GET",
+            "/user",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "v-one-g8-credential-principal",
+                "X-GitHub-Api-Version": _GITHUB_API_VERSION,
+            },
+        )
+        response = connection.getresponse()
+        if response.status != 200:
+            raise RuntimeError(
+                f"G8 GitHub credential principal observation failed with HTTP {response.status}"
+            )
+        try:
+            payload = json.loads(response.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("G8 GitHub credential principal response is invalid") from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise RuntimeError("G8 GitHub credential principal observation failed") from exc
+    finally:
+        connection.close()
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("G8 GitHub credential principal response is invalid")
+    principal_id = payload.get("id")
+    principal_type = payload.get("type")
+    if isinstance(principal_id, bool) or not isinstance(principal_id, int) or principal_id < 1:
+        raise RuntimeError("G8 GitHub credential principal id is invalid")
+    if not isinstance(principal_type, str) or not principal_type or principal_type != principal_type.strip():
+        raise RuntimeError("G8 GitHub credential principal type is invalid")
+    return f"github-principal/{principal_type.casefold()}/{principal_id}"
+
+
 class G8BoundGitHubReadTransport:
-    """Closed G8-owned GitHub READ port bound to one configured credential identity.
+    """Closed G8-owned GitHub READ port bound to provider-observed credential provenance.
 
     The object exposes only ``read_ref`` plus non-secret credential metadata required by the
     composition gate. It has no ``__dict__`` and the default pack requires the exact class, so a
     caller cannot subclass it or attach a second provider method to widen the retained runtime
     surface. The token remains in one private slot and is never returned or serialized.
 
-    ``credential_identity`` is the configured provider-principal identity (for example a dedicated
-    GitHub App installation identity). R1 binds that identity and credential class to the transport
-    actually retained by Runner/Verifier and additionally rejects identical credential material.
-    Provider-side identity observation remains part of the later live G8 E2E evidence gate.
+    ``credential_principal_identity`` is derived from GitHub's authenticated-user response using the
+    exact token retained by this transport; callers cannot supply that identity independently.
     """
 
-    __slots__ = ("__token", "credential_class", "credential_identity")
+    __slots__ = ("__token", "credential_class", "credential_principal_identity")
 
     source_identity: Final = GITHUB_API_SOURCE_IDENTITY
 
@@ -79,19 +127,19 @@ class G8BoundGitHubReadTransport:
         *,
         token: str,
         credential_class: str,
-        credential_identity: str,
     ) -> None:
         token = _require_text(token, field="token")
-        # Reuse the concrete transport constructor as the canonical validation of provider config.
+        # Reuse the concrete ref transport constructor as the canonical validation of provider config.
         GitHubApiRefReadTransport(token=token)
+        principal_identity = _observe_github_credential_principal(token)
         self.__token = token
         self.credential_class = _require_text(
             credential_class,
             field="credential_class",
         )
-        self.credential_identity = _require_text(
-            credential_identity,
-            field="credential_identity",
+        self.credential_principal_identity = _require_text(
+            principal_identity,
+            field="credential_principal_identity",
         )
 
     def read_ref(self, *, repository: str, ref: str) -> str:
@@ -145,24 +193,24 @@ class G8ReadRuntimePack:
     read_capability_definition_identity: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.pipeline, CanonicalOperationPipeline):
-            raise ValueError("pipeline must be CanonicalOperationPipeline")
+        if type(self.pipeline) is not CanonicalOperationPipeline:
+            raise ValueError("pipeline must be exact CanonicalOperationPipeline")
         if not isinstance(self.capsule_registry, ImmutableExecutionCapsuleRegistry):
             raise ValueError("capsule_registry must be ImmutableExecutionCapsuleRegistry")
-        if not isinstance(self.current_fence, DurableCurrentExecutionFence):
-            raise ValueError("current_fence must be DurableCurrentExecutionFence")
-        if not isinstance(self.runner_provider, GitHubActionsIsolatedRuntimeProvider):
-            raise ValueError("runner_provider must be GitHubActionsIsolatedRuntimeProvider")
-        if not isinstance(self.runner_clock, TrustedClockAuthority):
-            raise ValueError("runner_clock must be TrustedClockAuthority")
-        if not isinstance(self.runner_credential_policy, CredentialBrokerPolicy):
-            raise ValueError("runner_credential_policy must be CredentialBrokerPolicy")
-        if not isinstance(self.verifier_profile, VerifierRuntimeProfile):
-            raise ValueError("verifier_profile must be VerifierRuntimeProfile")
-        if not isinstance(self.verifier_policy, VerifierCredentialPolicy):
-            raise ValueError("verifier_policy must be VerifierCredentialPolicy")
-        if not isinstance(self.verifier_clock, TrustedClockAuthority):
-            raise ValueError("verifier_clock must be TrustedClockAuthority")
+        if type(self.current_fence) is not DurableCurrentExecutionFence:
+            raise ValueError("current_fence must be exact DurableCurrentExecutionFence")
+        if type(self.runner_provider) is not GitHubActionsIsolatedRuntimeProvider:
+            raise ValueError("runner_provider must be exact GitHubActionsIsolatedRuntimeProvider")
+        if type(self.runner_clock) is not TrustedClockAuthority:
+            raise ValueError("runner_clock must be exact TrustedClockAuthority")
+        if type(self.runner_credential_policy) is not CredentialBrokerPolicy:
+            raise ValueError("runner_credential_policy must be exact CredentialBrokerPolicy")
+        if type(self.verifier_profile) is not VerifierRuntimeProfile:
+            raise ValueError("verifier_profile must be exact VerifierRuntimeProfile")
+        if type(self.verifier_policy) is not VerifierCredentialPolicy:
+            raise ValueError("verifier_policy must be exact VerifierCredentialPolicy")
+        if type(self.verifier_clock) is not TrustedClockAuthority:
+            raise ValueError("verifier_clock must be exact TrustedClockAuthority")
 
         if type(self.runner_transport) is not G8BoundGitHubReadTransport:
             raise ValueError("runner_transport must be exact G8BoundGitHubReadTransport")
@@ -170,8 +218,11 @@ class G8ReadRuntimePack:
             raise ValueError("verifier_transport must be exact G8BoundGitHubReadTransport")
         if self.runner_transport is self.verifier_transport:
             raise ValueError("runner and verifier transports must be distinct instances")
-        if self.runner_transport.credential_identity == self.verifier_transport.credential_identity:
-            raise ValueError("runner and verifier credential identities must be distinct")
+        if (
+            self.runner_transport.credential_principal_identity
+            == self.verifier_transport.credential_principal_identity
+        ):
+            raise ValueError("runner and verifier provider principals must be distinct")
         if self.runner_transport._shares_credential_material(self.verifier_transport):
             raise ValueError("runner and verifier credential material must be distinct")
 
