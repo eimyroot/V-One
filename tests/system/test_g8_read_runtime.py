@@ -347,6 +347,15 @@ def pack(fixture: SimpleNamespace, **overrides: object) -> G8ReadRuntimePack:
     return G8ReadRuntimePack(**pack_values(fixture, **overrides))  # type: ignore[arg-type]
 
 
+def _closure_binding_registry(transport: G8BoundGitHubReadTransport) -> object:
+    property_getter = type(transport).credential_class.fget
+    assert property_getter is not None
+    assert property_getter.__closure__ is not None
+    binding_for = property_getter.__closure__[0].cell_contents
+    assert binding_for.__closure__ is not None
+    return binding_for.__closure__[0].cell_contents
+
+
 def test_g8_bound_transport_reattests_principal_from_exact_retained_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -389,22 +398,30 @@ def test_g8_bound_transport_exposes_no_caller_mutable_credential_slots() -> None
         with pytest.raises(AttributeError):
             object.__setattr__(transport, field, "replacement")
 
+    with pytest.raises(PermissionError, match="unpinned credential source"):
+        transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
 
-def test_g8_bound_transport_uses_same_re_attested_token_for_provider_read(
+
+def test_g8_runtime_pair_uses_same_re_attested_token_for_provider_read(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    token = "check-use-continuity-token"
-    transport = G8BoundGitHubReadTransport(
-        token=token,
-        credential_class=RUNNER_CREDENTIAL_CLASS,
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
     )
-    expected_principal = transport.credential_principal_identity
+    runner_effect_transport = runtime.read_terminal.runner_handler.transport
     observed_tokens: list[str] = []
     provider_tokens: list[str] = []
 
     def observe(candidate: str) -> str:
         observed_tokens.append(candidate)
-        return expected_principal
+        if candidate == RUNNER_TOKEN:
+            return RUNNER_PRINCIPAL
+        if candidate == VERIFIER_TOKEN:
+            return VERIFIER_PRINCIPAL
+        raise AssertionError("unexpected credential")
 
     class CapturingReadTransport:
         def __init__(self, *, token: str) -> None:
@@ -419,12 +436,46 @@ def test_g8_bound_transport_uses_same_re_attested_token_for_provider_read(
     monkeypatch.setattr(g8_module, "_observe_github_credential_principal", observe)
     monkeypatch.setattr(g8_module, "GitHubApiRefReadTransport", CapturingReadTransport)
 
-    result = transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
+    result = runner_effect_transport.read_ref(
+        repository="nulleimy/V-One",
+        ref="refs/heads/main",
+    )
 
     assert result == "a" * 40
-    assert observed_tokens == [token]
-    assert provider_tokens == [token]
-    assert observed_tokens[0] == provider_tokens[0]
+    assert observed_tokens == [RUNNER_TOKEN, VERIFIER_TOKEN, RUNNER_TOKEN]
+    assert provider_tokens == [RUNNER_TOKEN]
+    assert observed_tokens[-1] == provider_tokens[0]
+
+
+def test_g8_runtime_pair_rejects_introspective_closure_registry_rewrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    verifier_effect_transport = runtime.read_terminal.verifier_handler.transport
+    registry = _closure_binding_registry(fixture.verifier_transport)
+    registry[fixture.verifier_transport] = g8_module._CredentialBinding(  # type: ignore[index]
+        token=RUNNER_TOKEN,
+        token_fingerprint=g8_module._token_fingerprint(RUNNER_TOKEN),
+        credential_class=VERIFIER_CREDENTIAL_CLASS,
+        attested_principal=RUNNER_PRINCIPAL,
+    )
+
+    class ForbiddenProviderTransport:
+        def __init__(self, *, token: str) -> None:
+            raise AssertionError(f"provider READ must not be reached with {token!r}")
+
+    monkeypatch.setattr(g8_module, "GitHubApiRefReadTransport", ForbiddenProviderTransport)
+
+    with pytest.raises(PermissionError, match="Verifier credential changed after runtime pinning"):
+        verifier_effect_transport.read_ref(
+            repository="nulleimy/V-One",
+            ref="refs/heads/main",
+        )
 
 
 def test_real_principal_observer_uses_authenticated_github_user_read(
@@ -488,8 +539,20 @@ def test_g8_builds_only_read_runtime_over_exact_canonical_authority(tmp_path: Pa
     assert runtime_fence.trusted_clock is fixture.runner_clock
     assert runtime.read_terminal.runner_adapter.current_fence is runtime_fence
     assert runtime.read_terminal.runner_handler.current_fence is runtime_fence
-    assert runtime.read_terminal.runner_handler.transport is fixture.runner_transport
-    assert runtime.read_terminal.verifier_handler.transport is fixture.verifier_transport
+
+    runner_effect_transport = runtime.read_terminal.runner_handler.transport
+    verifier_effect_transport = runtime.read_terminal.verifier_handler.transport
+    assert runner_effect_transport is not fixture.runner_transport
+    assert verifier_effect_transport is not fixture.verifier_transport
+    assert runner_effect_transport.runner_transport is fixture.runner_transport
+    assert runner_effect_transport.verifier_transport is fixture.verifier_transport
+    assert verifier_effect_transport.runner_transport is fixture.runner_transport
+    assert verifier_effect_transport.verifier_transport is fixture.verifier_transport
+    assert runner_effect_transport.runner_pin == verifier_effect_transport.runner_pin
+    assert runner_effect_transport.verifier_pin == verifier_effect_transport.verifier_pin
+    with pytest.raises(AttributeError):
+        runner_effect_transport.runner_pin = verifier_effect_transport.verifier_pin  # type: ignore[misc]
+
     assert runtime.create_ref_preparer is None
     assert runtime.rollback_preparer is None
 
