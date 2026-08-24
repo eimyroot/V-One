@@ -31,7 +31,9 @@ existing CanonicalOperationPipeline
 
 Runner and Verifier credential provenance is not accepted from caller labels.
 
-Each `G8BoundGitHubReadTransport` retains the exact token privately and derives its non-secret principal identity by performing an authenticated GitHub `GET /user` with that same token. R1 fails closed when that provider observation cannot produce a valid principal identity.
+`G8BoundGitHubReadTransport` does not retain the token, fingerprint, credential class, or provider attestation in caller-mutable instance slots. Those values are retained in a private closure-owned binding registry outside the transport instance. Initial construction derives the non-secret principal identity by performing an authenticated GitHub `GET /user` with the exact credential material; R1 fails closed when that provider observation cannot produce a valid principal identity.
+
+Before every provider READ the transport captures one immutable binding snapshot, recomputes the token fingerprint, re-attests the provider principal with the exact local token, and then passes that same local token to the READ provider transport. Validation and provider use therefore cannot diverge through a post-check instance-state replacement or a check/use race.
 
 The pack rejects:
 
@@ -54,7 +56,9 @@ production       = REJECTED
 ambient token    = NOT LOADED BY ASSEMBLER
 ```
 
-R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, foreign current fences, subclasses that can override the durable current-fence implementation, shared Runner/Verifier provider authority, mutation-capable/generic provider transports, collapsed Runner/Verifier credential classes, product↔Runner environment mismatch, and production widening.
+R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, foreign current fences, subclasses or instance-level overrides that can replace the durable current-fence implementation, shared Runner/Verifier provider authority, mutation-capable/generic provider transports, collapsed Runner/Verifier credential classes, product↔Runner environment mismatch, and production widening.
+
+The caller-supplied fence is validated only as canonical provenance. The runtime retains a newly constructed exact `DurableCurrentExecutionFence` over the canonical ProductService DB and Runner trusted clock, shared by resume, activation, and the final pre-READ check.
 
 ## R1 evidence required before merge
 
