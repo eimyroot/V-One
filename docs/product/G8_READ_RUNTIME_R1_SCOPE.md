@@ -18,14 +18,30 @@ The assembler may create only:
 ```text
 existing CanonicalOperationPipeline
 + exact canonical ProductService DB / DatabasePermissionAuthority
-+ exact capability/capsule registries
-+ exact DurableCurrentExecutionFence
-+ READ-only Runner runtime + GitHubReadTransport
-+ separate READ-only Verifier identity/policy/transport
++ exact capability/capsule registry identity shared with Grant/conformance authority
++ exact DurableCurrentExecutionFence implementation
++ exact G8-owned closed GitHub READ transport for Runner
++ separately credentialed exact G8-owned closed GitHub READ transport for Verifier
 + CanonicalGitHubReadTerminal
 + CanonicalOperationResumeService
 → CanonicalOperationRuntime
 ```
+
+## Credential-independence boundary
+
+Runner and Verifier credential provenance is not accepted from caller labels.
+
+Each `G8BoundGitHubReadTransport` retains the exact token privately and derives its non-secret principal identity by performing an authenticated GitHub `GET /user` with that same token. R1 fails closed when that provider observation cannot produce a valid principal identity.
+
+The pack rejects:
+
+- the same transport instance;
+- the same underlying credential material;
+- two different credential strings that authenticate as the same provider principal;
+- transport subclasses or structural/generic provider clients;
+- Runner/Verifier credential-class collapse.
+
+The provider-observed principal check is composition evidence only. It does not replace the later live independent Verifier readback required by the G8 exit gate.
 
 ## R1 hard ceiling
 
@@ -38,7 +54,7 @@ production       = REJECTED
 ambient token    = NOT LOADED BY ASSEMBLER
 ```
 
-R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, a foreign current fence, shared Runner/Verifier transport instances, mutation-shaped provider transports, collapsed Runner/Verifier credential classes, and production widening.
+R1 rejects parallel product DBs, parallel permission authority, capsule-registry forks from Grant/conformance authority, foreign current fences, subclasses that can override the durable current-fence implementation, shared Runner/Verifier provider authority, mutation-capable/generic provider transports, collapsed Runner/Verifier credential classes, product↔Runner environment mismatch, and production widening.
 
 ## R1 evidence required before merge
 
