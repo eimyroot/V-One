@@ -372,25 +372,59 @@ def test_g8_bound_transport_reattests_principal_from_exact_retained_token(
         transport.credential_principal_identity = "github-principal/user/1"  # type: ignore[misc]
     with pytest.raises((AttributeError, TypeError)):
         transport.credential_class = "github.widened/scoped-v1"  # type: ignore[misc]
-    with pytest.raises((AttributeError, TypeError)):
-        transport._G8BoundGitHubReadTransport__token = "replacement-token"  # type: ignore[misc]
 
 
-def test_g8_bound_transport_detects_low_level_token_change_before_provider_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_g8_bound_transport_exposes_no_caller_mutable_credential_slots() -> None:
     transport = G8BoundGitHubReadTransport(
-        token="original-token",
+        token="closure-owned-token",
         credential_class=RUNNER_CREDENTIAL_CLASS,
     )
-    object.__setattr__(
-        transport,
-        "_G8BoundGitHubReadTransport__token",
-        "replacement-token",
-    )
 
-    with pytest.raises(PermissionError, match="credential material changed after attestation"):
-        transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
+    for field in (
+        "_G8BoundGitHubReadTransport__token",
+        "_G8BoundGitHubReadTransport__token_fingerprint",
+        "_G8BoundGitHubReadTransport__credential_class",
+        "_G8BoundGitHubReadTransport__attested_principal",
+    ):
+        with pytest.raises(AttributeError):
+            object.__setattr__(transport, field, "replacement")
+
+
+def test_g8_bound_transport_uses_same_re_attested_token_for_provider_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "check-use-continuity-token"
+    transport = G8BoundGitHubReadTransport(
+        token=token,
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+    )
+    expected_principal = transport.credential_principal_identity
+    observed_tokens: list[str] = []
+    provider_tokens: list[str] = []
+
+    def observe(candidate: str) -> str:
+        observed_tokens.append(candidate)
+        return expected_principal
+
+    class CapturingReadTransport:
+        def __init__(self, *, token: str) -> None:
+            provider_tokens.append(token)
+
+        @staticmethod
+        def read_ref(*, repository: str, ref: str) -> str:
+            assert repository == "nulleimy/V-One"
+            assert ref == "refs/heads/main"
+            return "a" * 40
+
+    monkeypatch.setattr(g8_module, "_observe_github_credential_principal", observe)
+    monkeypatch.setattr(g8_module, "GitHubApiRefReadTransport", CapturingReadTransport)
+
+    result = transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
+
+    assert result == "a" * 40
+    assert observed_tokens == [token]
+    assert provider_tokens == [token]
+    assert observed_tokens[0] == provider_tokens[0]
 
 
 def test_real_principal_observer_uses_authenticated_github_user_read(
