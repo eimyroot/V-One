@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from voodoo_product import g8_read_runtime as g8_module
 from voodoo_product.canonical_operation_runtime import CanonicalOperationRuntime
 from voodoo_product.canonical_pipeline import CanonicalOperationPipeline
 from voodoo_product.canonical_read_terminal import VerifierRuntimeProfile
@@ -34,6 +35,10 @@ VERIFIER_CREDENTIAL_CLASS = "github.verifier-read/scoped-v1"
 RUNNER_CLASS = "github-actions.docker-isolated/v1"
 RUNNER_TOKEN = "runner-g8-test-token"
 VERIFIER_TOKEN = "verifier-g8-test-token"
+RUNNER_PRINCIPAL = "github-principal/user/101"
+VERIFIER_PRINCIPAL = "github-principal/user/202"
+
+_REAL_PRINCIPAL_OBSERVER = g8_module._observe_github_credential_principal
 
 
 class FixedClockSource:
@@ -76,11 +81,7 @@ class FakeCapsuleRegistry(ImmutableExecutionCapsuleRegistry):
         return self.capsule
 
 
-class FakeFence(DurableCurrentExecutionFence):
-    def __init__(self, *, db: object, trusted_clock: TrustedClockAuthority) -> None:
-        self.db = db
-        self.trusted_clock = trusted_clock
-
+class BypassFence(DurableCurrentExecutionFence):
     def assert_current(self, **_: object) -> None:
         return None
 
@@ -148,6 +149,19 @@ class ProfileRegistry:
         raise AssertionError("G8 composition test must not resolve a live request")
 
 
+@pytest.fixture(autouse=True)
+def provider_principal_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    def observe(token: str) -> str:
+        if token == RUNNER_TOKEN:
+            return RUNNER_PRINCIPAL
+        if token == VERIFIER_TOKEN:
+            return VERIFIER_PRINCIPAL
+        principal_id = sum((index + 1) * ord(character) for index, character in enumerate(token))
+        return f"github-principal/user/{principal_id}"
+
+    monkeypatch.setattr(g8_module, "_observe_github_credential_principal", observe)
+
+
 def config(tmp_path: Path, *, environment: str = "staging") -> ProductConfig:
     return ProductConfig(
         environment=environment,
@@ -167,16 +181,10 @@ def clock(name: str) -> TrustedClockAuthority:
     )
 
 
-def bound_transport(
-    *,
-    token: str,
-    credential_class: str,
-    credential_identity: str,
-) -> G8BoundGitHubReadTransport:
+def bound_transport(*, token: str, credential_class: str) -> G8BoundGitHubReadTransport:
     return G8BoundGitHubReadTransport(
         token=token,
         credential_class=credential_class,
-        credential_identity=credential_identity,
     )
 
 
@@ -225,7 +233,10 @@ def build_fixture(tmp_path: Path) -> SimpleNamespace:
     )
     runner_clock = clock("g8-runner")
     verifier_clock = clock("g8-verifier")
-    current_fence = FakeFence(db=service.db, trusted_clock=runner_clock)
+    current_fence = DurableCurrentExecutionFence(
+        database=service.db,
+        trusted_clock=runner_clock,
+    )
     runner_provider = GitHubActionsIsolatedRuntimeProvider(
         provider_instance_id="gha:g8:runner:1",
         runner_class=RUNNER_CLASS,
@@ -283,12 +294,10 @@ def build_fixture(tmp_path: Path) -> SimpleNamespace:
         runner_transport=bound_transport(
             token=RUNNER_TOKEN,
             credential_class=RUNNER_CREDENTIAL_CLASS,
-            credential_identity="github-app-installation:g8-runner",
         ),
         verifier_transport=bound_transport(
             token=VERIFIER_TOKEN,
             credential_class=VERIFIER_CREDENTIAL_CLASS,
-            credential_identity="github-app-installation:g8-verifier",
         ),
     )
 
@@ -319,6 +328,65 @@ def pack(fixture: SimpleNamespace, **overrides: object) -> G8ReadRuntimePack:
     }
     values.update(overrides)
     return G8ReadRuntimePack(**values)  # type: ignore[arg-type]
+
+
+def test_g8_bound_transport_derives_principal_from_exact_retained_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[str] = []
+
+    def observe(token: str) -> str:
+        observed.append(token)
+        return "github-principal/user/909"
+
+    monkeypatch.setattr(g8_module, "_observe_github_credential_principal", observe)
+    transport = G8BoundGitHubReadTransport(
+        token="provider-attested-token",
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+    )
+
+    assert observed == ["provider-attested-token"]
+    assert transport.credential_principal_identity == "github-principal/user/909"
+    assert not hasattr(transport, "__dict__")
+
+
+def test_real_principal_observer_uses_authenticated_github_user_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[tuple[str, str, dict[str, str]]] = []
+
+    class Response:
+        status = 200
+
+        @staticmethod
+        def read() -> bytes:
+            return b'{"id":4242,"type":"User"}'
+
+    class Connection:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            assert (host, port, timeout) == ("api.github.com", 443, 15)
+
+        def request(self, method: str, path: str, *, headers: dict[str, str]) -> None:
+            requests.append((method, path, headers))
+
+        @staticmethod
+        def getresponse() -> Response:
+            return Response()
+
+        @staticmethod
+        def close() -> None:
+            return None
+
+    monkeypatch.setattr(g8_module.http.client, "HTTPSConnection", Connection)
+
+    principal = _REAL_PRINCIPAL_OBSERVER("exact-provider-token")
+
+    assert principal == "github-principal/user/4242"
+    assert len(requests) == 1
+    method, path, headers = requests[0]
+    assert method == "GET"
+    assert path == "/user"
+    assert headers["Authorization"] == "Bearer exact-provider-token"
 
 
 def test_g8_builds_only_read_runtime_over_exact_canonical_authority(tmp_path: Path) -> None:
@@ -392,27 +460,41 @@ def test_g8_rejects_shared_runner_and_verifier_transport(tmp_path: Path) -> None
         pack(fixture, verifier_transport=fixture.runner_transport)
 
 
-def test_g8_rejects_shared_credential_identity(tmp_path: Path) -> None:
+def test_g8_rejects_distinct_tokens_for_same_provider_principal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixture = build_fixture(tmp_path)
+    monkeypatch.setattr(
+        g8_module,
+        "_observe_github_credential_principal",
+        lambda token: RUNNER_PRINCIPAL,
+    )
     verifier = bound_transport(
-        token=VERIFIER_TOKEN,
+        token="different-token-same-provider-principal",
         credential_class=VERIFIER_CREDENTIAL_CLASS,
-        credential_identity=fixture.runner_transport.credential_identity,
     )
 
-    with pytest.raises(ValueError, match="credential identities must be distinct"):
+    with pytest.raises(ValueError, match="provider principals must be distinct"):
         pack(fixture, verifier_transport=verifier)
 
 
-def test_g8_rejects_shared_underlying_credential_material(tmp_path: Path) -> None:
+def test_g8_rejects_shared_underlying_credential_material_even_if_observer_is_inconsistent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixture = build_fixture(tmp_path)
+    monkeypatch.setattr(
+        g8_module,
+        "_observe_github_credential_principal",
+        lambda token: "github-principal/user/303",
+    )
     verifier = bound_transport(
         token=RUNNER_TOKEN,
         credential_class=VERIFIER_CREDENTIAL_CLASS,
-        credential_identity="github-app-installation:g8-verifier-different-label",
     )
 
-    with pytest.raises(ValueError, match="credential material must be distinct"):
+    with pytest.raises(ValueError, match="credential material must be distinct|provider principals"):
         pack(fixture, verifier_transport=verifier)
 
 
@@ -428,11 +510,21 @@ def test_g8_rejects_subclass_that_can_add_mutation_surface(tmp_path: Path) -> No
     mutating = MutationTransport(
         token="mutating-g8-test-token",
         credential_class=RUNNER_CREDENTIAL_CLASS,
-        credential_identity="github-app-installation:g8-mutating",
     )
 
     with pytest.raises(ValueError, match="exact G8BoundGitHubReadTransport"):
         pack(fixture, runner_transport=mutating)
+
+
+def test_g8_rejects_subclass_that_can_override_durable_fence(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    bypass = BypassFence(
+        database=fixture.service.db,
+        trusted_clock=fixture.runner_clock,
+    )
+
+    with pytest.raises(ValueError, match="exact DurableCurrentExecutionFence"):
+        pack(fixture, current_fence=bypass)
 
 
 def test_g8_rejects_transport_credential_class_mismatch(tmp_path: Path) -> None:
@@ -440,7 +532,6 @@ def test_g8_rejects_transport_credential_class_mismatch(tmp_path: Path) -> None:
     wrong = bound_transport(
         token="wrong-class-g8-test-token",
         credential_class="github.wrong-read/scoped-v1",
-        credential_identity="github-app-installation:g8-wrong",
     )
 
     with pytest.raises(PermissionError, match="transport is not bound to Runner credential class"):
@@ -476,7 +567,6 @@ def test_g8_rejects_runner_verifier_credential_class_collapse(tmp_path: Path) ->
     collapsed_transport = bound_transport(
         token="collapsed-verifier-token",
         credential_class=RUNNER_CREDENTIAL_CLASS,
-        credential_identity="github-app-installation:g8-collapsed-verifier",
     )
 
     with pytest.raises(PermissionError, match="credential classes must be distinct"):
@@ -559,7 +649,10 @@ def test_g8_rejects_product_runner_environment_mismatch(tmp_path: Path) -> None:
 def test_g8_rejects_current_fence_from_parallel_database(tmp_path: Path) -> None:
     fixture = build_fixture(tmp_path)
     other_service = ProductService(config(tmp_path / "other"))
-    foreign_fence = FakeFence(db=other_service.db, trusted_clock=fixture.runner_clock)
+    foreign_fence = DurableCurrentExecutionFence(
+        database=other_service.db,
+        trusted_clock=fixture.runner_clock,
+    )
 
     with pytest.raises(ValueError, match="current fence must use the product database"):
         pack(fixture, current_fence=foreign_fence).build_runtime(
