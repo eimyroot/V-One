@@ -372,6 +372,25 @@ def test_g8_bound_transport_reattests_principal_from_exact_retained_token(
         transport.credential_principal_identity = "github-principal/user/1"  # type: ignore[misc]
     with pytest.raises(AttributeError):
         transport.credential_class = "github.widened/scoped-v1"  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        transport._G8BoundGitHubReadTransport__token = "replacement-token"  # type: ignore[misc]
+
+
+def test_g8_bound_transport_detects_low_level_token_change_before_provider_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = G8BoundGitHubReadTransport(
+        token="original-token",
+        credential_class=RUNNER_CREDENTIAL_CLASS,
+    )
+    object.__setattr__(
+        transport,
+        "_G8BoundGitHubReadTransport__token",
+        "replacement-token",
+    )
+
+    with pytest.raises(PermissionError, match="credential material changed after attestation"):
+        transport.read_ref(repository="nulleimy/V-One", ref="refs/heads/main")
 
 
 def test_real_principal_observer_uses_authenticated_github_user_read(
