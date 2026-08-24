@@ -36,6 +36,8 @@ from .verifier_observation import VerifierGitHubRefReadHandler
 GITHUB_API_AUDIENCE: Final = "api.github.com"
 _GITHUB_API_HOST: Final = "api.github.com"
 _GITHUB_API_VERSION: Final = "2022-11-28"
+_DURABLE_FENCE_ASSERT_CURRENT: Final = DurableCurrentExecutionFence.assert_current
+_EXPECTED_DURABLE_FENCE_INSTANCE_FIELDS: Final = frozenset({"db", "trusted_clock"})
 
 
 def _require_text(value: object, *, field: str) -> str:
@@ -61,12 +63,12 @@ def _require_digest(value: object, *, field: str) -> str:
 
 
 def _observe_github_credential_principal(token: str) -> str:
-    """Resolve the provider principal authenticated by the exact credential material.
+    """Resolve the GitHub principal authenticated by the exact credential material.
 
     R1 deliberately supports only credentials for which GitHub's authenticated-user READ endpoint
-    returns a stable numeric principal id. Installation credentials that cannot prove a principal
-    through this endpoint fail closed rather than being labeled by caller input. This is a READ-only
-    provider observation and does not serialize the token or provider response into V-One evidence.
+    returns a stable numeric principal id. Credentials that cannot prove a principal through this
+    endpoint fail closed rather than being labeled by caller input. This is a READ-only provider
+    observation and does not serialize the token or provider response into V-One evidence.
     """
 
     connection = http.client.HTTPSConnection(_GITHUB_API_HOST, 443, timeout=15)
@@ -101,24 +103,39 @@ def _observe_github_credential_principal(token: str) -> str:
     principal_type = payload.get("type")
     if isinstance(principal_id, bool) or not isinstance(principal_id, int) or principal_id < 1:
         raise RuntimeError("G8 GitHub credential principal id is invalid")
-    if not isinstance(principal_type, str) or not principal_type or principal_type != principal_type.strip():
+    if (
+        not isinstance(principal_type, str)
+        or not principal_type
+        or principal_type != principal_type.strip()
+    ):
         raise RuntimeError("G8 GitHub credential principal type is invalid")
     return f"github-principal/{principal_type.casefold()}/{principal_id}"
 
 
+def _assert_pristine_durable_fence(fence: object) -> DurableCurrentExecutionFence:
+    """Reject subclass and instance-level replacement of the released fence implementation."""
+
+    if type(fence) is not DurableCurrentExecutionFence:
+        raise ValueError("current_fence must be exact DurableCurrentExecutionFence")
+    if DurableCurrentExecutionFence.assert_current is not _DURABLE_FENCE_ASSERT_CURRENT:
+        raise ValueError("DurableCurrentExecutionFence implementation changed after G8 import")
+    if frozenset(vars(fence)) != _EXPECTED_DURABLE_FENCE_INSTANCE_FIELDS:
+        raise ValueError("current_fence instance state is not pristine")
+    bound_assert_current = getattr(fence, "assert_current", None)
+    if getattr(bound_assert_current, "__func__", None) is not _DURABLE_FENCE_ASSERT_CURRENT:
+        raise ValueError("current_fence assert_current implementation is not canonical")
+    return fence
+
+
 class G8BoundGitHubReadTransport:
-    """Closed G8-owned GitHub READ port bound to provider-observed credential provenance.
+    """Closed G8-owned GitHub READ port with provider-attested credential provenance.
 
-    The object exposes only ``read_ref`` plus non-secret credential metadata required by the
-    composition gate. It has no ``__dict__`` and the default pack requires the exact class, so a
-    caller cannot subclass it or attach a second provider method to widen the retained runtime
-    surface. The token remains in one private slot and is never returned or serialized.
-
-    ``credential_principal_identity`` is derived from GitHub's authenticated-user response using the
-    exact token retained by this transport; callers cannot supply that identity independently.
+    Only the token and credential class are retained, both in private slots. Provider principal
+    identity is never stored in caller-writable state: each composition check derives it afresh from
+    GitHub's authenticated-user endpoint using the exact private token that later performs READs.
     """
 
-    __slots__ = ("__token", "credential_class", "credential_principal_identity")
+    __slots__ = ("__token", "__credential_class")
 
     source_identity: Final = GITHUB_API_SOURCE_IDENTITY
 
@@ -129,22 +146,26 @@ class G8BoundGitHubReadTransport:
         credential_class: str,
     ) -> None:
         token = _require_text(token, field="token")
-        # Reuse the concrete ref transport constructor as the canonical validation of provider config.
         GitHubApiRefReadTransport(token=token)
-        principal_identity = _observe_github_credential_principal(token)
-        self.__token = token
-        self.credential_class = _require_text(
+        credential_class = _require_text(
             credential_class,
             field="credential_class",
         )
-        self.credential_principal_identity = _require_text(
-            principal_identity,
-            field="credential_principal_identity",
-        )
+        # Fail closed immediately if the exact credential cannot attest a provider principal.
+        _observe_github_credential_principal(token)
+        self.__token = token
+        self.__credential_class = credential_class
+
+    @property
+    def credential_class(self) -> str:
+        return self.__credential_class
+
+    @property
+    def credential_principal_identity(self) -> str:
+        # Re-attest from the exact retained token instead of trusting cached/caller-writable metadata.
+        return _observe_github_credential_principal(self.__token)
 
     def read_ref(self, *, repository: str, ref: str) -> str:
-        # The delegated implementation is hard-coded to HTTPS GET against api.github.com and exposes
-        # no mutation operation. A new instance keeps the private token out of any returned object.
         return GitHubApiRefReadTransport(token=self.__token).read_ref(
             repository=repository,
             ref=ref,
@@ -162,12 +183,9 @@ class G8ReadRuntimePack:
 
     G8 owns only provider/runtime composition. G1-G7 authority, durable dispatch, terminal-profile
     selection, and lease allocation are supplied by one already-canonical ``CanonicalOperationPipeline``.
-    This pack refuses parallel databases, permission authorities, capability/capsule registries,
-    current fences, coordinators, or mutation-capable provider transports.
-
-    Credential bytes are confined to closed transport private slots. The assembler never reads
-    ambient credential environment variables and never serializes credential material into V-One
-    evidence.
+    The caller-supplied durable fence is accepted only as canonical composition provenance; the
+    runtime retains a newly constructed exact fence over the same canonical DB and trusted clock so
+    instance-level monkeypatching of the source fence cannot cross into execution.
     """
 
     pipeline: CanonicalOperationPipeline
@@ -197,8 +215,7 @@ class G8ReadRuntimePack:
             raise ValueError("pipeline must be exact CanonicalOperationPipeline")
         if not isinstance(self.capsule_registry, ImmutableExecutionCapsuleRegistry):
             raise ValueError("capsule_registry must be ImmutableExecutionCapsuleRegistry")
-        if type(self.current_fence) is not DurableCurrentExecutionFence:
-            raise ValueError("current_fence must be exact DurableCurrentExecutionFence")
+        _assert_pristine_durable_fence(self.current_fence)
         if type(self.runner_provider) is not GitHubActionsIsolatedRuntimeProvider:
             raise ValueError("runner_provider must be exact GitHubActionsIsolatedRuntimeProvider")
         if type(self.runner_clock) is not TrustedClockAuthority:
@@ -218,13 +235,12 @@ class G8ReadRuntimePack:
             raise ValueError("verifier_transport must be exact G8BoundGitHubReadTransport")
         if self.runner_transport is self.verifier_transport:
             raise ValueError("runner and verifier transports must be distinct instances")
-        if (
-            self.runner_transport.credential_principal_identity
-            == self.verifier_transport.credential_principal_identity
-        ):
-            raise ValueError("runner and verifier provider principals must be distinct")
         if self.runner_transport._shares_credential_material(self.verifier_transport):
             raise ValueError("runner and verifier credential material must be distinct")
+        runner_principal = self.runner_transport.credential_principal_identity
+        verifier_principal = self.verifier_transport.credential_principal_identity
+        if runner_principal == verifier_principal:
+            raise ValueError("runner and verifier provider principals must be distinct")
 
         for field in (
             "runner_credential_decision_revision",
@@ -251,16 +267,30 @@ class G8ReadRuntimePack:
     ) -> CanonicalOperationRuntime:
         """Build the G8 READ-only runtime only when every canonical binding is exact."""
 
-        if not isinstance(service, ProductService):
-            raise ValueError("service must be ProductService")
-        if not isinstance(permission_authority, DatabasePermissionAuthority):
-            raise ValueError("permission_authority must be DatabasePermissionAuthority")
+        if type(service) is not ProductService:
+            raise ValueError("service must be exact ProductService")
+        if type(permission_authority) is not DatabasePermissionAuthority:
+            raise ValueError("permission_authority must be exact DatabasePermissionAuthority")
         if service.config.environment == "production":
             raise PermissionError("G8 R1 cannot install into a production ProductService")
         if service.config.environment != self.runner_provider.environment:
             raise PermissionError("G8 product and Runner environments must match")
         if permission_authority.db is not service.db:
             raise ValueError("G8 permission authority must use the product database")
+
+        source_fence = _assert_pristine_durable_fence(self.current_fence)
+        if source_fence.db is not service.db:
+            raise ValueError("G8 current fence must use the product database")
+        if source_fence.trusted_clock is not self.runner_clock:
+            raise ValueError("G8 Runner and current fence must share the trusted clock")
+
+        # Never retain the caller-owned fence object. The runtime gets a new exact implementation
+        # over canonical DB/clock authority, shared by resume, activation and final pre-READ checks.
+        runtime_fence = DurableCurrentExecutionFence(
+            database=service.db,
+            trusted_clock=self.runner_clock,
+        )
+        _assert_pristine_durable_fence(runtime_fence)
 
         pipeline = self.pipeline
         snapshot_creator = pipeline.snapshot_creator
@@ -301,11 +331,6 @@ class G8ReadRuntimePack:
         if getattr(binding_authority, "registry", None) is not self.capsule_registry:
             raise ValueError("G8 grant binding authority must use the canonical capsule registry")
 
-        if self.current_fence.db is not service.db:
-            raise ValueError("G8 current fence must use the product database")
-        if self.current_fence.trusted_clock is not self.runner_clock:
-            raise ValueError("G8 Runner and current fence must share the trusted clock")
-
         definition = capability_registry.definition_by_identity(
             self.read_capability_definition_identity
         )
@@ -333,14 +358,14 @@ class G8ReadRuntimePack:
         runner_adapter = IsolatedRunnerAdapter(
             provider=self.runner_provider,
             credential_broker=broker,
-            current_fence=self.current_fence,
+            current_fence=runtime_fence,
             identity_revision=self.runner_identity_revision,
             boundary_revision=self.runner_boundary_revision,
             activation_revision=self.runner_activation_revision,
         )
         runner_handler = GitHubRefReadHandler(
             transport=self.runner_transport,
-            current_fence=self.current_fence,
+            current_fence=runtime_fence,
             trusted_clock=self.runner_clock,
             observation_revision=self.runner_observation_revision,
         )
@@ -368,11 +393,10 @@ class G8ReadRuntimePack:
             snapshot_store=snapshot_store,
             permission_authority=permission_authority,
             terminal_profile_registry=pipeline.terminal_profile_registry,
-            current_fence=self.current_fence,
+            current_fence=runtime_fence,
             envelope_revision=pipeline.envelope_revision,
         )
 
-        # A09 preparers are intentionally absent. G8 has no provider WRITE or rollback path.
         return CanonicalOperationRuntime(
             pipeline=pipeline,
             read_terminal=read_terminal,
@@ -437,10 +461,10 @@ class G8ReadRuntimePack:
 def create_g8_read_runtime_factory(
     pack: G8ReadRuntimePack,
 ) -> Callable[[ProductService, DatabasePermissionAuthority], CanonicalOperationRuntime]:
-    """Adapt a validated G8 pack to ProductComposition's canonical runtime factory seam."""
+    """Adapt an exact G8 pack to ProductComposition's canonical runtime factory seam."""
 
-    if not isinstance(pack, G8ReadRuntimePack):
-        raise ValueError("pack must be G8ReadRuntimePack")
+    if type(pack) is not G8ReadRuntimePack:
+        raise ValueError("pack must be exact G8ReadRuntimePack")
 
     def factory(
         service: ProductService,
