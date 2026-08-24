@@ -553,6 +553,15 @@ def _build_pinned_runner_handler(
             activation: ReadOnlyRuntimeActivation,
             target: ExecutionTarget,
         ) -> GitHubRefObservation:
+            state = object.__getattribute__(self, "__dict__")
+            if state.get("transport") is not expected_transport:
+                raise PermissionError("G8 Runner handler credential role mismatch")
+            if state.get("current_fence") is not expected_fence:
+                raise PermissionError("G8 Runner handler current fence binding changed")
+            if state.get("trusted_clock") is not expected_clock:
+                raise PermissionError("G8 Runner handler trusted clock binding changed")
+            if state.get("observation_revision") != expected_revision:
+                raise PermissionError("G8 Runner handler observation revision changed")
             return _G8_ROLE_BOUND_RUNNER_OBSERVE(
                 self,
                 prepared=prepared,
@@ -613,6 +622,13 @@ def _build_pinned_verifier_handler(
             decision: VerifierCredentialDecision,
             target: ExecutionTarget,
         ) -> VerifierGitHubRefObservation:
+            state = object.__getattribute__(self, "__dict__")
+            if state.get("transport") is not expected_transport:
+                raise PermissionError("G8 Verifier handler credential role mismatch")
+            if state.get("trusted_clock") is not expected_clock:
+                raise PermissionError("G8 Verifier handler trusted clock binding changed")
+            if state.get("observation_revision") != expected_revision:
+                raise PermissionError("G8 Verifier handler observation revision changed")
             return _G8_ROLE_BOUND_VERIFIER_OBSERVE(
                 self,
                 verifier=verifier,
@@ -717,6 +733,29 @@ def _build_pinned_read_terminal(
             super().__setattr__(name, value)
 
         def run(self, *, prepared: CanonicalPreparedExecution) -> CanonicalReadTerminalResult:
+            state = object.__getattribute__(self, "__dict__")
+            identity_bindings = (
+                ("capability_registry", expected_capability_registry),
+                ("capsule_registry", expected_capsule_registry),
+                ("runner_adapter", expected_runner_adapter),
+                ("runner_handler", expected_runner_handler),
+                ("completion_coordinator", expected_completion_coordinator),
+                ("verifier_profile", expected_verifier_profile),
+                ("verifier_policy", expected_verifier_policy),
+                ("verifier_handler", expected_verifier_handler),
+                ("verifier_clock", expected_verifier_clock),
+            )
+            for field, expected in identity_bindings:
+                if state.get(field) is not expected:
+                    raise PermissionError(f"G8 READ terminal {field} binding changed")
+            value_bindings = (
+                ("observed_post_state_revision", expected_observed_post_state_revision),
+                ("strength_revision", expected_strength_revision),
+                ("result_revision", expected_result_revision),
+            )
+            for field, expected in value_bindings:
+                if state.get(field) != expected:
+                    raise PermissionError(f"G8 READ terminal {field} binding changed")
             return _CANONICAL_READ_TERMINAL_RUN(self, prepared=prepared)
 
     terminal = object.__new__(_PinnedCanonicalGitHubReadTerminal)
