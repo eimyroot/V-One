@@ -445,7 +445,7 @@ def test_g8_runtime_pair_uses_pinned_get_only_provider_after_module_rebind(
 
         @staticmethod
         def read() -> bytes:
-            return (b'{"object":{"sha":"' + (b"a" * 40) + b'"}}')
+            return b'{"object":{"sha":"' + (b"a" * 40) + b'"}}'
 
     class Connection:
         def __init__(self, host: str, port: int, timeout: int) -> None:
@@ -896,4 +896,57 @@ def test_g8_rejects_current_fence_from_parallel_database(tmp_path: Path) -> None
         pack(fixture, current_fence=foreign_fence).build_runtime(
             service=fixture.service,
             permission_authority=fixture.permission,
+        )
+
+
+def test_g8_role_bound_handlers_reject_direct_transport_rebinding(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.read_terminal is not None
+    runner_handler = runtime.read_terminal.runner_handler
+    verifier_handler = runtime.read_terminal.verifier_handler
+    runner_effect_transport = runner_handler.transport
+    verifier_effect_transport = verifier_handler.transport
+
+    with pytest.raises(AttributeError, match="Runner handler transport binding is immutable"):
+        runner_handler.transport = verifier_effect_transport
+    with pytest.raises(AttributeError, match="Verifier handler transport binding is immutable"):
+        verifier_handler.transport = runner_effect_transport
+
+    assert runner_handler.transport is runner_effect_transport
+    assert verifier_handler.transport is verifier_effect_transport
+
+
+def test_g8_role_bound_handlers_fail_closed_after_object_setattr_role_swap(
+    tmp_path: Path,
+) -> None:
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.read_terminal is not None
+    runner_handler = runtime.read_terminal.runner_handler
+    verifier_handler = runtime.read_terminal.verifier_handler
+    runner_effect_transport = runner_handler.transport
+    verifier_effect_transport = verifier_handler.transport
+
+    object.__setattr__(runner_handler, "transport", verifier_effect_transport)
+    with pytest.raises(PermissionError, match="Runner handler credential role mismatch"):
+        runner_handler.observe_ref(
+            prepared=object(),  # type: ignore[arg-type]
+            activation=object(),  # type: ignore[arg-type]
+            target=object(),  # type: ignore[arg-type]
+        )
+
+    object.__setattr__(verifier_handler, "transport", runner_effect_transport)
+    with pytest.raises(PermissionError, match="Verifier handler credential role mismatch"):
+        verifier_handler.observe_ref(
+            verifier=object(),  # type: ignore[arg-type]
+            boundary=object(),  # type: ignore[arg-type]
+            decision=object(),  # type: ignore[arg-type]
+            target=object(),  # type: ignore[arg-type]
         )
