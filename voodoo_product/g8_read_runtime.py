@@ -12,11 +12,13 @@ from .capability_registry import ImmutableCapabilityRegistry
 from .credential_broker import CredentialBrokerPolicy, ImmutableCredentialBroker
 from .durable_current_fence import DurableCurrentExecutionFence
 from .execution_capsule import ImmutableExecutionCapsuleRegistry
-from .github_actions_runtime import GitHubActionsIsolatedRuntimeProvider
+from .github_actions_runtime import (
+    GitHubActionsIsolatedRuntimeProvider,
+    GitHubApiRefReadTransport,
+)
 from .github_read_provider import (
     GITHUB_READ_REF_CAPABILITY,
     GITHUB_REF_TARGET_KIND,
-    GitHubReadTransport,
     GitHubRefReadHandler,
 )
 from .isolated_runner import IsolatedRunnerAdapter
@@ -29,9 +31,10 @@ from .verifier_observation import VerifierGitHubRefReadHandler
 
 GITHUB_API_AUDIENCE: Final = "api.github.com"
 
-# A G8 transport is deliberately narrower than a generic HTTP/provider client. Structural
-# GitHubReadTransport conformance alone does not prohibit an implementation from exposing an
-# additional mutation surface, so the default pack rejects common mutation/generic request ports.
+# The default G8 pack intentionally accepts only the concrete transport whose implementation is
+# hard-coded to GitHub's HTTPS GET ref endpoint. A structural GitHubReadTransport implementation is
+# insufficient proof: a custom ``read_ref`` method could hide a mutation internally while satisfying
+# the narrow Protocol. Exact type checking also prevents a subclass from overriding ``read_ref``.
 _FORBIDDEN_TRANSPORT_METHODS: Final = frozenset(
     {
         "create_ref",
@@ -71,9 +74,13 @@ def _require_digest(value: object, *, field: str) -> str:
     return text
 
 
-def _assert_narrow_read_transport(transport: object, *, field: str) -> GitHubReadTransport:
-    if not isinstance(transport, GitHubReadTransport):
-        raise ValueError(f"{field} must implement GitHubReadTransport")
+def _assert_narrow_read_transport(
+    transport: object,
+    *,
+    field: str,
+) -> GitHubApiRefReadTransport:
+    if type(transport) is not GitHubApiRefReadTransport:
+        raise ValueError(f"{field} must be exact GitHubApiRefReadTransport")
     _require_text(transport.source_identity, field=f"{field}.source_identity")
     widened = sorted(
         name
@@ -94,16 +101,16 @@ class G8ReadRuntimePack:
     This pack refuses parallel databases, permission authorities, capability/capsule registries,
     current fences, coordinators, or mutation-shaped provider transports.
 
-    Credential bytes are intentionally outside this object. Concrete READ transports may privately
-    hold separately supplied credentials, but this assembler never reads ambient environment
-    variables and never serializes credential material into V-One evidence.
+    Credential bytes are intentionally outside V-One evidence. The two concrete GET-only transports
+    privately retain explicitly supplied credentials, while this assembler never reads ambient
+    environment variables and never serializes credential material into V-One evidence.
     """
 
     pipeline: CanonicalOperationPipeline
     capsule_registry: ImmutableExecutionCapsuleRegistry
     current_fence: DurableCurrentExecutionFence
     runner_provider: GitHubActionsIsolatedRuntimeProvider
-    runner_transport: GitHubReadTransport
+    runner_transport: GitHubApiRefReadTransport
     runner_clock: TrustedClockAuthority
     runner_credential_policy: CredentialBrokerPolicy
     runner_credential_decision_revision: str
@@ -113,7 +120,7 @@ class G8ReadRuntimePack:
     runner_observation_revision: str
     verifier_profile: VerifierRuntimeProfile
     verifier_policy: VerifierCredentialPolicy
-    verifier_transport: GitHubReadTransport
+    verifier_transport: GitHubApiRefReadTransport
     verifier_clock: TrustedClockAuthority
     verifier_observation_revision: str
     observed_post_state_revision: str
