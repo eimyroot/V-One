@@ -6,7 +6,7 @@ import json
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar, Final
+from typing import ClassVar, Final, NamedTuple
 from weakref import WeakKeyDictionary
 
 from .canonical_operation_resume import CanonicalOperationResumeService
@@ -141,8 +141,14 @@ class _CredentialBinding:
     attested_principal: str
 
 
+class _CredentialPin(NamedTuple):
+    token_fingerprint: str
+    credential_class: str
+    attested_principal: str
+
+
 def _build_g8_bound_github_read_transport_type() -> type:
-    """Create the closed transport with credential state outside caller-retained instances."""
+    """Create the credential source with binding state outside caller-retained instances."""
 
     bindings: WeakKeyDictionary[object, _CredentialBinding] = WeakKeyDictionary()
 
@@ -164,12 +170,11 @@ def _build_g8_bound_github_read_transport_type() -> type:
         return binding
 
     class G8BoundGitHubReadTransport:
-        """Closed GitHub READ port whose credential binding is closure-owned.
+        """Closed credential source; direct provider effects are intentionally disabled.
 
-        The caller-retained transport instance has no token, fingerprint, credential-class, or
-        provider-attestation slot. Those values live in a private closure-owned registry. Each READ
-        captures one immutable binding snapshot, re-attests the exact local token, then passes that
-        same local token to the provider transport so validation and use cannot diverge.
+        Binding state is closure-owned, but R1 does not trust that registry by itself. Runtime
+        construction separately pins both Runner and Verifier identities into an immutable pair
+        transport. Only that pair transport is retained by the provider-effect handlers.
         """
 
         __slots__ = ("__weakref__",)
@@ -204,13 +209,44 @@ def _build_g8_bound_github_read_transport_type() -> type:
         def credential_principal_identity(self) -> str:
             return validated_binding(self).attested_principal
 
-        def read_ref(self, *, repository: str, ref: str) -> str:
+        @property
+        def credential_fingerprint(self) -> str:
+            return validated_binding(self).token_fingerprint
+
+        def _pin_snapshot(self) -> _CredentialPin:
             binding = validated_binding(self)
+            return _CredentialPin(
+                token_fingerprint=binding.token_fingerprint,
+                credential_class=binding.credential_class,
+                attested_principal=binding.attested_principal,
+            )
+
+        def _read_ref_with_pin(
+            self,
+            *,
+            pin: _CredentialPin,
+            repository: str,
+            ref: str,
+        ) -> str:
+            if type(pin) is not _CredentialPin:
+                raise ValueError("G8 credential pin is invalid")
+            binding = validated_binding(self)
+            current_pin = _CredentialPin(
+                token_fingerprint=binding.token_fingerprint,
+                credential_class=binding.credential_class,
+                attested_principal=binding.attested_principal,
+            )
+            if current_pin != pin:
+                raise PermissionError("G8 credential binding changed after runtime pinning")
             token = binding.token
             return GitHubApiRefReadTransport(token=token).read_ref(
                 repository=repository,
                 ref=ref,
             )
+
+        def read_ref(self, *, repository: str, ref: str) -> str:
+            del repository, ref
+            raise PermissionError("G8 unpinned credential source cannot perform provider READ")
 
         def _shares_credential_material(self, other: object) -> bool:
             if type(other) is not G8BoundGitHubReadTransport:
@@ -223,6 +259,58 @@ def _build_g8_bound_github_read_transport_type() -> type:
 
 
 G8BoundGitHubReadTransport = _build_g8_bound_github_read_transport_type()
+
+
+class _G8IndependentCredentialPairTransport(NamedTuple):
+    """Immutable use-time guard over both independently pinned credential sources."""
+
+    runner_transport: object
+    verifier_transport: object
+    role: str
+    runner_pin: _CredentialPin
+    verifier_pin: _CredentialPin
+
+    @property
+    def source_identity(self) -> str:
+        return GITHUB_API_SOURCE_IDENTITY
+
+    def read_ref(self, *, repository: str, ref: str) -> str:
+        runner_transport = self.runner_transport
+        verifier_transport = self.verifier_transport
+        if type(runner_transport) is not G8BoundGitHubReadTransport:
+            raise PermissionError("G8 Runner credential source type changed")
+        if type(verifier_transport) is not G8BoundGitHubReadTransport:
+            raise PermissionError("G8 Verifier credential source type changed")
+        if self.role not in {"runner", "verifier"}:
+            raise PermissionError("G8 credential pair role is invalid")
+
+        runner_now = runner_transport._pin_snapshot()
+        verifier_now = verifier_transport._pin_snapshot()
+        if runner_now != self.runner_pin:
+            raise PermissionError("G8 Runner credential changed after runtime pinning")
+        if verifier_now != self.verifier_pin:
+            raise PermissionError("G8 Verifier credential changed after runtime pinning")
+        if secrets.compare_digest(
+            runner_now.token_fingerprint,
+            verifier_now.token_fingerprint,
+        ):
+            raise PermissionError("G8 Runner and Verifier credential material collapsed")
+        if runner_now.attested_principal == verifier_now.attested_principal:
+            raise PermissionError("G8 Runner and Verifier provider principals collapsed")
+        if runner_now.credential_class == verifier_now.credential_class:
+            raise PermissionError("G8 Runner and Verifier credential classes collapsed")
+
+        if self.role == "runner":
+            return runner_transport._read_ref_with_pin(
+                pin=self.runner_pin,
+                repository=repository,
+                ref=ref,
+            )
+        return verifier_transport._read_ref_with_pin(
+            pin=self.verifier_pin,
+            repository=repository,
+            ref=ref,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,6 +485,35 @@ class G8ReadRuntimePack:
 
         self._validate_runtime_ceiling(definition=definition, capsule=capsule)
 
+        runner_pin = self.runner_transport._pin_snapshot()
+        verifier_pin = self.verifier_transport._pin_snapshot()
+        if runner_pin.credential_class != self.runner_credential_policy.credential_class:
+            raise PermissionError("G8 Runner runtime pin credential class mismatch")
+        if verifier_pin.credential_class != self.verifier_policy.credential_class:
+            raise PermissionError("G8 Verifier runtime pin credential class mismatch")
+        if secrets.compare_digest(
+            runner_pin.token_fingerprint,
+            verifier_pin.token_fingerprint,
+        ):
+            raise PermissionError("G8 Runner and Verifier runtime pin material collapsed")
+        if runner_pin.attested_principal == verifier_pin.attested_principal:
+            raise PermissionError("G8 Runner and Verifier runtime pin principals collapsed")
+
+        runner_effect_transport = _G8IndependentCredentialPairTransport(
+            runner_transport=self.runner_transport,
+            verifier_transport=self.verifier_transport,
+            role="runner",
+            runner_pin=runner_pin,
+            verifier_pin=verifier_pin,
+        )
+        verifier_effect_transport = _G8IndependentCredentialPairTransport(
+            runner_transport=self.runner_transport,
+            verifier_transport=self.verifier_transport,
+            role="verifier",
+            runner_pin=runner_pin,
+            verifier_pin=verifier_pin,
+        )
+
         broker = ImmutableCredentialBroker(
             policies=(self.runner_credential_policy,),
             decision_revision=self.runner_credential_decision_revision,
@@ -410,13 +527,13 @@ class G8ReadRuntimePack:
             activation_revision=self.runner_activation_revision,
         )
         runner_handler = GitHubRefReadHandler(
-            transport=self.runner_transport,
+            transport=runner_effect_transport,
             current_fence=runtime_fence,
             trusted_clock=self.runner_clock,
             observation_revision=self.runner_observation_revision,
         )
         verifier_handler = VerifierGitHubRefReadHandler(
-            transport=self.verifier_transport,
+            transport=verifier_effect_transport,
             trusted_clock=self.verifier_clock,
             observation_revision=self.verifier_observation_revision,
         )
