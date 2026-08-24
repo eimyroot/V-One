@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import ClassVar, Final
 
 from .canonical_operation_resume import CanonicalOperationResumeService
 from .canonical_operation_runtime import CanonicalOperationRuntime
@@ -60,6 +61,10 @@ def _require_digest(value: object, *, field: str) -> str:
     ):
         raise ValueError(f"{field} must be a lowercase SHA-256 digest")
     return text
+
+
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _observe_github_credential_principal(token: str) -> str:
@@ -127,17 +132,22 @@ def _assert_pristine_durable_fence(fence: object) -> DurableCurrentExecutionFenc
     return fence
 
 
+@dataclass(frozen=True, slots=True, init=False)
 class G8BoundGitHubReadTransport:
-    """Closed G8-owned GitHub READ port with provider-attested credential provenance.
+    """Closed immutable GitHub READ port with provider-attested credential provenance.
 
-    Only the token and credential class are retained, both in private slots. Provider principal
-    identity is never stored in caller-writable state: each composition check derives it afresh from
-    GitHub's authenticated-user endpoint using the exact private token that later performs READs.
+    The exact token, its fingerprint, credential class and initial provider attestation are retained
+    only in frozen private slots. The credential fingerprint and provider principal are revalidated
+    immediately before every provider READ, so credential substitution after composition fails closed
+    at the effect boundary rather than silently collapsing Runner and Verifier authority.
     """
 
-    __slots__ = ("__token", "__credential_class")
+    __token: str
+    __token_fingerprint: str
+    __credential_class: str
+    __attested_principal: str
 
-    source_identity: Final = GITHUB_API_SOURCE_IDENTITY
+    source_identity: ClassVar[str] = GITHUB_API_SOURCE_IDENTITY
 
     def __init__(
         self,
@@ -151,10 +161,23 @@ class G8BoundGitHubReadTransport:
             credential_class,
             field="credential_class",
         )
-        # Fail closed immediately if the exact credential cannot attest a provider principal.
-        _observe_github_credential_principal(token)
-        self.__token = token
-        self.__credential_class = credential_class
+        principal = _observe_github_credential_principal(token)
+        object.__setattr__(self, "_G8BoundGitHubReadTransport__token", token)
+        object.__setattr__(
+            self,
+            "_G8BoundGitHubReadTransport__token_fingerprint",
+            _token_fingerprint(token),
+        )
+        object.__setattr__(
+            self,
+            "_G8BoundGitHubReadTransport__credential_class",
+            credential_class,
+        )
+        object.__setattr__(
+            self,
+            "_G8BoundGitHubReadTransport__attested_principal",
+            principal,
+        )
 
     @property
     def credential_class(self) -> str:
@@ -162,10 +185,19 @@ class G8BoundGitHubReadTransport:
 
     @property
     def credential_principal_identity(self) -> str:
-        # Re-attest from the exact retained token instead of trusting cached/caller-writable metadata.
-        return _observe_github_credential_principal(self.__token)
+        return self._assert_credential_current()
+
+    def _assert_credential_current(self) -> str:
+        current_fingerprint = _token_fingerprint(self.__token)
+        if not secrets.compare_digest(current_fingerprint, self.__token_fingerprint):
+            raise PermissionError("G8 credential material changed after attestation")
+        current_principal = _observe_github_credential_principal(self.__token)
+        if current_principal != self.__attested_principal:
+            raise PermissionError("G8 credential principal changed after attestation")
+        return current_principal
 
     def read_ref(self, *, repository: str, ref: str) -> str:
+        self._assert_credential_current()
         return GitHubApiRefReadTransport(token=self.__token).read_ref(
             repository=repository,
             ref=ref,
@@ -174,6 +206,8 @@ class G8BoundGitHubReadTransport:
     def _shares_credential_material(self, other: G8BoundGitHubReadTransport) -> bool:
         if type(other) is not G8BoundGitHubReadTransport:
             raise ValueError("credential comparison requires closed G8 transport")
+        self._assert_credential_current()
+        other._assert_credential_current()
         return secrets.compare_digest(self.__token, other.__token)
 
 
@@ -284,8 +318,6 @@ class G8ReadRuntimePack:
         if source_fence.trusted_clock is not self.runner_clock:
             raise ValueError("G8 Runner and current fence must share the trusted clock")
 
-        # Never retain the caller-owned fence object. The runtime gets a new exact implementation
-        # over canonical DB/clock authority, shared by resume, activation and final pre-READ checks.
         runtime_fence = DurableCurrentExecutionFence(
             database=service.db,
             trusted_clock=self.runner_clock,
