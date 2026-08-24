@@ -86,6 +86,19 @@ class BypassFence(DurableCurrentExecutionFence):
         return None
 
 
+class ProductServiceSubclass(ProductService):
+    pass
+
+
+class PermissionAuthoritySubclass(DatabasePermissionAuthority):
+    pass
+
+
+class BypassPack(G8ReadRuntimePack):
+    def build_runtime(self, **_: object) -> CanonicalOperationRuntime:
+        raise AssertionError("subclass build_runtime must never be retained")
+
+
 class SnapshotStore:
     def __init__(self, db: object) -> None:
         self.db = db
@@ -302,7 +315,7 @@ def build_fixture(tmp_path: Path) -> SimpleNamespace:
     )
 
 
-def pack(fixture: SimpleNamespace, **overrides: object) -> G8ReadRuntimePack:
+def pack_values(fixture: SimpleNamespace, **overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
         "pipeline": fixture.pipeline,
         "capsule_registry": fixture.capsule_registry,
@@ -327,10 +340,14 @@ def pack(fixture: SimpleNamespace, **overrides: object) -> G8ReadRuntimePack:
         "read_capability_definition_identity": READ_DEFINITION_ID,
     }
     values.update(overrides)
-    return G8ReadRuntimePack(**values)  # type: ignore[arg-type]
+    return values
 
 
-def test_g8_bound_transport_derives_principal_from_exact_retained_token(
+def pack(fixture: SimpleNamespace, **overrides: object) -> G8ReadRuntimePack:
+    return G8ReadRuntimePack(**pack_values(fixture, **overrides))  # type: ignore[arg-type]
+
+
+def test_g8_bound_transport_reattests_principal_from_exact_retained_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observed: list[str] = []
@@ -347,7 +364,14 @@ def test_g8_bound_transport_derives_principal_from_exact_retained_token(
 
     assert observed == ["provider-attested-token"]
     assert transport.credential_principal_identity == "github-principal/user/909"
+    assert observed == ["provider-attested-token", "provider-attested-token"]
+    assert transport.credential_class == RUNNER_CREDENTIAL_CLASS
     assert not hasattr(transport, "__dict__")
+
+    with pytest.raises(AttributeError):
+        transport.credential_principal_identity = "github-principal/user/1"  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        transport.credential_class = "github.widened/scoped-v1"  # type: ignore[misc]
 
 
 def test_real_principal_observer_uses_authenticated_github_user_read(
@@ -403,9 +427,14 @@ def test_g8_builds_only_read_runtime_over_exact_canonical_authority(tmp_path: Pa
     assert runtime.resume_service.db is fixture.service.db
     assert runtime.resume_service.permission_authority is fixture.permission
     assert runtime.resume_service.terminal_profile_registry is fixture.pipeline.terminal_profile_registry
-    assert runtime.resume_service.current_fence is fixture.current_fence
-    assert runtime.read_terminal.runner_adapter.current_fence is fixture.current_fence
-    assert runtime.read_terminal.runner_handler.current_fence is fixture.current_fence
+
+    runtime_fence = runtime.resume_service.current_fence
+    assert type(runtime_fence) is DurableCurrentExecutionFence
+    assert runtime_fence is not fixture.current_fence
+    assert runtime_fence.db is fixture.service.db
+    assert runtime_fence.trusted_clock is fixture.runner_clock
+    assert runtime.read_terminal.runner_adapter.current_fence is runtime_fence
+    assert runtime.read_terminal.runner_handler.current_fence is runtime_fence
     assert runtime.read_terminal.runner_handler.transport is fixture.runner_transport
     assert runtime.read_terminal.verifier_handler.transport is fixture.verifier_transport
     assert runtime.create_ref_preparer is None
@@ -429,6 +458,43 @@ def test_g8_factory_uses_product_composition_arguments_without_hidden_authority(
     assert runtime.pipeline.snapshot_creator.permission_authority is fixture.permission
     assert runtime.resume_service is not None
     assert runtime.resume_service.permission_authority is fixture.permission
+
+
+def test_g8_factory_rejects_runtime_pack_subclass_virtual_dispatch(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    bypass = BypassPack(**pack_values(fixture))  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="exact G8ReadRuntimePack"):
+        create_g8_read_runtime_factory(bypass)
+
+
+def test_g8_rejects_product_service_subclass(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path / "fixture")
+    subclass_service = ProductServiceSubclass(config(tmp_path / "subclass"))
+    permission = DatabasePermissionAuthority(
+        database=subclass_service.db,
+        authority_revision="database-permission/g8-subclass-r1",
+    )
+
+    with pytest.raises(ValueError, match="exact ProductService"):
+        pack(fixture).build_runtime(
+            service=subclass_service,
+            permission_authority=permission,
+        )
+
+
+def test_g8_rejects_permission_authority_subclass(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    subclass_permission = PermissionAuthoritySubclass(
+        database=fixture.service.db,
+        authority_revision="database-permission/g8-subclass-r1",
+    )
+
+    with pytest.raises(ValueError, match="exact DatabasePermissionAuthority"):
+        pack(fixture).build_runtime(
+            service=fixture.service,
+            permission_authority=subclass_permission,
+        )
 
 
 def test_g8_rejects_parallel_permission_authority_even_on_same_database(tmp_path: Path) -> None:
@@ -479,7 +545,7 @@ def test_g8_rejects_distinct_tokens_for_same_provider_principal(
         pack(fixture, verifier_transport=verifier)
 
 
-def test_g8_rejects_shared_underlying_credential_material_even_if_observer_is_inconsistent(
+def test_g8_rejects_shared_underlying_credential_material(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -494,7 +560,7 @@ def test_g8_rejects_shared_underlying_credential_material_even_if_observer_is_in
         credential_class=VERIFIER_CREDENTIAL_CLASS,
     )
 
-    with pytest.raises(ValueError, match="credential material must be distinct|provider principals"):
+    with pytest.raises(ValueError, match="credential material must be distinct"):
         pack(fixture, verifier_transport=verifier)
 
 
@@ -525,6 +591,14 @@ def test_g8_rejects_subclass_that_can_override_durable_fence(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="exact DurableCurrentExecutionFence"):
         pack(fixture, current_fence=bypass)
+
+
+def test_g8_rejects_instance_level_durable_fence_override(tmp_path: Path) -> None:
+    fixture = build_fixture(tmp_path)
+    fixture.current_fence.assert_current = lambda **_: None
+
+    with pytest.raises(ValueError, match="instance state is not pristine|implementation is not canonical"):
+        pack(fixture)
 
 
 def test_g8_rejects_transport_credential_class_mismatch(tmp_path: Path) -> None:
