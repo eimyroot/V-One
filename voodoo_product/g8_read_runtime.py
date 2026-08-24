@@ -172,7 +172,7 @@ def _current_provider_read_effect_pin() -> _ProviderReadEffectPin:
         raise PermissionError("G8 GitHub provider transport initializer changed after import")
     if pin.transport_type.read_ref is not pin.read_ref_method:
         raise PermissionError("G8 GitHub provider READ implementation changed after import")
-    if GITHUB_API_SOURCE_IDENTITY != pin.source_identity:
+    if pin.source_identity != GITHUB_API_SOURCE_IDENTITY:
         raise PermissionError("G8 GitHub provider source identity changed after import")
     return pin
 
