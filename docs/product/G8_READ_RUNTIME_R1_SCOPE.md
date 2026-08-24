@@ -20,8 +20,9 @@ existing CanonicalOperationPipeline
 + exact canonical ProductService DB / DatabasePermissionAuthority
 + exact capability/capsule registry identity shared with Grant/conformance authority
 + exact DurableCurrentExecutionFence implementation
-+ exact G8-owned closed GitHub READ transport for Runner
-+ separately credentialed exact G8-owned closed GitHub READ transport for Verifier
++ exact G8-owned Runner credential source
++ separately credentialed exact G8-owned Verifier credential source
++ immutable independently pinned credential-pair READ transports
 + CanonicalGitHubReadTerminal
 + CanonicalOperationResumeService
 → CanonicalOperationRuntime
@@ -33,7 +34,18 @@ Runner and Verifier credential provenance is not accepted from caller labels.
 
 `G8BoundGitHubReadTransport` does not retain the token, fingerprint, credential class, or provider attestation in caller-mutable instance slots. Those values are retained in a private closure-owned binding registry outside the transport instance. Initial construction derives the non-secret principal identity by performing an authenticated GitHub `GET /user` with the exact credential material; R1 fails closed when that provider observation cannot produce a valid principal identity.
 
-Before every provider READ the transport captures one immutable binding snapshot, recomputes the token fingerprint, re-attests the provider principal with the exact local token, and then passes that same local token to the READ provider transport. Validation and provider use therefore cannot diverge through a post-check instance-state replacement or a check/use race.
+The closure registry is **not** treated as a sufficient trust anchor. The raw credential-source object is intentionally unable to perform a provider READ directly. During canonical runtime construction, G8 revalidates both sources and pins each source's token fingerprint, credential class, and provider-attested principal into an immutable tuple-backed Runner/Verifier pair transport. Both effect transports carry the same independently pinned pair.
+
+Before every provider READ the immutable pair transport:
+
+1. revalidates the current Runner binding and performs a fresh GitHub `/user` principal observation;
+2. revalidates the current Verifier binding and performs a fresh GitHub `/user` principal observation;
+3. requires each current fingerprint/class/principal to equal its independently pinned runtime value;
+4. requires Runner and Verifier fingerprints, credential classes, and provider principals to remain distinct;
+5. invokes only the selected source with its immutable pin; and
+6. the selected source captures one binding snapshot, re-attests that exact local token, compares it to the runtime pin, and passes that same local token to the READ provider transport.
+
+Therefore changing an introspectable closure-registry entry after composition cannot silently replace the Verifier with the Runner credential, and validation/provider use cannot diverge through a post-check instance-state change or check/use race.
 
 The pack rejects:
 
@@ -43,7 +55,7 @@ The pack rejects:
 - transport subclasses or structural/generic provider clients;
 - Runner/Verifier credential-class collapse.
 
-The provider-observed principal check is composition evidence only. It does not replace the later live independent Verifier readback required by the G8 exit gate.
+The provider-observed principal checks are composition/use-time security evidence only. They do not replace the later live independent Verifier readback required by the G8 exit gate.
 
 ## R1 hard ceiling
 
