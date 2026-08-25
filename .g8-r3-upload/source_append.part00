@@ -1,0 +1,362 @@
+
+# G8 R3 completion/clock assembly hardening.
+#
+# R3 leaves the complete R1/R2 implementation intact and adds the two remaining assembly roots:
+# the durable completion coordinator and the concrete trusted-clock source implementation/state.
+# Public runtime objects remain inspectable for compatibility, but every effect path re-attests
+# them against immutable tuple payloads and executes through call-local pinned coordinator/clock
+# objects so post-build object.__setattr__ cannot alter completion or lease-time semantics.
+_G8_R2_BUILD_RUNTIME_FOR_R3: Final = G8ReadRuntimePack.build_runtime
+_G8_R2_TERMINAL_TYPE_FOR_R3: Final = _G8_R2_READ_TERMINAL_TYPE
+_G8_R2_RUNNER_HANDLER_TYPE_FOR_R3: Final = _G8_R2_RUNNER_HANDLER_TYPE
+_G8_R2_VERIFIER_HANDLER_TYPE_FOR_R3: Final = _G8_R2_VERIFIER_HANDLER_TYPE
+_G8_R2_RESUME_SERVICE_TYPE_FOR_R3: Final = _G8_R2_RESUME_SERVICE_TYPE
+_G8_TRUSTED_CLOCK_TYPE: Final = TrustedClockAuthority
+_G8_TRUSTED_CLOCK_INIT: Final = TrustedClockAuthority.__init__
+_G8_TRUSTED_CLOCK_WITNESS: Final = TrustedClockAuthority.witness
+_G8_EXPECTED_TRUSTED_CLOCK_FIELDS: Final = frozenset(
+    {"_source_identity", "_authority_revision", "_source", "_allowed_environments"}
+)
+
+
+class _G8TrustedClockPin(NamedTuple):
+    clock: TrustedClockAuthority
+    source: object
+    source_identity: str
+    authority_revision: str
+    allowed_environments: frozenset[str]
+    source_type: type
+    source_read_method: Callable[..., object]
+
+
+class _G8CompletionCoordinatorPin(NamedTuple):
+    coordinator: object
+    coordinator_type: type
+    complete_method: Callable[..., object]
+
+
+class _G8R3AssemblyAnchors(NamedTuple):
+    r2_anchors: _G8AssemblyAnchors
+    completion_pin: _G8CompletionCoordinatorPin
+    runner_clock_pin: _G8TrustedClockPin
+    verifier_clock_pin: _G8TrustedClockPin
+
+
+def _capture_g8_trusted_clock_pin(clock: object) -> _G8TrustedClockPin:
+    if type(clock) is not _G8_TRUSTED_CLOCK_TYPE:
+        raise ValueError("G8 trusted clock must be exact TrustedClockAuthority")
+    if _G8_TRUSTED_CLOCK_TYPE.__init__ is not _G8_TRUSTED_CLOCK_INIT:
+        raise PermissionError("G8 trusted clock initializer changed after import")
+    if _G8_TRUSTED_CLOCK_TYPE.witness is not _G8_TRUSTED_CLOCK_WITNESS:
+        raise PermissionError("G8 trusted clock witness implementation changed after import")
+    state = vars(clock)
+    if frozenset(state) != _G8_EXPECTED_TRUSTED_CLOCK_FIELDS:
+        raise PermissionError("G8 trusted clock instance state is not pristine")
+    source = state["_source"]
+    source_type = type(source)
+    source_read_method = getattr(source_type, "read", None)
+    bound_read = getattr(source, "read", None)
+    if not callable(source_read_method) or not callable(bound_read):
+        raise PermissionError("G8 trusted clock source READ implementation is invalid")
+    if getattr(bound_read, "__func__", None) is not source_read_method:
+        raise PermissionError("G8 trusted clock source READ implementation is not canonical")
+    allowed = state["_allowed_environments"]
+    if type(allowed) is not frozenset:
+        raise PermissionError("G8 trusted clock environment ceiling is not immutable")
+    return _G8TrustedClockPin(
+        clock=clock,
+        source=source,
+        source_identity=_require_text(state["_source_identity"], field="clock.source_identity"),
+        authority_revision=_require_text(
+            state["_authority_revision"],
+            field="clock.authority_revision",
+        ),
+        allowed_environments=allowed,
+        source_type=source_type,
+        source_read_method=source_read_method,
+    )
+
+
+def _assert_g8_trusted_clock_pin_current(pin: object) -> _G8TrustedClockPin:
+    if type(pin) is not _G8TrustedClockPin:
+        raise PermissionError("G8 trusted clock pin is invalid")
+    clock = pin.clock
+    if type(clock) is not _G8_TRUSTED_CLOCK_TYPE:
+        raise PermissionError("G8 trusted clock type changed after assembly")
+    if _G8_TRUSTED_CLOCK_TYPE.__init__ is not _G8_TRUSTED_CLOCK_INIT:
+        raise PermissionError("G8 trusted clock initializer changed after assembly")
+    if _G8_TRUSTED_CLOCK_TYPE.witness is not _G8_TRUSTED_CLOCK_WITNESS:
+        raise PermissionError("G8 trusted clock witness implementation changed after assembly")
+    state = vars(clock)
+    if frozenset(state) != _G8_EXPECTED_TRUSTED_CLOCK_FIELDS:
+        raise PermissionError("G8 trusted clock instance state changed after assembly")
+    if state["_source"] is not pin.source:
+        raise PermissionError("G8 trusted clock source changed after assembly")
+    if state["_source_identity"] != pin.source_identity:
+        raise PermissionError("G8 trusted clock source identity changed after assembly")
+    if state["_authority_revision"] != pin.authority_revision:
+        raise PermissionError("G8 trusted clock authority revision changed after assembly")
+    if state["_allowed_environments"] != pin.allowed_environments:
+        raise PermissionError("G8 trusted clock environment ceiling changed after assembly")
+    if type(pin.source) is not pin.source_type:
+        raise PermissionError("G8 trusted clock source type changed after assembly")
+    if getattr(pin.source_type, "read", None) is not pin.source_read_method:
+        raise PermissionError("G8 trusted clock source READ implementation changed after assembly")
+    bound_read = getattr(pin.source, "read", None)
+    if getattr(bound_read, "__func__", None) is not pin.source_read_method:
+        raise PermissionError("G8 trusted clock source READ binding changed after assembly")
+    return pin
+
+
+def _materialize_g8_trusted_clock(pin: _G8TrustedClockPin) -> TrustedClockAuthority:
+    pin = _assert_g8_trusted_clock_pin_current(pin)
+    pinned_source = pin.source
+    pinned_read = pin.source_read_method
+
+    class _CallLocalPinnedClockSource:
+        __slots__ = ()
+
+        def read(self) -> object:
+            return pinned_read(pinned_source)
+
+    local_clock = object.__new__(_G8_TRUSTED_CLOCK_TYPE)
+    _G8_TRUSTED_CLOCK_INIT(
+        local_clock,
+        source_identity=pin.source_identity,
+        authority_revision=pin.authority_revision,
+        source=_CallLocalPinnedClockSource(),
+        allowed_environments=pin.allowed_environments,
+    )
+
+    # Instance-level closure pins the released witness implementation through effect time. The
+    # local clock is not retained on the public runtime graph, so callers cannot replace it.
+    def pinned_witness(*, environment: str) -> object:
+        return _G8_TRUSTED_CLOCK_WITNESS(local_clock, environment=environment)
+
+    local_clock.witness = pinned_witness  # type: ignore[method-assign]
+    return local_clock
+
+
+def _capture_g8_completion_pin(coordinator: object) -> _G8CompletionCoordinatorPin:
+    complete_method = getattr(type(coordinator), "complete", None)
+    bound_complete = getattr(coordinator, "complete", None)
+    if not callable(complete_method) or not callable(bound_complete):
+        raise ValueError("G8 canonical coordinator must implement durable completion")
+    if getattr(bound_complete, "__func__", None) is not complete_method:
+        raise PermissionError("G8 completion coordinator has a non-canonical complete binding")
+    return _G8CompletionCoordinatorPin(
+        coordinator=coordinator,
+        coordinator_type=type(coordinator),
+        complete_method=complete_method,
+    )
+
+
+def _assert_g8_completion_pin_current(
+    coordinator: object,
+    pin: object,
+) -> _G8CompletionCoordinatorPin:
+    if type(pin) is not _G8CompletionCoordinatorPin:
+        raise PermissionError("G8 completion coordinator pin is invalid")
+    if coordinator is not pin.coordinator:
+        raise PermissionError("G8 completion coordinator is not assembly-bound")
+    if type(coordinator) is not pin.coordinator_type:
+        raise PermissionError("G8 completion coordinator type changed after assembly")
+    if getattr(pin.coordinator_type, "complete", None) is not pin.complete_method:
+        raise PermissionError("G8 completion coordinator implementation changed after assembly")
+    bound_complete = getattr(coordinator, "complete", None)
+    if getattr(bound_complete, "__func__", None) is not pin.complete_method:
+        raise PermissionError("G8 completion coordinator binding changed after assembly")
+    return pin
+
+
+def _materialize_g8_completion_coordinator(
+    pin: _G8CompletionCoordinatorPin,
+) -> object:
+    pin = _assert_g8_completion_pin_current(pin.coordinator, pin)
+    coordinator = pin.coordinator
+    complete_method = pin.complete_method
+
+    class _CallLocalPinnedCompletionCoordinator:
+        __slots__ = ()
+
+        def complete(self, *, lease_id: str, completion_digest: str) -> object:
+            return complete_method(
+                coordinator,
+                lease_id=lease_id,
+                completion_digest=completion_digest,
+            )
+
+    return _CallLocalPinnedCompletionCoordinator()
+
+
+def _g8_r3_local_r2_anchors(
+    anchors: _G8R3AssemblyAnchors,
+    *,
+    runner_clock: TrustedClockAuthority,
+) -> _G8AssemblyAnchors:
+    r2 = anchors.r2_anchors
+    return _G8AssemblyAnchors(
+        canonical_db=r2.canonical_db,
+        runner_clock=runner_clock,
+        runner_source=r2.runner_source,
+        verifier_source=r2.verifier_source,
+        runner_pin=r2.runner_pin,
+        verifier_pin=r2.verifier_pin,
+        source_implementation_pin=r2.source_implementation_pin,
+        provider_effect_pin=r2.provider_effect_pin,
+    )
+
+
+class _G8R3RunnerReadHandler(tuple, GitHubRefReadHandler):
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"transport", "current_fence", "trusted_clock", "observation_revision"}
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8R3AssemblyAnchors,
+        transport: object,
+        current_fence: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> _G8R3RunnerReadHandler:
+        del transport, current_fence, trusted_clock, observation_revision
+        if type(assembly_anchors) is not _G8R3AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8R3AssemblyAnchors")
+        # Keep the R2 anchor at tuple index 0 for the existing R2 evidence contract/tests.
+        return tuple.__new__(cls, (assembly_anchors.r2_anchors, assembly_anchors))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8R3AssemblyAnchors,
+        transport: object,
+        current_fence: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> None:
+        del assembly_anchors
+        _G8_BASE_RUNNER_HANDLER_INIT(
+            self,
+            transport=transport,
+            current_fence=current_fence,
+            trusted_clock=trusted_clock,
+            observation_revision=observation_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 Runner handler {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        prepared: PreparedIsolatedRuntime,
+        activation: ReadOnlyRuntimeActivation,
+        target: ExecutionTarget,
+    ) -> GitHubRefObservation:
+        anchors = tuple.__getitem__(self, 1)
+        if type(anchors) is not _G8R3AssemblyAnchors:
+            raise PermissionError("G8 R3 Runner assembly anchors are invalid")
+        r2 = anchors.r2_anchors
+        transport = self.transport
+        if type(transport) is not _G8IndependentCredentialPairTransport:
+            raise PermissionError("G8 Runner handler transport is not canonical")
+        if transport.role != "runner":
+            raise PermissionError("G8 Runner handler credential role mismatch")
+        transport = _assert_g8_transport_matches_assembly(
+            transport,
+            role="runner",
+            anchors=r2,
+        )
+        source_fence = _assert_pristine_durable_fence(self.current_fence)
+        if source_fence.db is not r2.canonical_db:
+            raise PermissionError("G8 Runner fence is not bound to assembly canonical database")
+        if self.trusted_clock is not anchors.runner_clock_pin.clock:
+            raise PermissionError("G8 Runner trusted clock is not assembly-bound")
+        _assert_g8_trusted_clock_pin_current(anchors.runner_clock_pin)
+        if source_fence.trusted_clock is not anchors.runner_clock_pin.clock:
+            raise PermissionError("G8 Runner handler fence/clock binding mismatch")
+
+        local_clock = _materialize_g8_trusted_clock(anchors.runner_clock_pin)
+        local_r2 = _g8_r3_local_r2_anchors(anchors, runner_clock=local_clock)
+        local_fence = DurableCurrentExecutionFence(
+            database=r2.canonical_db,
+            trusted_clock=local_clock,
+        )
+        _assert_pristine_durable_fence(local_fence)
+        local_handler = _G8_R2_RUNNER_HANDLER_TYPE_FOR_R3(
+            assembly_anchors=local_r2,
+            transport=transport,
+            current_fence=local_fence,
+            trusted_clock=local_clock,
+            observation_revision=self.observation_revision,
+        )
+        return local_handler.observe_ref(
+            prepared=prepared,
+            activation=activation,
+            target=target,
+        )
+
+
+_G8_R3_RUNNER_HANDLER_TYPE: Final = _G8R3RunnerReadHandler
+
+
+class _G8R3VerifierReadHandler(tuple, VerifierGitHubRefReadHandler):
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"transport", "trusted_clock", "observation_revision"}
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8R3AssemblyAnchors,
+        transport: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> _G8R3VerifierReadHandler:
+        del transport, trusted_clock, observation_revision
+        if type(assembly_anchors) is not _G8R3AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8R3AssemblyAnchors")
+        return tuple.__new__(cls, (assembly_anchors.r2_anchors, assembly_anchors))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8R3AssemblyAnchors,
+        transport: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> None:
+        del assembly_anchors
+        _G8_BASE_VERIFIER_HANDLER_INIT(
+            self,
+            transport=transport,
+            trusted_clock=trusted_clock,
+            observation_revision=observation_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 Verifier handler {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        verifier: VerifierIdentity,
+        boundary: IndependentVerificationBoundary,
+        decision: VerifierCredentialDecision,
+        target: ExecutionTarget,
+    ) -> VerifierGitHubRefObservation:
+        anchors = tuple.__getitem__(self, 1)
+        if type(anchors) is not _G8R3AssemblyAnchors:
+            raise PermissionError("G8 R3 Verifier assembly anchors are invalid")
+        transport = self.transport
+        if type(transport) is not _G8IndependentCredentialPairTransport:
+            raise PermissionError("G8 Verifier handler transport is not canonical")
+        if transport.role != "verifier":
+            raise PermissionError("G8 Verifier handler credential role mismatch")
+        transport = _assert_g8_transport_matches_assembly(
