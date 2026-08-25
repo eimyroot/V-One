@@ -950,3 +950,197 @@ def test_g8_role_bound_handlers_fail_closed_after_object_setattr_role_swap(
             decision=object(),  # type: ignore[arg-type]
             target=object(),  # type: ignore[arg-type]
         )
+
+
+def test_g8_r2_rejects_perfectly_consistent_attacker_pair_before_provider_effect(
+    tmp_path: Path,
+) -> None:
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.read_terminal is not None
+    runner_handler = runtime.read_terminal.runner_handler
+    verifier_handler = runtime.read_terminal.verifier_handler
+    legitimate = runner_handler.transport
+
+    malicious_provider_calls: list[tuple[str, str]] = []
+
+    def attacker_read_ref_with_pin(
+        transport: object,
+        *,
+        pin: object,
+        provider_effect_pin: object,
+        repository: str,
+        ref: str,
+    ) -> str:
+        del transport, pin, provider_effect_pin
+        malicious_provider_calls.append((repository, ref))
+        return "a" * 40
+
+    class AttackerProvider:
+        source_identity = "github-api/attacker-g8-r2"
+
+        def __init__(self, *, token: str) -> None:
+            self.token = token
+
+        def read_ref(self, *, repository: str, ref: str) -> str:
+            malicious_provider_calls.append((repository, ref))
+            return "a" * 40
+
+    attacker_source_pin = g8_module._CredentialSourceImplementationPin(
+        transport_type=legitimate.source_implementation_pin.transport_type,
+        pin_snapshot_method=legitimate.source_implementation_pin.pin_snapshot_method,
+        read_ref_with_pin_method=attacker_read_ref_with_pin,
+    )
+    attacker_effect_pin = g8_module._ProviderReadEffectPin(
+        transport_type=AttackerProvider,
+        init_method=AttackerProvider.__init__,
+        read_ref_method=AttackerProvider.read_ref,
+        source_identity=AttackerProvider.source_identity,
+    )
+    attacker_runner = g8_module._G8IndependentCredentialPairTransport(
+        runner_transport=legitimate.runner_transport,
+        verifier_transport=legitimate.verifier_transport,
+        role="runner",
+        runner_pin=legitimate.runner_pin,
+        verifier_pin=legitimate.verifier_pin,
+        source_implementation_pin=attacker_source_pin,
+        provider_effect_pin=attacker_effect_pin,
+    )
+    attacker_verifier = g8_module._G8IndependentCredentialPairTransport(
+        runner_transport=legitimate.runner_transport,
+        verifier_transport=legitimate.verifier_transport,
+        role="verifier",
+        runner_pin=legitimate.runner_pin,
+        verifier_pin=legitimate.verifier_pin,
+        source_implementation_pin=attacker_source_pin,
+        provider_effect_pin=attacker_effect_pin,
+    )
+
+    assert g8_module._assert_pair_transport_parity(
+        attacker_runner,
+        attacker_verifier,
+    ) == (attacker_runner, attacker_verifier)
+
+    object.__setattr__(runner_handler, "transport", attacker_runner)
+    object.__setattr__(verifier_handler, "transport", attacker_verifier)
+
+    with pytest.raises(PermissionError, match="assembly-bound"):
+        runtime.read_terminal.run(prepared=object())  # type: ignore[arg-type]
+
+    assert malicious_provider_calls == []
+
+
+def test_g8_r2_rejects_parallel_database_fence_pair_before_provider_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = build_fixture(tmp_path / "canonical")
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.read_terminal is not None
+
+    parallel_service = ProductService(config(tmp_path / "parallel"))
+    assert parallel_service.db is not fixture.service.db
+    parallel_fence = DurableCurrentExecutionFence(
+        database=parallel_service.db,
+        trusted_clock=fixture.runner_clock,
+    )
+    assert type(parallel_fence) is DurableCurrentExecutionFence
+
+    runner_handler = runtime.read_terminal.runner_handler
+    runner_adapter = runtime.read_terminal.runner_adapter
+    object.__setattr__(runner_handler, "current_fence", parallel_fence)
+    object.__setattr__(runner_adapter, "current_fence", parallel_fence)
+
+    assert runner_handler.current_fence is runner_adapter.current_fence
+    assert runner_handler.current_fence.db is parallel_service.db
+    assert runner_handler.current_fence.trusted_clock is fixture.runner_clock
+
+    provider_read_calls: list[tuple[str, str]] = []
+
+    class ForbiddenConnection:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            del host, port, timeout
+
+        def request(
+            self,
+            method: str,
+            path: str,
+            *,
+            headers: dict[str, str],
+        ) -> None:
+            del headers
+            provider_read_calls.append((method, path))
+
+        def getresponse(self) -> object:
+            raise AssertionError("provider READ must not be reached")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(g8_module.http.client, "HTTPSConnection", ForbiddenConnection)
+
+    with pytest.raises(PermissionError, match="assembly canonical database"):
+        runtime.read_terminal.run(prepared=object())  # type: ignore[arg-type]
+
+    assert provider_read_calls == []
+
+
+def test_g8_r2_resume_rejects_consistent_parallel_database_before_durable_read(
+    tmp_path: Path,
+) -> None:
+    fixture = build_fixture(tmp_path / "canonical")
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.resume_service is not None
+
+    parallel_service = ProductService(config(tmp_path / "parallel"))
+    parallel_fence = DurableCurrentExecutionFence(
+        database=parallel_service.db,
+        trusted_clock=fixture.runner_clock,
+    )
+    object.__setattr__(runtime.resume_service, "db", parallel_service.db)
+    object.__setattr__(runtime.resume_service, "current_fence", parallel_fence)
+
+    assert runtime.resume_service.db is parallel_service.db
+    assert runtime.resume_service.current_fence.db is parallel_service.db
+    assert runtime.resume_service.current_fence.trusted_clock is fixture.runner_clock
+
+    with pytest.raises(PermissionError, match="assembly canonical database"):
+        runtime.resume_service.resume(
+            actor_id="usr-g8-r2",
+            execution_id="exec-g8-r2",
+        )
+
+
+def test_g8_r2_assembly_anchor_payload_survives_object_setattr(
+    tmp_path: Path,
+) -> None:
+    fixture = build_fixture(tmp_path)
+    runtime = pack(fixture).build_runtime(
+        service=fixture.service,
+        permission_authority=fixture.permission,
+    )
+    assert runtime.read_terminal is not None
+
+    runner_handler = runtime.read_terminal.runner_handler
+    anchors = tuple.__getitem__(runner_handler, 0)
+    assert type(anchors) is g8_module._G8AssemblyAnchors
+    assert anchors.canonical_db is fixture.service.db
+    assert anchors.runner_clock is fixture.runner_clock
+    assert anchors.runner_source is fixture.runner_transport
+    assert anchors.verifier_source is fixture.verifier_transport
+
+    object.__setattr__(
+        runner_handler,
+        "transport",
+        runtime.read_terminal.verifier_handler.transport,
+    )
+    assert tuple.__getitem__(runner_handler, 0) is anchors

@@ -1213,3 +1213,805 @@ class _G8RoleBoundReadTerminal(CanonicalGitHubReadTerminal):  # noqa: F811
             result_revision=result_revision,
         )
         return _G8_BASE_READ_TERMINAL_RUN(local_terminal, prepared=prepared)
+
+
+# G8 R2 assembly-anchor hardening.
+#
+# R2 intentionally leaves the complete R1 implementation above intact. The original exact
+# assembly function is retained and invoked first; R2 then validates that result against trust
+# anchors captured independently at the beginning of this build_runtime() call and returns a
+# runtime whose execution wrappers retain those anchors outside caller-mutable instance fields.
+_G8_R1_BUILD_RUNTIME: Final = G8ReadRuntimePack.build_runtime
+_G8_R1_FINAL_RUNNER_HANDLER_TYPE: Final = _G8_HARDENED_RUNNER_HANDLER_TYPE
+_G8_R1_FINAL_VERIFIER_HANDLER_TYPE: Final = _G8_HARDENED_VERIFIER_HANDLER_TYPE
+_G8_R1_FINAL_READ_TERMINAL_TYPE: Final = _G8RoleBoundReadTerminal
+_G8_BASE_RESUME_SERVICE_TYPE: Final = CanonicalOperationResumeService
+_G8_BASE_RESUME_SERVICE_INIT: Final = CanonicalOperationResumeService.__init__
+_G8_BASE_RESUME_SERVICE_RESUME: Final = CanonicalOperationResumeService.resume
+
+
+class _G8AssemblyAnchors(NamedTuple):
+    """Immutable assembly-time roots that execution must never reconstruct."""
+
+    canonical_db: object
+    runner_clock: TrustedClockAuthority
+    runner_source: object
+    verifier_source: object
+    runner_pin: _CredentialPin
+    verifier_pin: _CredentialPin
+    source_implementation_pin: _CredentialSourceImplementationPin
+    provider_effect_pin: _ProviderReadEffectPin
+
+
+class _G8ResumeAssemblyBinding(NamedTuple):
+    snapshot_store: object
+    permission_authority: DatabasePermissionAuthority
+    terminal_profile_registry: object
+    envelope_revision: str
+
+
+def _assert_g8_transport_matches_assembly(
+    transport: object,
+    *,
+    role: str,
+    anchors: _G8AssemblyAnchors,
+) -> _G8IndependentCredentialPairTransport:
+    """Require current transport parity *and* independent assembly-time provenance."""
+
+    if type(anchors) is not _G8AssemblyAnchors:
+        raise PermissionError("G8 assembly anchors are invalid")
+    if type(transport) is not _G8IndependentCredentialPairTransport:
+        raise PermissionError(f"G8 {role.title()} handler transport is not canonical")
+    if transport.role != role:
+        raise PermissionError(f"G8 {role.title()} handler credential role mismatch")
+    if transport.runner_transport is not anchors.runner_source:
+        raise PermissionError("G8 Runner credential source is not assembly-bound")
+    if transport.verifier_transport is not anchors.verifier_source:
+        raise PermissionError("G8 Verifier credential source is not assembly-bound")
+    if transport.runner_pin != anchors.runner_pin:
+        raise PermissionError("G8 Runner credential pin is not assembly-bound")
+    if transport.verifier_pin != anchors.verifier_pin:
+        raise PermissionError("G8 Verifier credential pin is not assembly-bound")
+    if transport.source_implementation_pin != anchors.source_implementation_pin:
+        raise PermissionError("G8 credential source implementation is not assembly-bound")
+    if transport.provider_effect_pin != anchors.provider_effect_pin:
+        raise PermissionError("G8 provider READ effect is not assembly-bound")
+    return transport
+
+
+def _assert_g8_r2_base_implementations() -> None:
+    _assert_g8_base_execution_implementations()
+    if CanonicalOperationResumeService is not _G8_BASE_RESUME_SERVICE_TYPE:
+        raise PermissionError("G8 canonical resume service type changed")
+    if _G8_BASE_RESUME_SERVICE_TYPE.__init__ is not _G8_BASE_RESUME_SERVICE_INIT:
+        raise PermissionError("G8 canonical resume service initializer changed")
+    if _G8_BASE_RESUME_SERVICE_TYPE.resume is not _G8_BASE_RESUME_SERVICE_RESUME:
+        raise PermissionError("G8 canonical resume implementation changed")
+
+
+class _G8AssemblyBoundRunnerReadHandler(tuple, GitHubRefReadHandler):
+    """Runner handler whose tuple payload retains assembly roots immutably."""
+
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"transport", "current_fence", "trusted_clock", "observation_revision"}
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        transport: object,
+        current_fence: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> _G8AssemblyBoundRunnerReadHandler:
+        del transport, current_fence, trusted_clock, observation_revision
+        if type(assembly_anchors) is not _G8AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8AssemblyAnchors")
+        return tuple.__new__(cls, (assembly_anchors,))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        transport: object,
+        current_fence: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> None:
+        del assembly_anchors
+        _G8_BASE_RUNNER_HANDLER_INIT(
+            self,
+            transport=transport,
+            current_fence=current_fence,
+            trusted_clock=trusted_clock,
+            observation_revision=observation_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 Runner handler {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        prepared: PreparedIsolatedRuntime,
+        activation: ReadOnlyRuntimeActivation,
+        target: ExecutionTarget,
+    ) -> GitHubRefObservation:
+        _assert_g8_r2_base_implementations()
+        anchors = tuple.__getitem__(self, 0)
+        if type(anchors) is not _G8AssemblyAnchors:
+            raise PermissionError("G8 Runner assembly anchors are invalid")
+
+        transport = self.transport
+        source_fence = self.current_fence
+        trusted_clock = self.trusted_clock
+        observation_revision = self.observation_revision
+
+        transport = _assert_g8_transport_matches_assembly(
+            transport,
+            role="runner",
+            anchors=anchors,
+        )
+        source_fence = _assert_pristine_durable_fence(source_fence)
+        if source_fence.db is not anchors.canonical_db:
+            raise PermissionError(
+                "G8 Runner fence is not bound to assembly canonical database"
+            )
+        if type(trusted_clock) is not TrustedClockAuthority:
+            raise PermissionError("G8 Runner handler trusted clock is not canonical")
+        if trusted_clock is not anchors.runner_clock:
+            raise PermissionError("G8 Runner trusted clock is not assembly-bound")
+        if source_fence.trusted_clock is not anchors.runner_clock:
+            raise PermissionError("G8 Runner handler fence/clock binding mismatch")
+        if prepared.decision.credential_class != anchors.runner_pin.credential_class:
+            raise PermissionError("G8 Runner handler credential decision mismatch")
+
+        local_fence = DurableCurrentExecutionFence(
+            database=anchors.canonical_db,
+            trusted_clock=anchors.runner_clock,
+        )
+        _assert_pristine_durable_fence(local_fence)
+
+        local_handler = object.__new__(_G8_BASE_RUNNER_HANDLER_TYPE)
+        _G8_BASE_RUNNER_HANDLER_INIT(
+            local_handler,
+            transport=transport,
+            current_fence=local_fence,
+            trusted_clock=anchors.runner_clock,
+            observation_revision=observation_revision,
+        )
+        return _G8_BASE_RUNNER_HANDLER_OBSERVE(
+            local_handler,
+            prepared=prepared,
+            activation=activation,
+            target=target,
+        )
+
+
+_G8_R2_RUNNER_HANDLER_TYPE: Final = _G8AssemblyBoundRunnerReadHandler
+
+
+class _G8AssemblyBoundVerifierReadHandler(tuple, VerifierGitHubRefReadHandler):
+    """Verifier handler whose role transport must match independent assembly roots."""
+
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"transport", "trusted_clock", "observation_revision"}
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        transport: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> _G8AssemblyBoundVerifierReadHandler:
+        del transport, trusted_clock, observation_revision
+        if type(assembly_anchors) is not _G8AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8AssemblyAnchors")
+        return tuple.__new__(cls, (assembly_anchors,))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        transport: object,
+        trusted_clock: object,
+        observation_revision: str,
+    ) -> None:
+        del assembly_anchors
+        _G8_BASE_VERIFIER_HANDLER_INIT(
+            self,
+            transport=transport,
+            trusted_clock=trusted_clock,
+            observation_revision=observation_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 Verifier handler {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def observe_ref(
+        self,
+        *,
+        verifier: VerifierIdentity,
+        boundary: IndependentVerificationBoundary,
+        decision: VerifierCredentialDecision,
+        target: ExecutionTarget,
+    ) -> VerifierGitHubRefObservation:
+        _assert_g8_r2_base_implementations()
+        anchors = tuple.__getitem__(self, 0)
+        if type(anchors) is not _G8AssemblyAnchors:
+            raise PermissionError("G8 Verifier assembly anchors are invalid")
+
+        transport = self.transport
+        trusted_clock = self.trusted_clock
+        observation_revision = self.observation_revision
+        transport = _assert_g8_transport_matches_assembly(
+            transport,
+            role="verifier",
+            anchors=anchors,
+        )
+
+        if type(trusted_clock) is not TrustedClockAuthority:
+            raise PermissionError("G8 Verifier handler trusted clock is not canonical")
+        if verifier.credential_class != anchors.verifier_pin.credential_class:
+            raise PermissionError("G8 Verifier handler identity credential class mismatch")
+        if decision.credential_class != anchors.verifier_pin.credential_class:
+            raise PermissionError("G8 Verifier handler credential decision mismatch")
+
+        local_handler = object.__new__(_G8_BASE_VERIFIER_HANDLER_TYPE)
+        _G8_BASE_VERIFIER_HANDLER_INIT(
+            local_handler,
+            transport=transport,
+            trusted_clock=trusted_clock,
+            observation_revision=observation_revision,
+        )
+        return _G8_BASE_VERIFIER_HANDLER_OBSERVE(
+            local_handler,
+            verifier=verifier,
+            boundary=boundary,
+            decision=decision,
+            target=target,
+        )
+
+
+_G8_R2_VERIFIER_HANDLER_TYPE: Final = _G8AssemblyBoundVerifierReadHandler
+
+
+class _G8AssemblyBoundReadTerminal(tuple, CanonicalGitHubReadTerminal):
+    """One-call local READ graph validated against independent assembly roots."""
+
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "capability_registry",
+            "capsule_registry",
+            "runner_adapter",
+            "runner_handler",
+            "completion_coordinator",
+            "verifier_profile",
+            "verifier_policy",
+            "verifier_handler",
+            "verifier_clock",
+            "observed_post_state_revision",
+            "strength_revision",
+            "result_revision",
+        }
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        capability_registry: object,
+        capsule_registry: object,
+        runner_adapter: object,
+        runner_handler: object,
+        completion_coordinator: object,
+        verifier_profile: object,
+        verifier_policy: object,
+        verifier_handler: object,
+        verifier_clock: object,
+        observed_post_state_revision: str,
+        strength_revision: str,
+        result_revision: str,
+    ) -> _G8AssemblyBoundReadTerminal:
+        del (
+            capability_registry,
+            capsule_registry,
+            runner_adapter,
+            runner_handler,
+            completion_coordinator,
+            verifier_profile,
+            verifier_policy,
+            verifier_handler,
+            verifier_clock,
+            observed_post_state_revision,
+            strength_revision,
+            result_revision,
+        )
+        if type(assembly_anchors) is not _G8AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8AssemblyAnchors")
+        return tuple.__new__(cls, (assembly_anchors,))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        capability_registry: object,
+        capsule_registry: object,
+        runner_adapter: object,
+        runner_handler: object,
+        completion_coordinator: object,
+        verifier_profile: object,
+        verifier_policy: object,
+        verifier_handler: object,
+        verifier_clock: object,
+        observed_post_state_revision: str,
+        strength_revision: str,
+        result_revision: str,
+    ) -> None:
+        del assembly_anchors
+        _G8_BASE_READ_TERMINAL_INIT(
+            self,
+            capability_registry=capability_registry,
+            capsule_registry=capsule_registry,
+            runner_adapter=runner_adapter,
+            runner_handler=runner_handler,
+            completion_coordinator=completion_coordinator,
+            verifier_profile=verifier_profile,
+            verifier_policy=verifier_policy,
+            verifier_handler=verifier_handler,
+            verifier_clock=verifier_clock,
+            observed_post_state_revision=observed_post_state_revision,
+            strength_revision=strength_revision,
+            result_revision=result_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 READ terminal {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def run(self, *, prepared: CanonicalPreparedExecution) -> CanonicalReadTerminalResult:
+        _assert_g8_r2_base_implementations()
+        anchors = tuple.__getitem__(self, 0)
+        if type(anchors) is not _G8AssemblyAnchors:
+            raise PermissionError("G8 READ terminal assembly anchors are invalid")
+
+        capability_registry = self.capability_registry
+        capsule_registry = self.capsule_registry
+        source_adapter = self.runner_adapter
+        source_runner_handler = self.runner_handler
+        completion_coordinator = self.completion_coordinator
+        verifier_profile = self.verifier_profile
+        verifier_policy = self.verifier_policy
+        source_verifier_handler = self.verifier_handler
+        verifier_clock = self.verifier_clock
+        observed_post_state_revision = self.observed_post_state_revision
+        strength_revision = self.strength_revision
+        result_revision = self.result_revision
+
+        if type(source_adapter) is not _G8_RUNNER_ADAPTER_TYPE:
+            raise PermissionError("G8 READ terminal Runner adapter is not canonical")
+        if type(source_runner_handler) is not _G8_R2_RUNNER_HANDLER_TYPE:
+            raise PermissionError("G8 READ terminal Runner handler is not role-bound")
+        if type(source_verifier_handler) is not _G8_R2_VERIFIER_HANDLER_TYPE:
+            raise PermissionError("G8 READ terminal Verifier handler is not role-bound")
+        if type(verifier_profile) is not VerifierRuntimeProfile:
+            raise PermissionError("G8 READ terminal Verifier profile is not canonical")
+        if type(verifier_policy) is not VerifierCredentialPolicy:
+            raise PermissionError("G8 READ terminal Verifier policy is not canonical")
+        if type(verifier_clock) is not TrustedClockAuthority:
+            raise PermissionError("G8 READ terminal Verifier clock is not canonical")
+
+        provider = source_adapter.provider
+        credential_broker = source_adapter.credential_broker
+        adapter_fence = source_adapter.current_fence
+        identity_revision = source_adapter.identity_revision
+        boundary_revision = source_adapter.boundary_revision
+        activation_revision = source_adapter.activation_revision
+        if type(provider) is not GitHubActionsIsolatedRuntimeProvider:
+            raise PermissionError("G8 READ terminal Runner provider is not canonical")
+        if type(credential_broker) is not ImmutableCredentialBroker:
+            raise PermissionError("G8 READ terminal credential broker is not canonical")
+
+        runner_transport, verifier_transport = _assert_pair_transport_parity(
+            source_runner_handler.transport,
+            source_verifier_handler.transport,
+        )
+        runner_transport = _assert_g8_transport_matches_assembly(
+            runner_transport,
+            role="runner",
+            anchors=anchors,
+        )
+        verifier_transport = _assert_g8_transport_matches_assembly(
+            verifier_transport,
+            role="verifier",
+            anchors=anchors,
+        )
+
+        source_fence = _assert_pristine_durable_fence(
+            source_runner_handler.current_fence
+        )
+        runner_clock = source_runner_handler.trusted_clock
+        if source_fence.db is not anchors.canonical_db:
+            raise PermissionError(
+                "G8 READ terminal Runner fence escaped assembly canonical database"
+            )
+        if type(runner_clock) is not TrustedClockAuthority:
+            raise PermissionError("G8 READ terminal Runner clock is not canonical")
+        if runner_clock is not anchors.runner_clock:
+            raise PermissionError("G8 READ terminal Runner clock is not assembly-bound")
+        if adapter_fence is not source_fence:
+            raise PermissionError("G8 READ terminal Runner fence binding mismatch")
+        if getattr(adapter_fence, "db", None) is not anchors.canonical_db:
+            raise PermissionError(
+                "G8 READ terminal Runner adapter escaped assembly canonical database"
+            )
+        if source_fence.trusted_clock is not anchors.runner_clock:
+            raise PermissionError("G8 READ terminal Runner clock binding mismatch")
+        if source_verifier_handler.trusted_clock is not verifier_clock:
+            raise PermissionError("G8 READ terminal Verifier clock binding mismatch")
+        if verifier_profile.credential_class != anchors.verifier_pin.credential_class:
+            raise PermissionError("G8 READ terminal Verifier profile credential mismatch")
+        if verifier_policy.credential_class != anchors.verifier_pin.credential_class:
+            raise PermissionError("G8 READ terminal Verifier policy credential mismatch")
+        if anchors.runner_pin.credential_class == anchors.verifier_pin.credential_class:
+            raise PermissionError("G8 READ terminal credential roles collapsed")
+
+        local_fence = DurableCurrentExecutionFence(
+            database=anchors.canonical_db,
+            trusted_clock=anchors.runner_clock,
+        )
+        _assert_pristine_durable_fence(local_fence)
+
+        local_adapter = object.__new__(_G8_RUNNER_ADAPTER_TYPE)
+        _G8_RUNNER_ADAPTER_INIT(
+            local_adapter,
+            provider=provider,
+            credential_broker=credential_broker,
+            current_fence=local_fence,
+            identity_revision=identity_revision,
+            boundary_revision=boundary_revision,
+            activation_revision=activation_revision,
+        )
+        local_runner_handler = _G8_R2_RUNNER_HANDLER_TYPE(
+            assembly_anchors=anchors,
+            transport=runner_transport,
+            current_fence=local_fence,
+            trusted_clock=anchors.runner_clock,
+            observation_revision=source_runner_handler.observation_revision,
+        )
+        local_verifier_handler = _G8_R2_VERIFIER_HANDLER_TYPE(
+            assembly_anchors=anchors,
+            transport=verifier_transport,
+            trusted_clock=verifier_clock,
+            observation_revision=source_verifier_handler.observation_revision,
+        )
+
+        local_terminal = object.__new__(_G8_BASE_READ_TERMINAL_TYPE)
+        _G8_BASE_READ_TERMINAL_INIT(
+            local_terminal,
+            capability_registry=capability_registry,
+            capsule_registry=capsule_registry,
+            runner_adapter=local_adapter,
+            runner_handler=local_runner_handler,
+            completion_coordinator=completion_coordinator,
+            verifier_profile=verifier_profile,
+            verifier_policy=verifier_policy,
+            verifier_handler=local_verifier_handler,
+            verifier_clock=verifier_clock,
+            observed_post_state_revision=observed_post_state_revision,
+            strength_revision=strength_revision,
+            result_revision=result_revision,
+        )
+        return _G8_BASE_READ_TERMINAL_RUN(local_terminal, prepared=prepared)
+
+
+_G8_R2_READ_TERMINAL_TYPE: Final = _G8AssemblyBoundReadTerminal
+
+
+class _G8AssemblyBoundResumeService(tuple, CanonicalOperationResumeService):
+    """Resume path pinned to assembly DB and original canonical dependencies."""
+
+    _CRITICAL_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "db",
+            "snapshot_store",
+            "permission_authority",
+            "terminal_profile_registry",
+            "current_fence",
+            "envelope_revision",
+        }
+    )
+
+    def __new__(
+        cls,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        resume_binding: _G8ResumeAssemblyBinding,
+        database: object,
+        snapshot_store: object,
+        permission_authority: object,
+        terminal_profile_registry: object,
+        current_fence: object,
+        envelope_revision: str,
+    ) -> _G8AssemblyBoundResumeService:
+        del (
+            database,
+            snapshot_store,
+            permission_authority,
+            terminal_profile_registry,
+            current_fence,
+            envelope_revision,
+        )
+        if type(assembly_anchors) is not _G8AssemblyAnchors:
+            raise ValueError("assembly_anchors must be exact _G8AssemblyAnchors")
+        if type(resume_binding) is not _G8ResumeAssemblyBinding:
+            raise ValueError("resume_binding must be exact _G8ResumeAssemblyBinding")
+        return tuple.__new__(cls, (assembly_anchors, resume_binding))
+
+    def __init__(
+        self,
+        *,
+        assembly_anchors: _G8AssemblyAnchors,
+        resume_binding: _G8ResumeAssemblyBinding,
+        database: object,
+        snapshot_store: object,
+        permission_authority: object,
+        terminal_profile_registry: object,
+        current_fence: object,
+        envelope_revision: str,
+    ) -> None:
+        del assembly_anchors, resume_binding
+        _G8_BASE_RESUME_SERVICE_INIT(
+            self,
+            database=database,
+            snapshot_store=snapshot_store,
+            permission_authority=permission_authority,
+            terminal_profile_registry=terminal_profile_registry,
+            current_fence=current_fence,
+            envelope_revision=envelope_revision,
+        )
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self._CRITICAL_FIELDS and hasattr(self, name):
+            raise AttributeError(f"G8 resume service {name} binding is immutable")
+        super().__setattr__(name, value)
+
+    def resume(self, *, actor_id: str, execution_id: str) -> CanonicalPreparedExecution:
+        _assert_g8_r2_base_implementations()
+        anchors = tuple.__getitem__(self, 0)
+        resume_binding = tuple.__getitem__(self, 1)
+        if type(anchors) is not _G8AssemblyAnchors:
+            raise PermissionError("G8 resume assembly anchors are invalid")
+        if type(resume_binding) is not _G8ResumeAssemblyBinding:
+            raise PermissionError("G8 resume assembly binding is invalid")
+
+        database = self.db
+        snapshot_store = self.snapshot_store
+        permission_authority = self.permission_authority
+        terminal_profile_registry = self.terminal_profile_registry
+        source_fence = self.current_fence
+        envelope_revision = self.envelope_revision
+
+        if database is not anchors.canonical_db:
+            raise PermissionError("G8 resume database is not assembly canonical database")
+        if snapshot_store is not resume_binding.snapshot_store:
+            raise PermissionError("G8 resume snapshot store is not assembly-bound")
+        if permission_authority is not resume_binding.permission_authority:
+            raise PermissionError("G8 resume permission authority is not assembly-bound")
+        if terminal_profile_registry is not resume_binding.terminal_profile_registry:
+            raise PermissionError("G8 resume terminal registry is not assembly-bound")
+        if envelope_revision != resume_binding.envelope_revision:
+            raise PermissionError("G8 resume envelope revision is not assembly-bound")
+        if getattr(snapshot_store, "db", None) is not anchors.canonical_db:
+            raise PermissionError("G8 resume snapshot store escaped canonical database")
+        if getattr(permission_authority, "db", None) is not anchors.canonical_db:
+            raise PermissionError("G8 resume permission authority escaped canonical database")
+
+        source_fence = _assert_pristine_durable_fence(source_fence)
+        if source_fence.db is not anchors.canonical_db:
+            raise PermissionError("G8 resume fence escaped assembly canonical database")
+        if source_fence.trusted_clock is not anchors.runner_clock:
+            raise PermissionError("G8 resume fence clock is not assembly-bound")
+
+        local_fence = DurableCurrentExecutionFence(
+            database=anchors.canonical_db,
+            trusted_clock=anchors.runner_clock,
+        )
+        _assert_pristine_durable_fence(local_fence)
+
+        local_resume = object.__new__(_G8_BASE_RESUME_SERVICE_TYPE)
+        _G8_BASE_RESUME_SERVICE_INIT(
+            local_resume,
+            database=anchors.canonical_db,
+            snapshot_store=snapshot_store,
+            permission_authority=permission_authority,
+            terminal_profile_registry=terminal_profile_registry,
+            current_fence=local_fence,
+            envelope_revision=envelope_revision,
+        )
+        return _G8_BASE_RESUME_SERVICE_RESUME(
+            local_resume,
+            actor_id=actor_id,
+            execution_id=execution_id,
+        )
+
+
+_G8_R2_RESUME_SERVICE_TYPE: Final = _G8AssemblyBoundResumeService
+
+
+def _g8_r2_build_runtime(
+    self: G8ReadRuntimePack,
+    *,
+    service: ProductService,
+    permission_authority: DatabasePermissionAuthority,
+) -> CanonicalOperationRuntime:
+    """Run complete R1 assembly, then bind execution to independent R2 roots."""
+
+    if type(service) is not ProductService:
+        raise ValueError("service must be exact ProductService")
+    if type(permission_authority) is not DatabasePermissionAuthority:
+        raise ValueError("permission_authority must be exact DatabasePermissionAuthority")
+    if service.config.environment == "production":
+        raise PermissionError("G8 R1 cannot install into a production ProductService")
+    if service.config.environment != self.runner_provider.environment:
+        raise PermissionError("G8 product and Runner environments must match")
+
+    canonical_db = service.db
+    assembly_runner_clock = self.runner_clock
+    assembly_runner_source = self.runner_transport
+    assembly_verifier_source = self.verifier_transport
+
+    if permission_authority.db is not canonical_db:
+        raise ValueError("G8 permission authority must use the product database")
+    assembly_source_fence = _assert_pristine_durable_fence(self.current_fence)
+    if assembly_source_fence.db is not canonical_db:
+        raise ValueError("G8 current fence must use the product database")
+    if assembly_source_fence.trusted_clock is not assembly_runner_clock:
+        raise ValueError("G8 Runner and current fence must share the trusted clock")
+
+    source_implementation_pin = _current_credential_source_implementation_pin()
+    provider_effect_pin = _current_provider_read_effect_pin()
+    runner_pin = source_implementation_pin.pin_snapshot_method(assembly_runner_source)
+    verifier_pin = source_implementation_pin.pin_snapshot_method(assembly_verifier_source)
+    assembly_anchors = _G8AssemblyAnchors(
+        canonical_db=canonical_db,
+        runner_clock=assembly_runner_clock,
+        runner_source=assembly_runner_source,
+        verifier_source=assembly_verifier_source,
+        runner_pin=runner_pin,
+        verifier_pin=verifier_pin,
+        source_implementation_pin=source_implementation_pin,
+        provider_effect_pin=provider_effect_pin,
+    )
+
+    r1_runtime = _G8_R1_BUILD_RUNTIME(
+        self,
+        service=service,
+        permission_authority=permission_authority,
+    )
+    if type(r1_runtime) is not CanonicalOperationRuntime:
+        raise PermissionError("G8 R1 runtime type changed")
+    r1_terminal = r1_runtime.read_terminal
+    r1_resume = r1_runtime.resume_service
+    if type(r1_terminal) is not _G8_R1_FINAL_READ_TERMINAL_TYPE:
+        raise PermissionError("G8 R1 READ terminal type changed")
+    if type(r1_resume) is not _G8_BASE_RESUME_SERVICE_TYPE:
+        raise PermissionError("G8 R1 resume service type changed")
+
+    r1_runner_handler = r1_terminal.runner_handler
+    r1_verifier_handler = r1_terminal.verifier_handler
+    r1_adapter = r1_terminal.runner_adapter
+    if type(r1_runner_handler) is not _G8_R1_FINAL_RUNNER_HANDLER_TYPE:
+        raise PermissionError("G8 R1 Runner handler type changed")
+    if type(r1_verifier_handler) is not _G8_R1_FINAL_VERIFIER_HANDLER_TYPE:
+        raise PermissionError("G8 R1 Verifier handler type changed")
+    if type(r1_adapter) is not _G8_RUNNER_ADAPTER_TYPE:
+        raise PermissionError("G8 R1 Runner adapter type changed")
+
+    r1_runner_transport, r1_verifier_transport = _assert_pair_transport_parity(
+        r1_runner_handler.transport,
+        r1_verifier_handler.transport,
+    )
+    r1_runner_transport = _assert_g8_transport_matches_assembly(
+        r1_runner_transport,
+        role="runner",
+        anchors=assembly_anchors,
+    )
+    r1_verifier_transport = _assert_g8_transport_matches_assembly(
+        r1_verifier_transport,
+        role="verifier",
+        anchors=assembly_anchors,
+    )
+
+    r1_fence = _assert_pristine_durable_fence(r1_runner_handler.current_fence)
+    if r1_fence.db is not canonical_db:
+        raise PermissionError("G8 R1 runtime fence escaped assembly canonical database")
+    if r1_fence.trusted_clock is not assembly_runner_clock:
+        raise PermissionError("G8 R1 runtime fence clock escaped assembly binding")
+    if r1_adapter.current_fence is not r1_fence:
+        raise PermissionError("G8 R1 Runner adapter/fence binding mismatch")
+    if getattr(r1_adapter.current_fence, "db", None) is not canonical_db:
+        raise PermissionError("G8 R1 Runner adapter escaped assembly canonical database")
+    if r1_resume.db is not canonical_db:
+        raise PermissionError("G8 R1 resume database escaped assembly canonical database")
+    if r1_resume.current_fence is not r1_fence:
+        raise PermissionError("G8 R1 resume/READ fence binding mismatch")
+
+    resume_binding = _G8ResumeAssemblyBinding(
+        snapshot_store=r1_resume.snapshot_store,
+        permission_authority=r1_resume.permission_authority,
+        terminal_profile_registry=r1_resume.terminal_profile_registry,
+        envelope_revision=r1_resume.envelope_revision,
+    )
+
+    runtime_fence = DurableCurrentExecutionFence(
+        database=canonical_db,
+        trusted_clock=assembly_runner_clock,
+    )
+    _assert_pristine_durable_fence(runtime_fence)
+
+    r2_adapter = object.__new__(_G8_RUNNER_ADAPTER_TYPE)
+    _G8_RUNNER_ADAPTER_INIT(
+        r2_adapter,
+        provider=r1_adapter.provider,
+        credential_broker=r1_adapter.credential_broker,
+        current_fence=runtime_fence,
+        identity_revision=r1_adapter.identity_revision,
+        boundary_revision=r1_adapter.boundary_revision,
+        activation_revision=r1_adapter.activation_revision,
+    )
+    r2_runner_handler = _G8_R2_RUNNER_HANDLER_TYPE(
+        assembly_anchors=assembly_anchors,
+        transport=r1_runner_transport,
+        current_fence=runtime_fence,
+        trusted_clock=assembly_runner_clock,
+        observation_revision=r1_runner_handler.observation_revision,
+    )
+    r2_verifier_handler = _G8_R2_VERIFIER_HANDLER_TYPE(
+        assembly_anchors=assembly_anchors,
+        transport=r1_verifier_transport,
+        trusted_clock=r1_verifier_handler.trusted_clock,
+        observation_revision=r1_verifier_handler.observation_revision,
+    )
+    r2_terminal = _G8_R2_READ_TERMINAL_TYPE(
+        assembly_anchors=assembly_anchors,
+        capability_registry=r1_terminal.capability_registry,
+        capsule_registry=r1_terminal.capsule_registry,
+        runner_adapter=r2_adapter,
+        runner_handler=r2_runner_handler,
+        completion_coordinator=r1_terminal.completion_coordinator,
+        verifier_profile=r1_terminal.verifier_profile,
+        verifier_policy=r1_terminal.verifier_policy,
+        verifier_handler=r2_verifier_handler,
+        verifier_clock=r1_terminal.verifier_clock,
+        observed_post_state_revision=r1_terminal.observed_post_state_revision,
+        strength_revision=r1_terminal.strength_revision,
+        result_revision=r1_terminal.result_revision,
+    )
+    r2_resume = _G8_R2_RESUME_SERVICE_TYPE(
+        assembly_anchors=assembly_anchors,
+        resume_binding=resume_binding,
+        database=canonical_db,
+        snapshot_store=resume_binding.snapshot_store,
+        permission_authority=resume_binding.permission_authority,
+        terminal_profile_registry=resume_binding.terminal_profile_registry,
+        current_fence=runtime_fence,
+        envelope_revision=resume_binding.envelope_revision,
+    )
+    return CanonicalOperationRuntime(
+        pipeline=r1_runtime.pipeline,
+        read_terminal=r2_terminal,
+        resume_service=r2_resume,
+    )
+
+
+_G8_R2_BUILD_RUNTIME: Final = _g8_r2_build_runtime
+G8ReadRuntimePack.build_runtime = _G8_R2_BUILD_RUNTIME  # type: ignore[method-assign]
