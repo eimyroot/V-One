@@ -105,6 +105,28 @@ def test_policy_accepts_only_review_branches() -> None:
             policy.validate_target_branch(invalid)
 
 
+def test_canonical_repository_identity_allows_only_explicit_legacy_origin_alias() -> None:
+    policy = MODULE.PublicationPolicy()
+
+    canonical = "https://github.com/eimyroot/V-One.git"
+    legacy = "https://github.com/nulleimy/V-One.git"
+
+    assert canonical == MODULE.ALLOWED_GITHUB_REPOSITORY
+
+    policy.validate_repository_url(canonical)
+    policy.validate_origin_fetch_url(canonical, canonical)
+    policy.validate_origin_fetch_url(legacy, canonical)
+
+    with pytest.raises(MODULE.PublicationError, match="not allowlisted"):
+        policy.validate_repository_url(legacy)
+
+    with pytest.raises(MODULE.PublicationError, match="origin fetch URL"):
+        policy.validate_origin_fetch_url(
+            "https://github.com/example/not-v-one.git",
+            canonical,
+        )
+
+
 def test_manifest_verification_detects_drift(tmp_path: Path) -> None:
     target = tmp_path / "doc.md"
     target.write_text("original\n", encoding="utf-8")
