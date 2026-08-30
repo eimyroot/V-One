@@ -422,23 +422,24 @@ class SharedStatePointer:
 
         state_hash = _require_state_hash(self.state_hash, field_name="state_hash")
         state = _decode_canonical_object(self.state_json, field_name="state_json")
-        if self.revision == 0:
-            if state_hash != GENESIS_STATE_HASH:
-                raise ValueError("revision zero must use GENESIS state hash")
-            if state:
-                raise ValueError("revision zero must use empty canonical state")
-            if any(
-                value is not None
-                for value in (self.last_event_id, self.last_correlation_id, self.updated_at)
-            ):
-                raise ValueError("genesis pointer must not claim event lineage")
-        else:
-            if state_hash == GENESIS_STATE_HASH:
-                raise ValueError("non-genesis revision requires a sha256 state hash")
-            if _state_hash(self.state_json) != state_hash:
-                raise ValueError("state_hash does not match state_json")
-            if not all((self.last_event_id, self.last_correlation_id, self.updated_at)):
-                raise ValueError("non-genesis pointer requires complete event lineage")
+        if self.revision == 0 and state_hash != GENESIS_STATE_HASH:
+            raise ValueError("revision zero must use GENESIS state hash")
+        if self.revision == 0 and state:
+            raise ValueError("revision zero must use empty canonical state")
+        if self.revision == 0 and any(
+            value is not None
+            for value in (self.last_event_id, self.last_correlation_id, self.updated_at)
+        ):
+            raise ValueError("genesis pointer must not claim event lineage")
+        if self.revision > 0 and state_hash == GENESIS_STATE_HASH:
+            raise ValueError("non-genesis revision requires a sha256 state hash")
+        if self.revision > 0 and _state_hash(self.state_json) != state_hash:
+            raise ValueError("state_hash does not match state_json")
+        if self.revision > 0 and not all(
+            (self.last_event_id, self.last_correlation_id, self.updated_at)
+        ):
+            raise ValueError("non-genesis pointer requires complete event lineage")
+        if self.revision > 0:
             _require_prefixed_id(
                 str(self.last_event_id),
                 prefix="evt",
