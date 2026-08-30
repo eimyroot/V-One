@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from .evidence_primitives import canonical_json, new_id, utc_now
 
@@ -14,6 +15,9 @@ STATE_TRANSITION_SCHEMA = "voodoo.state-transition.v1"
 SHARED_STATE_SCHEMA = "voodoo.shared-state-pointer.v1"
 
 GENESIS_STATE_HASH = "GENESIS"
+EVENT_STATUSES = frozenset(
+    {"OBSERVED", "VERIFIED", "PROPOSED", "BLOCKED", "FAILED", "UNKNOWN"}
+)
 
 
 def _require_nonempty(value: str, *, field_name: str) -> str:
@@ -34,8 +38,10 @@ def _require_state_hash(value: str, *, field_name: str) -> str:
     if value == GENESIS_STATE_HASH:
         return value
     normalized = value.lower()
-    if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
-        raise ValueError(f"{field_name} must be GENESIS or a lowercase sha256 digest")
+    if len(normalized) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise ValueError(f"{field_name} must be GENESIS or a sha256 digest")
     return normalized
 
 
@@ -43,8 +49,24 @@ def _state_hash(state_json: str) -> str:
     return hashlib.sha256(state_json.encode()).hexdigest()
 
 
-def _canonical_payload_json(payload: Mapping[str, Any]) -> str:
-    return canonical_json(dict(payload))
+def _canonical_object_json(value: Mapping[str, Any], *, field_name: str) -> str:
+    encoded = canonical_json(dict(value))
+    decoded = json.loads(encoded)
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{field_name} must encode a JSON object")
+    return encoded
+
+
+def _decode_canonical_object(value: str, *, field_name: str) -> dict[str, Any]:
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{field_name} must contain valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{field_name} must decode to a JSON object")
+    if canonical_json(decoded) != value:
+        raise ValueError(f"{field_name} must use canonical JSON encoding")
+    return decoded
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,16 +178,20 @@ class ImmutableProjectRegistry:
         by_repository: dict[str, ProjectDescriptor] = {}
 
         for project in projects:
+            if type(project) is not ProjectDescriptor:
+                raise ValueError("project registry accepts exact ProjectDescriptor values only")
             identities = (project.project_id, *project.aliases)
             for identity in identities:
                 if identity in by_identity:
                     raise ValueError(f"duplicate project identity: {identity}")
                 by_identity[identity] = project
-            if project.canonical_repository in by_repository:
+
+            repository_key = project.canonical_repository.casefold()
+            if repository_key in by_repository:
                 raise ValueError(
                     f"duplicate canonical repository: {project.canonical_repository}"
                 )
-            by_repository[project.canonical_repository] = project
+            by_repository[repository_key] = project
 
         self._by_identity = by_identity
         self._by_repository = by_repository
@@ -178,7 +204,7 @@ class ImmutableProjectRegistry:
 
     def resolve_repository(self, repository: str) -> ProjectDescriptor:
         try:
-            return self._by_repository[repository]
+            return self._by_repository[repository.casefold()]
         except KeyError as exc:
             raise LookupError(f"unknown project repository: {repository}") from exc
 
@@ -197,20 +223,18 @@ class StateTransition:
             self.previous_state_hash,
             field_name="previous_state_hash",
         )
-        expected_next = _state_hash(self.next_state_json)
+        next_state = _decode_canonical_object(
+            self.next_state_json,
+            field_name="next_state_json",
+        )
+        canonical_next = canonical_json(next_state)
+        expected_next = _state_hash(canonical_next)
         supplied_next = _require_state_hash(
             self.next_state_hash,
             field_name="next_state_hash",
         )
         if supplied_next == GENESIS_STATE_HASH or supplied_next != expected_next:
             raise ValueError("next_state_hash does not match next_state_json")
-        try:
-            parsed = json.loads(self.next_state_json)
-        except json.JSONDecodeError as exc:
-            raise ValueError("next_state_json must contain valid JSON") from exc
-        canonical = canonical_json(parsed)
-        if canonical != self.next_state_json:
-            raise ValueError("next_state_json must use canonical JSON encoding")
 
         object.__setattr__(self, "previous_state_hash", previous)
         object.__setattr__(self, "next_state_hash", supplied_next)
@@ -222,7 +246,7 @@ class StateTransition:
         previous_state_hash: str,
         next_state: Mapping[str, Any],
     ) -> StateTransition:
-        next_state_json = _canonical_payload_json(next_state)
+        next_state_json = _canonical_object_json(next_state, field_name="next_state")
         return cls(
             previous_state_hash=previous_state_hash,
             next_state_json=next_state_json,
@@ -230,10 +254,7 @@ class StateTransition:
         )
 
     def state(self) -> dict[str, Any]:
-        value = json.loads(self.next_state_json)
-        if not isinstance(value, dict):
-            raise ValueError("shared state must decode to an object")
-        return value
+        return _decode_canonical_object(self.next_state_json, field_name="next_state_json")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -270,25 +291,33 @@ class ControlPlaneEvent:
             "event_id",
             _require_prefixed_id(self.event_id, prefix="evt", field_name="event_id"),
         )
-        for name in ("event_type", "occurred_at", "actor_id", "component", "action", "resource"):
+        for name in (
+            "event_type",
+            "occurred_at",
+            "actor_id",
+            "component",
+            "action",
+            "resource",
+        ):
             object.__setattr__(
                 self,
                 name,
                 _require_nonempty(str(getattr(self, name)), field_name=name),
             )
+
         status = _require_nonempty(self.status, field_name="status").upper()
-        if status not in {"OBSERVED", "VERIFIED", "REJECTED", "FAILED"}:
-            raise ValueError("status must be OBSERVED, VERIFIED, REJECTED, or FAILED")
+        if status not in EVENT_STATUSES:
+            raise ValueError(f"unsupported control-plane event status: {status}")
         object.__setattr__(self, "status", status)
 
-        try:
-            parsed_payload = json.loads(self.payload_json)
-        except json.JSONDecodeError as exc:
-            raise ValueError("payload_json must contain valid JSON") from exc
-        if not isinstance(parsed_payload, dict):
-            raise ValueError("event payload must decode to an object")
-        if canonical_json(parsed_payload) != self.payload_json:
-            raise ValueError("payload_json must use canonical JSON encoding")
+        if type(self.correlation) is not CorrelationContext:
+            raise ValueError("correlation must be an exact CorrelationContext")
+        if type(self.project) is not ProjectDescriptor:
+            raise ValueError("project must be an exact ProjectDescriptor")
+        if self.state_transition is not None and type(self.state_transition) is not StateTransition:
+            raise ValueError("state_transition must be an exact StateTransition")
+
+        _decode_canonical_object(self.payload_json, field_name="payload_json")
 
         evidence_refs = tuple(
             _require_nonempty(reference, field_name="evidence_ref")
@@ -335,17 +364,14 @@ class ControlPlaneEvent:
             status=status,
             correlation=correlation,
             project=project,
-            payload_json=_canonical_payload_json(payload),
+            payload_json=_canonical_object_json(payload, field_name="payload"),
             evidence_refs=tuple(evidence_refs),
             decision_refs=tuple(decision_refs),
             state_transition=state_transition,
         )
 
     def payload(self) -> dict[str, Any]:
-        value = json.loads(self.payload_json)
-        if not isinstance(value, dict):
-            raise ValueError("event payload must decode to an object")
-        return value
+        return _decode_canonical_object(self.payload_json, field_name="payload_json")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -371,7 +397,7 @@ class ControlPlaneEvent:
 
 @dataclass(frozen=True, slots=True)
 class SharedStatePointer:
-    """Current deterministic projection derived from verified state-transition events."""
+    """Current deterministic projection derived from state-transition events."""
 
     project_id: str
     revision: int
@@ -390,11 +416,13 @@ class SharedStatePointer:
         )
         if self.revision < 0:
             raise ValueError("revision must be non-negative")
+
         state_hash = _require_state_hash(self.state_hash, field_name="state_hash")
+        state = _decode_canonical_object(self.state_json, field_name="state_json")
         if self.revision == 0:
             if state_hash != GENESIS_STATE_HASH:
                 raise ValueError("revision zero must use GENESIS state hash")
-            if self.state_json != "{}":
+            if state:
                 raise ValueError("revision zero must use empty canonical state")
             if any(
                 value is not None
@@ -408,10 +436,17 @@ class SharedStatePointer:
                 raise ValueError("state_hash does not match state_json")
             if not all((self.last_event_id, self.last_correlation_id, self.updated_at)):
                 raise ValueError("non-genesis pointer requires complete event lineage")
+            _require_prefixed_id(
+                str(self.last_event_id),
+                prefix="evt",
+                field_name="last_event_id",
+            )
+            _require_prefixed_id(
+                str(self.last_correlation_id),
+                prefix="corr",
+                field_name="last_correlation_id",
+            )
 
-        parsed = json.loads(self.state_json)
-        if not isinstance(parsed, dict) or canonical_json(parsed) != self.state_json:
-            raise ValueError("state_json must be a canonical JSON object")
         object.__setattr__(self, "state_hash", state_hash)
 
     @classmethod
@@ -427,10 +462,7 @@ class SharedStatePointer:
         )
 
     def state(self) -> dict[str, Any]:
-        value = json.loads(self.state_json)
-        if not isinstance(value, dict):
-            raise ValueError("state_json must decode to an object")
-        return value
+        return _decode_canonical_object(self.state_json, field_name="state_json")
 
     def as_dict(self) -> dict[str, Any]:
         return {
