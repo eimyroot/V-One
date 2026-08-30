@@ -4,7 +4,7 @@
 |---|---|
 | Document class | Governance authority and adoption register |
 | Candidate preparation date | `2026-08-06` |
-| Latest recorded owner adoption date | `2026-08-17` |
+| Latest recorded owner adoption date | `2026-08-24` |
 | Scope | VOODOO One governance documents, accepted ADRs, and technical operating-standard succession |
 | Live repository authority | None; live Git, tests, CI, artifacts and runtime remain separate evidence sources |
 | Owner adoption effect | An explicit owner decision over an exact content SHA-256 and candidate commit creates adoption when recorded here without modifying the adopted content |
@@ -240,3 +240,33 @@ modifies only this external governance register and does not modify the adopted 
 The embedded `PROPOSED / REVIEW REQUIRED` label is therefore preserved as historical declared status;
 this record establishes the effective `ADOPTED` status. This record does not itself authorize A8 or
 any later implementation, release, deployment, provider mutation, or production effect.
+
+## 12. ADR-0019 owner adoption record — canonical READ E2E before provider WRITE
+
+```text
+DOCUMENT: docs/adr/ADR-0019-read-e2e-before-write.md
+VERSION_OR_CANDIDATE_VERSION: ADR-0019 — Canonical READ E2E Before Provider WRITE
+DECLARED_STATUS: PROPOSED — governed adoption pending
+EFFECTIVE_STATUS: ADOPTED
+OWNER: project owner VOODOO — ENGINEERING
+ADOPTION_METHOD: explicit owner decision over exact candidate commit 39f6743c239876b2d532d6fd7e7b8b74714d3c0d and exact content SHA-256 464f9fde473edd01df37ab86f3b08661da00cb9c4023830c1792b0de65d12df0 after exact-head CI #1060, fresh independent Codex review with no major findings, zero unresolved blocking review threads, protected-main merge PR #142, and confirmation that merged main retains Git blob 18595723171cfa00fba8cfa5231863ef7c2f5bc2
+ADOPTION_DATE: 2026-08-24
+ADOPTED_CONTENT_COMMIT: 39f6743c239876b2d532d6fd7e7b8b74714d3c0d
+CONTENT_SHA256: 464f9fde473edd01df37ab86f3b08661da00cb9c4023830c1792b0de65d12df0
+SUPERSEDES: none; establishes the READ-before-WRITE eligibility boundary for provider effects
+CONFLICTS_RESOLVED: exact candidate bytes remain PROPOSED and immutable while this external record establishes effective adoption; restart/resume is constrained to the same ACTIVE execution before Runner completion; completed-execution resume/reverification is not claimed; G8 is READ-only; execution success remains distinct from independent VerificationResult/v1; provider WRITE remains blocked until the adopted READ evidence gate is VERIFIED and a later effect-specific authorization exists
+NEXT_REVIEW: before any weakening of the READ-before-WRITE gate, before provider WRITE activation, or after material contradictory runtime/security evidence
+IMPLEMENTATION_AUTHORIZATION: NOT_CREATED_BY_THIS_RECORD; the separate owner instruction to proceed with a conforming READ-only G8 candidate remains distinct
+G8_READ_ONLY_RUNTIME: MAY_PROCEED_ONLY_WITHIN_ADOPTED_BOUNDARY_AND_NORMAL_REVIEW_GATES
+PROVIDER_WRITE: NOT_AUTHORIZED
+CREATE_REF_DELETE_REF_EFFECTS: NOT_AUTHORIZED
+RELEASE: NOT_AUTHORIZED
+DEPLOYMENT: NOT_AUTHORIZED
+PRODUCTION_EFFECTS: BLOCKED
+```
+
+The adopted bytes are exactly those in candidate commit
+`39f6743c239876b2d532d6fd7e7b8b74714d3c0d` with the recorded SHA-256 and Git blob identity. PR #142
+merged those bytes without modifying the ADR. This external record establishes effective adoption and
+does not itself authorize G8 implementation beyond the separately recorded owner instruction, any
+provider mutation, release, deployment, or production effect.

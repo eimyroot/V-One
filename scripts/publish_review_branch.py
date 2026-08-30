@@ -17,7 +17,10 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-ALLOWED_GITHUB_REPOSITORY = "https://github.com/nulleimy/V-One.git"
+ALLOWED_GITHUB_REPOSITORY = "https://github.com/eimyroot/V-One.git"
+LEGACY_GITHUB_REPOSITORY_ALIASES = frozenset(
+    {"https://github.com/nulleimy/V-One.git"}
+)
 CANONICAL_EVIDENCE_ROOT = Path("/Users/eimyna/00_DEV/V-ONE-EVIDENCE")
 DEFAULT_BASE_REF = "origin/main"
 DEFAULT_BASE_FETCH_REFSPEC = "+refs/heads/main:refs/remotes/origin/main"
@@ -42,6 +45,23 @@ class PublicationPolicy:
                 "repository URL is not allowlisted: "
                 f"expected={self.allowed_repository_url!r} actual={repository_url!r}"
             )
+
+    def validate_origin_fetch_url(
+        self,
+        origin_fetch_url: str,
+        repository_url: str,
+    ) -> None:
+        if origin_fetch_url == repository_url:
+            return
+        if (
+            repository_url == self.allowed_repository_url
+            and origin_fetch_url in LEGACY_GITHUB_REPOSITORY_ALIASES
+        ):
+            return
+        raise PublicationError(
+            "origin fetch URL is not an accepted source for the publication repository: "
+            f"origin={origin_fetch_url!r} publication={repository_url!r}"
+        )
 
     def validate_target_branch(self, target_branch: str) -> None:
         if target_branch in self.protected_branches:
@@ -207,11 +227,7 @@ def build_plan(
     )
 
     origin_fetch_url = git(repo_root, "remote", "get-url", "origin").stdout.strip()
-    if origin_fetch_url != repository_url:
-        raise PublicationError(
-            "origin fetch URL does not match the allowlisted publication repository: "
-            f"origin={origin_fetch_url!r} publication={repository_url!r}"
-        )
+    policy.validate_origin_fetch_url(origin_fetch_url, repository_url)
 
     if fetch_origin:
         fetch_origin_base(repo_root, base_ref)

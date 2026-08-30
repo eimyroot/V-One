@@ -67,14 +67,18 @@ OperationProof != OperationCell
 | Security Intelligence R-SI1.1 | IMPLEMENTED intelligence-only metadata/test layer |
 | VOP semantic revision R2 | CURRENT / MERGED via PR #128 |
 | Canonical FastAPI ProductComposition runtime seam | IMPLEMENTED / MERGED; explicit runtime factory required, default provider pack disabled |
-| Canonical public operation API | NOT YET SURFACED |
-| GitHub main ruleset enforcement | UNKNOWN / release-blocking until live evidence |
+| Canonical public READ operation API | IMPLEMENTED / MERGED via PR #137; reconciled with resume/runtime via PR #140 |
+| Restart-safe durable READ resume | IMPLEMENTED / MERGED via PR #140 |
+| GitHub main governance enforcement | VERIFIED / G0 PASS from retained live verifier evidence |
+| Default provider runtime pack | BLOCKED / disabled until G8 |
+| Real canonical HTTP READ E2E through default G8 pack | BLOCKED / not yet verified |
+| Provider WRITE activation | BLOCKED pending repeated READ E2E + restart-safe verification gate |
 | Production effects | BLOCKED / disabled by default |
 | Unrestricted production release | BLOCKED |
 | Public commercial distribution | BLOCKED |
 | CyberCore integration | BLOCKED pending product/release-governance hardening |
 
-Product version remains `0.9.0-rc2-dev`; reconciliation merge is not release/deploy.
+Product version remains `0.9.0-rc2-dev`; G7 reconciliation is not release/deploy.
 
 ### Historical runtime checkpoint
 
@@ -132,16 +136,57 @@ as a `ProductComposition` seam: an explicit runtime factory must share the exact
 and `DatabasePermissionAuthority`, and the default application intentionally leaves the provider
 runtime pack absent/fail-closed.
 
+PR #137 merged the canonical READ HTTP surface. PR #140 reconciled that surface with restart-safe
+durable resume and runtime resume wiring, without adding a provider WRITE route or default provider
+runtime pack.
+
 ```text
 COMPONENT COVERAGE = STRONG
 HISTORICAL BOUNDED-MUTATION ATOM = VERIFIED
 CANONICAL PRODUCT RUNTIME SEAM = IMPLEMENTED / MERGED
+CANONICAL PUBLIC READ API = IMPLEMENTED / MERGED
+RESTART-SAFE DURABLE RESUME = IMPLEMENTED / MERGED
 DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
-CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
+REAL DEFAULT-RUNTIME HTTP READ E2E = NOT VERIFIED
+PROVIDER WRITE = BLOCKED
 ```
 
-Legacy `ExecutionService` remains an explicit compatibility surface. ProductComposition wiring does
-not imply a new public canonical operation endpoint, provider mutation, deployment or release.
+Legacy `ExecutionService` remains an explicit compatibility surface and is not canonical fallback
+authority. Public READ API availability does not imply provider runtime activation, provider mutation,
+deployment, or release.
+
+## G0 governance evidence
+
+The former GitHub-governance blocker is closed by retained live verifier evidence, not by documentation
+or ordinary CI inference:
+
+```text
+workflow = g0-governance-verify
+run = 32553113424
+source_sha = 76d74d2ed62b6e78f027728c456c22da0b4a95bd
+artifact = g0-governance-evidence-32553113424-1
+artifact_digest = sha256:6e63caee23a57613471df66ef0279c0261ed8d375e4c929accdf50eff7dc4f5f
+verdict = VERIFIED
+```
+
+This evidence established the G0 PASS controls in the current-state documents. G0 PASS remains separate
+from provider runtime, release, and deployment authorization.
+
+## READ before WRITE
+
+The next governed direction is a READ-only G8 runtime pack followed by repeated real canonical HTTP
+READ E2E and restart/resume verification. Provider WRITE remains blocked unless the adopted safety gate
+is satisfied with evidence for READ E2E, restart continuity, no duplicate authority/effect, independent
+verification, and fail-closed behavior. Even then, `ELIGIBLE` would not itself authorize a WRITE effect.
+
+Execution success remains distinct from independent verification:
+
+```text
+execution.status      = SUCCEEDED
+verification.verdict  = NOT_VERIFIED
+```
+
+is truthful and must not be promoted to `VERIFIED` by execution success, receipts, or hash integrity.
 
 ## Historical verified bounded-mutation atom
 
@@ -156,7 +201,8 @@ F6b run `32213563750` proved one staging rollback operation:
 - `OperationProof/v2 = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd1718`;
 - `OperationCell/v1 = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5`.
 
-This is real bounded-mutation evidence, not evidence that every READ produces Proof/v2/Cell/v1.
+This is real bounded-mutation evidence, not evidence that every READ produces Proof/v2/Cell/v1 or that
+a new provider mutation is authorized.
 
 ## Security posture
 
@@ -168,8 +214,11 @@ This is real bounded-mutation evidence, not evidence that every READ produces Pr
 - bounded isolated pilot runtimes;
 - separate independent verifier path;
 - receipt/verification semantics separate;
+- canonical public READ API and restart-safe resume are merged;
+- default G8 provider runtime and real product HTTP READ E2E remain blocked/unverified;
+- provider WRITE remains blocked behind READ-before-WRITE evidence and separate effect authorization;
 - no release/deployment inferred from CI, merge, Proof or Cell;
-- live GitHub enforcement remains UNKNOWN until settings/ruleset evidence proves it.
+- GitHub main governance enforcement has retained live G0 VERIFIED evidence.
 
 ## Documentation
 
@@ -184,6 +233,8 @@ This is real bounded-mutation evidence, not evidence that every READ produces Pr
 | [`foundation/FOUNDATIONS.md`](foundation/FOUNDATIONS.md) | Stable engineering foundations |
 | [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md) | Shared terminology/status language |
 | [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md) | Current capability inventory |
+| [`docs/product/POST_G7_CANONICAL_STATE.md`](docs/product/POST_G7_CANONICAL_STATE.md) | Commit-bound post-G7 truth snapshot |
+| [`docs/product/G8_READ_RUNTIME_GATE.md`](docs/product/G8_READ_RUNTIME_GATE.md) | G8 READ-only runtime acceptance boundary |
 | [`docs/product/TARGET_CAPABILITIES.md`](docs/product/TARGET_CAPABILITIES.md) | Target capability contracts |
 | [`docs/product/SECURITY_OVERVIEW.md`](docs/product/SECURITY_OVERVIEW.md) | Security-control summary |
 | [`docs/product/MVP_DELIVERY_MAP.md`](docs/product/MVP_DELIVERY_MAP.md) | MVP/product delivery map |
@@ -194,7 +245,8 @@ This is real bounded-mutation evidence, not evidence that every READ produces Pr
 
 Normative governance remains in
 [`WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md`](WORLD_CLASS_SOFTWARE_DEVOPS_OPERATING_MODE.md),
-[`PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md), and effective adopted records/ADRs.
+[`PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md), and effective adopted records/ADRs. ADR-0019
+remains `PROPOSED` until its governed adoption gate closes.
 
 ## Local verification
 

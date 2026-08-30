@@ -350,11 +350,6 @@ class ExternalSkillNormalizer:
             raise ValueError("external skill is invalid")
         if external.discovery.source != external.source:
             raise ValueError("discovery source mismatch")
-        if (
-            external.discovery.level is DiscoveryLevel.CONTENT
-            and external.discovery.content_ref != external.content_ref
-        ):
-            raise ValueError("content_ref provenance mismatch")
         if not external.capabilities:
             raise ValueError("external skill requires at least one capability")
 

@@ -1,16 +1,15 @@
 # VOODOO One — CURRENT PRODUCT STATE
 
-> Living evidence-scoped snapshot. Live Git/GitHub, executed tests and runtime evidence outrank this
-> document. Historical claims stay historical and are never upgraded by later success.
+> Living evidence-scoped snapshot. Live Git/GitHub, executed tests and runtime evidence outrank this document. Historical claims stay historical and are never upgraded by later success.
 
 ## Snapshot identity
 
 ```text
-AS_OF: 2026-08-21
+AS_OF: 2026-08-24
 EXACT_LIVE_GIT_IDENTITY: QUERY_LIVE_GIT_DIRECTLY
-RECONCILIATION_INPUT_HEAD: 71a931b561faa93c8dd2e062b83559401143b1df
-RECONCILIATION_BASE_MAIN: 71a931b561faa93c8dd2e062b83559401143b1df
-RECONCILIATION_MERGE: PR #128 / d9e27ff17b76f29daba4a3421b11cc396826fe12
+RECONCILIATION_INPUT_HEAD: 3106ba95125a13adb8e0ee867fbf341d2d2e776e
+RECONCILIATION_BASE_MAIN: 3106ba95125a13adb8e0ee867fbf341d2d2e776e
+RECONCILIATION_MERGE: PR #140 / 60bc9c26813ee23c73bac194a9adb27714e8a1e8
 LATEST_RUNTIME_ATTESTED_COMMITTED_BASELINE: main@d57d37111b8bc9471a136b6c618aad8e920f1aff
 VOP_SEMANTIC_REVISION: vop-terminology-freeze-r2
 PRODUCT_VERSION: 0.9.0-rc2-dev
@@ -19,8 +18,7 @@ RELEASE: NOT_PERFORMED
 DEPLOYMENT: NOT_PERFORMED
 ```
 
-The exact live `main` identity must be queried directly. Retained SHAs in this file are historical or
-merge provenance and are never self-updating claims about future repository state.
+The exact live `main` identity must be queried directly. The G7 merge SHA above is snapshot provenance, not a self-updating current-main claim.
 
 ## Historical checkpoint boundary
 
@@ -32,8 +30,7 @@ POST_MERGE_CHECKPOINT_ZIP_SHA256=80e53da665fe122375900ac888fef3562b0182018c4f749
 POST_MERGE_CHECKPOINT_IMAGE_ID=sha256:8342c2ac978343a59ef13d90bda5d89f3d06be2c3d25875665026f039eb99abc
 ```
 
-Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains ADR-0008
-evidence-index provenance only; it is not the current Git baseline.
+Historical documentation-review merge `57c7bf2277616c4445039865ac7cf81c5fada858` remains ADR-0008 evidence-index provenance only; it is not the current Git baseline.
 
 ## Truth dimensions
 
@@ -53,29 +50,57 @@ RELEASED / DEPLOYED       = separately governed states
 | Dimension | Current state |
 |---|---|
 | Technical trust-plane components | **STRONG / IMPLEMENTED** |
-| Historical bounded-mutation operation atom | **VERIFIED** in F6b staging scope |
-| Canonical ProductComposition trust-plane seam | **IMPLEMENTED / MERGED via PR #128** |
+| Canonical ProductComposition trust-plane seam | **IMPLEMENTED / MERGED** |
+| Canonical public READ operation API | **IMPLEMENTED / MERGED via PR #137** |
+| Restart-safe durable resume | **IMPLEMENTED / MERGED via PR #140** |
+| Runtime resume wiring | **IMPLEMENTED / MERGED via PR #140** |
+| G7 post-merge verification | **VERIFIED on `main@60bc9c268...` by CI #1015, D4 #202, E3 #193, E4B #189** |
+| GitHub G0 governance | **VERIFIED / PASS** |
 | Default provider runtime pack | **DISABLED / FAIL-CLOSED** |
-| Canonical public operation API | **NOT YET SURFACED** |
-| Capability→terminal profile authority | **IMPLEMENTED / MERGED; caller cannot strengthen profile** |
-| Runtime/database-backed permission authority | **IMPLEMENTED / MERGED; current role + active state + workspace membership** |
-| Workspace membership scope | **IMPLEMENTED / MERGED; schema 14, no legacy inference/backfill** |
-| READ Runner→independent Verifier terminal | **IMPLEMENTED / MERGED; live pilot primitives already VERIFIED** |
-| Reusable CREATE_REF WRITE orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
-| Reusable DELETE_REF rollback orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT EXECUTED** |
-| Canonical VOP language | **R2 CURRENT / MERGED** |
-| UI receipt/verification truth | **FIXED / MERGED; exact-head closure passed** |
-| SQLite persistence | **IMPLEMENTED through schema 14** |
-| OperationProof/v2 | **IMPLEMENTED bounded-mutation proof; historical F6b instance VERIFIED** |
-| OperationCell/v1 | **IMPLEMENTED bounded-mutation atom; historical F6b instance VERIFIED** |
-| Security Intelligence R-SI1.1 | **IMPLEMENTED intelligence-only layer** |
-| GitHub main ruleset enforcement | **UNKNOWN / RELEASE BLOCKER** |
-| Production release/effects | **BLOCKED** |
+| Real canonical HTTP READ E2E using default G8 pack | **BLOCKED / NOT YET VERIFIED** |
+| Provider WRITE activation | **BLOCKED** |
+| Reusable CREATE_REF orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT CURRENTLY EXECUTED** |
+| Reusable DELETE_REF rollback orchestration | **IMPLEMENTED PRE-EFFECT ONLY; NOT CURRENTLY EXECUTED** |
+| Production release/effects | **BLOCKED / DISABLED** |
+| Release | **NOT PERFORMED** |
+| Deployment | **NOT PERFORMED** |
 | CyberCore | **BLOCKED pending product/release-governance hardening** |
 
-## Canonical shared authority/execution prefix
+## G0 live GitHub governance
 
-Merged PR #128 established a reusable canonical prefix:
+G0 is no longer an unresolved blocker. The exit gate is tied to identifiable live evidence:
+
+```text
+workflow = g0-governance-verify
+run = 32553113424
+event = workflow_dispatch
+branch = main
+source_sha = 76d74d2ed62b6e78f027728c456c22da0b4a95bd
+artifact = g0-governance-evidence-32553113424-1
+artifact_id = 9470619984
+artifact_digest = sha256:6e63caee23a57613471df66ef0279c0261ed8d375e4c929accdf50eff7dc4f5f
+evidence_json_checksum = 11a99765485b63b70186037011d31c105dea8dd75b689e0036a8766d05e8137d
+verdict = VERIFIED
+```
+
+The retained evidence verifies PR-only main, required `verify` from workflow `ci`, latest-head strict checks, force-push disabled, branch deletion disabled, conversation resolution, no ordinary admin/ruleset bypass, active rulesets, and verifier source binding.
+
+```text
+REPO_ENFORCEMENT_CONTRACT       = VERIFIED
+GITHUB_SETTINGS_ENFORCED        = VERIFIED
+MAIN_PR_ONLY                    = VERIFIED
+REQUIRED_CI                     = VERIFIED
+FORCE_PUSH_DISABLED             = VERIFIED
+BRANCH_DELETE_DISABLED          = VERIFIED
+CONVERSATION_RESOLUTION         = VERIFIED
+ORDINARY_ADMIN_BYPASS_DISABLED  = VERIFIED
+P0_GITHUB_GOVERNANCE            = PASS
+G0                              = PASS
+```
+
+G0 PASS does not authorize release or deployment.
+
+## Canonical shared authority/execution prefix
 
 ```text
 ReviewedOperation
@@ -91,84 +116,108 @@ ReviewedOperation
 → profile-specific terminal
 ```
 
-`CanonicalOperationPipeline.prepare()` stops before Runner/provider effect and retains exact bound
-runtime objects for the terminal router. Grant consumption remains control-plane-before-Dispatch;
-Runner never issues or consumes ExecutionGrant.
+`CanonicalOperationPipeline.prepare()` stops before Runner/provider effect and retains exact bound runtime objects for the terminal router. Grant consumption remains control-plane-before-Dispatch; Runner never issues or consumes ExecutionGrant.
 
 ## Capability-bound terminal selection
 
-Terminal strength is no longer a caller-selected argument. An immutable registry binds the exact
-`capability_definition_identity` and capability name to one allowed terminal profile.
+Terminal strength is not caller-selected. The immutable capability definition determines the terminal profile. G7 additionally narrows the public READ path to exactly:
 
 ```text
-capability_definition_identity
-→ immutable allowlist binding
-→ terminal profile
+terminal_profile = READ_ONLY_VERIFIED
+capability       = github.read-ref/v1
 ```
 
-A caller cannot request `BOUNDED_MUTATION_VERIFIED` for a READ capability or otherwise strengthen the
-profile by supplying a stronger string to `CanonicalOperationPipeline.prepare()`.
+A caller-supplied `terminal_profile` is rejected. Route/profile/capability mismatch fails before Grant issuance/consumption.
 
 ## Runtime permission authority
 
-`DatabasePermissionAuthority` is the current permission source for canonical product composition.
-Every permission decision re-reads the same ProductService database and requires the current active
-user, current global role permissions, exact workspace/environment and an exact current user↔workspace
-membership. A stale in-memory `Principal`, a later role downgrade, deactivation or membership
-revocation therefore cannot preserve stronger canonical authority.
+`DatabasePermissionAuthority` remains the current permission source for canonical product composition. Every permission decision re-reads the ProductService database and requires the current active user, global role permission, exact workspace/environment, and current user↔workspace membership. A stale Principal, role downgrade, deactivation, or membership revocation cannot preserve stronger canonical authority.
 
-Global role still answers **what** a principal may do; current membership answers **where** that
-permission may be considered. Membership role (`owner`/`member`) controls membership management and
-does not activate the separately PROPOSED Solo/Team/Regulated organization-policy semantics.
-Migration `0014_workspace_memberships.sql` deliberately does not infer memberships for historical
-schema-13 workspaces; upgraded legacy workspaces remain fail-closed until an administrator records
-membership explicitly.
+## Canonical G7 public Operation API — merged
 
-`ProductComposition` owns this database-backed authority. A canonical runtime factory is rejected if
-it attempts to use another database or another permission-authority instance.
-
-## ProductComposition reality
-
-Merged PR #128 wires the trust-plane seam into `ProductComposition` rather than leaving it as a
-detached pre-effect helper:
+PR #137 is merged. PR #140 reconciles that API with durable resume and runtime resume wiring.
 
 ```text
-ProductService database
-        ↓
-DatabasePermissionAuthority
-        ↓
-CanonicalOperationPipeline
-        ↓
-CanonicalOperationRuntime
-        ├── READ_ONLY_VERIFIED → CanonicalGitHubReadTerminal
-        └── BOUNDED_MUTATION_VERIFIED
-             ├── CREATE_REF → A09CreateRefPreparer
-             └── DELETE_REF → A09RollbackPreparer
+GET  /api/v1/operations/status
+POST /api/v1/operations/{request_id}/read
 ```
 
-The canonical runtime is supplied through an explicit runtime factory and must share the exact
-ProductService database and permission authority. Without that explicit provider/runtime pack,
-`canonical_operation_runtime` remains `None`. This is intentional fail-closed behavior, not a hidden
-fallback to legacy authority or ambient GitHub credentials.
-
-Legacy `ExecutionService` remains an explicit existing API compatibility surface. The canonical VOP
-runtime is product-composable, but a new public HTTP operation endpoint has not yet been surfaced.
-
-## Canonical terminal profiles — R2
-
-### READ-only verified
+The response keeps execution and independent verification separate. This remains a valid truthful state:
 
 ```text
-READ_ONLY_VERIFIED
-Runner Observation
-→ independent Verifier Observation
+execution.status      = SUCCEEDED
+verification.verdict  = NOT_VERIFIED
+```
+
+Execution success, receipt existence, digest integrity, or evidence-chain integrity must never manufacture `VERIFIED`.
+
+No canonical CREATE_REF, DELETE_REF, or rollback HTTP route exists.
+
+## Restart-safe durable resume — merged
+
+Canonical resume reconstructs the same already-authorized execution from durable evidence. It requires the original actor and current DB permission, validates durable snapshot/grant/consumption/outbox/envelope/inbox/lease evidence, resolves the terminal profile server-side, and rechecks the current execution fence.
+
+Resume must not:
+
+```text
+re-enter CanonicalOperationPipeline.prepare()
+issue a second ExecutionGrant/v2
+consume the grant a second time
+append a second outbox/inbox admission
+reacquire a lease
+accept a parallel DB / permission authority / profile registry / fence
+```
+
+PR #140 fixed reviewed nested-ownership cases so runtime/composition revalidates the canonical DB ownership of snapshot store, permission authority, and current fence.
+
+## G7 closure evidence
+
+Accepted reconciliation head:
+
+```text
+cda7d957cbba8412aa8cd8720e5eb95ed781e58d
+```
+
+Pre-merge:
+
+```text
+CI #1013 = SUCCESS
+D4 #201 = SUCCESS
+E3 #192 = SUCCESS
+E4B #188 = SUCCESS
+fresh Codex R3 = no major issues
+```
+
+Post-merge on `main@60bc9c26813ee23c73bac194a9adb27714e8a1e8`:
+
+```text
+CI #1015 = SUCCESS
+D4 #202 = SUCCESS
+E3 #193 = SUCCESS
+E4B #189 = SUCCESS
+full pytest = SUCCESS
+product readiness = SUCCESS
+dependency vulnerability audit = SUCCESS
+product image build + smoke = SUCCESS
+```
+
+Historical stacked PRs #138 and #139 were closed without merge after PR #140 became canonical.
+
+## Canonical terminal profiles
+
+### READ_ONLY_VERIFIED
+
+```text
+isolated READ Runner
+→ Runner observation
+→ durable completion
+→ independent Verifier
 → ObservedPostState/v1
 → VerificationStrength/v1
-→ VerificationResult/v1 = VERIFIED
+→ VerificationResult/v1
 ```
 
-`CanonicalGitHubReadTerminal` composes the accepted D4b Runner and E3/E4b independent-verifier
-contracts. READ terminates at `VerificationResult/v1`.
+For READ:
 
 ```text
 ExecutionReceipt/v2 = NOT_APPLICABLE
@@ -176,98 +225,54 @@ OperationProof/v2   = NOT_APPLICABLE
 OperationCell/v1    = NOT_APPLICABLE
 ```
 
-### Bounded mutation verified
-
-The semantic completed terminal remains:
+### BOUNDED_MUTATION_VERIFIED
 
 ```text
-BOUNDED_MUTATION_VERIFIED
 bounded provider mutation
-→ ExecutionReceipt/v2                  [verification_status=NOT_EVALUATED]
-→ independent readback
+→ ExecutionReceipt/v2
+→ independent verifier
 → VerificationResult/v1 = VERIFIED
 → OperationProof/v2
 → OperationCell/v1
 ```
 
-Merged PR #128 did **not** execute this terminal. It established reusable A09 preparation that ends
-immediately before a separately authorized provider effect.
+Current reusable CREATE_REF and DELETE_REF/rollback orchestration stop at pre-effect artifacts. No current provider mutation is authorized by G7.
 
-### A09 CREATE_REF preparation
+## Hard READ-before-WRITE boundary
 
-```text
-CanonicalPreparedExecution
-→ exact capability/capsule/handler evidence
-→ ControlledWriteRequirement
-→ write Runner identity/boundary
-→ scoped credential decision metadata
-→ runtime activation metadata
-→ exact target binding/request
-→ WriteEffectPreflight/v1
-→ STOP
-```
+Provider WRITE remains blocked until the same canonical product path repeatedly proves a real authenticated HTTP READ through independent `VerificationResult/v1`, including process restart and durable resume of the same execution.
 
-There is no provider transport, credential secret, `create_ref()` invocation or historical PR120/SHA
-hard-bind in the A09 orchestration.
-
-### A09 rollback preparation
+Required gate:
 
 ```text
-CanonicalPreparedExecution
-→ exact rollback capability/capsule/handler evidence
-→ current target provenance
-→ rollback condition/requirement
-→ rollback Runner identity/boundary
-→ scoped credential decision metadata
-→ current pre-delete observation
-→ current fence recheck
-→ RollbackWriteEffectPreflight/v2
-→ STOP
+READ_E2E             = VERIFIED
+RESTART_RESUME       = VERIFIED
+NO_DUPLICATE_EFFECT  = VERIFIED
+AUTHORITY_CONTINUITY = VERIFIED
+INDEPENDENT_VERIFY   = VERIFIED
+FAIL_CLOSED          = VERIFIED
+
+WRITE_RUNTIME_GATE   = ELIGIBLE
 ```
 
-There is no `DELETE_REF` provider call. Rollback remains a separately authorized future effect.
+`ELIGIBLE` still does not authorize provider WRITE; WRITE requires a later explicit effect-specific gate and authorization.
 
-Mandatory non-conflation:
+## G8 current boundary
+
+G8 is the next implementation gate. The first default provider runtime pack is READ-only and must reuse existing canonical components rather than create a parallel provider or authority framework. It must use explicit configuration, separate Runner and Verifier credential decisions/identities, the exact ProductComposition DB/permission authority/profile registry/current fence, and no ambient credential fallback.
+
+Until G8 is implemented and real HTTP READ E2E is verified:
 
 ```text
-Approval != Authorization
-ExecutionGrant != ExecutionCapsule
-ExecutionReceipt != VerificationResult
-execution succeeded != VERIFIED
-VerificationResult != OperationProof
-OperationProof != OperationCell
-Evidence-chain integrity != independent verification
-Preflight != provider effect
-Prepared rollback != rollback execution
-Release != Deploy
+DEFAULT_PROVIDER_RUNTIME = OFF
+REAL_CANONICAL_READ_E2E = NOT_VERIFIED
+WRITE_RUNTIME_GATE = BLOCKED
+PRODUCTION_EFFECTS = DISABLED
 ```
 
-## Component inventory
+## Historical bounded mutation evidence
 
-| Layer | Component | Product composed | Live evidence |
-|---|---|---|---|
-| Review/approval | IMPLEMENTED | legacy product path | local/system |
-| AuthoritativeSnapshotCreator | IMPLEMENTED | canonical runtime factory seam | component tests |
-| ExecutionGrant/v2 + durable store | IMPLEMENTED | canonical runtime factory seam | component tests |
-| Grant consumption + transactional outbox | IMPLEMENTED | canonical pipeline | component/pilot |
-| Dispatch envelope + durable inbox/dedup | IMPLEMENTED | canonical pipeline | component/pilot |
-| ExecutionEpoch/Lease + DurableCoordinator | IMPLEMENTED | canonical pipeline | component/pilot |
-| Capability terminal allowlist | IMPLEMENTED | canonical pipeline | system tests |
-| Database permission authority | IMPLEMENTED | ProductComposition | system tests |
-| Workspace membership scope | IMPLEMENTED | DatabasePermissionAuthority | schema-14/membership tests; no live provider claim |
-| Capsule / Runner identity/boundary | IMPLEMENTED | profile terminals | pilot/tests |
-| READ runtime activation | IMPLEMENTED | CanonicalGitHubReadTerminal | D4b |
-| Independent verifier / VerificationResult | IMPLEMENTED | CanonicalGitHubReadTerminal | E3/E4b/F6b |
-| Bounded CREATE_REF | IMPLEMENTED | A09 pre-effect preparer | historical F4b; no new execution |
-| Bounded DELETE_REF rollback | IMPLEMENTED | A09 pre-effect preparer | historical F6b; no new execution |
-| ExecutionReceipt/v2 | IMPLEMENTED | post-effect mutation lineage only | historical F6b |
-| OperationProof/v2 | IMPLEMENTED | post-verification mutation lineage only | historical F6b |
-| OperationCell/v1 | IMPLEMENTED | post-proof mutation lineage only | historical F6b |
-| Canonical operation runtime router | IMPLEMENTED | ProductComposition optional runtime pack | tests + PR #128 exact-head closure |
-
-## Historical F6b mutation evidence
-
-Historical F6b run `32213563750` records one complete bounded staging operation:
+Historical F6b run `32213563750` remains one complete bounded staging operation:
 
 ```text
 provider operation = DELETE_REF
@@ -281,84 +286,25 @@ OperationProof/v2 = 40248a675287785778e1b0a8cc9ae9fd8fff12e869e820413f6fcea0ffcd
 OperationCell/v1  = 2fc7de767018bdab8e08dcbfeffba988f16a4bc95694d2bf94b7854408e0a7b5
 ```
 
-This historical evidence does not authorize or prove any new A09 provider mutation.
-
-## CI / readiness state
-
-Merged PR #128 was gated on exact head `fcdd43578860bf8bf01f85b3f088bb5c6d21526c` with:
-
-```text
-CI #839 = SUCCESS
-D4b #157 = SUCCESS
-E3 #148 = SUCCESS
-E4b #144 = SUCCESS
-R3 self/adversarial review = PASS WITH OWNER-ACCEPTED INDEPENDENCE RISK
-unresolved review threads = 0
-```
-
-CI #839 included lint, compile, migrations, documentation/VOP truth gates, auth/governance,
-execution/persistence, full tests, Product Readiness, dependency audit, product image build and smoke.
-Those exact-head results are historical merge evidence; later repository state must still be queried and
-re-tested for later changes.
-
-The product-readiness inventory includes the canonical runtime, terminal allowlist, DB permission
-authority, workspace membership boundary and A09 modules/tests so those layers cannot silently fall
-outside future readiness checks.
-
-## UI truth
-
-Merged PR #128 changes evidence UI so hash-chain integrity is `PASS/FAIL` and a receipt's independent
-verification is `UNKNOWN` unless an actual VerificationResult binding is exposed. Receipt existence
-must never render `VERIFIED` by itself.
-
-## GitHub governance
-
-Repository policy requires PR-only `main`, latest-head checks, no force push/delete and conversation
-resolution. The live branch endpoint currently reports `protected=true` but classic
-`required_status_checks.enforcement_level=off`; available connector evidence cannot inspect the full
-modern ruleset configuration. Therefore successful CI is not Settings/ruleset evidence.
-
-```text
-GITHUB_SETTINGS_ENFORCED = UNKNOWN
-RELEASE_BLOCKER = YES
-```
+This historical evidence does not authorize or prove any new provider mutation.
 
 ## Governance history
 
-- Engineering operating standard remains hash-bound to
-  `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`.
-- Historical PR #125 technical merge/post-state is VERIFIED; separate pre-merge merge-authorization
-  provenance remains **NOT VERIFIED** and is not rewritten.
+- Engineering operating standard remains hash-bound to `36d2798f377ee5e6ba05ea8a565fc053ad58182d95a3af4f466050d536285bed`.
+- Historical PR #125 technical merge/post-state is VERIFIED; separate pre-merge merge-authorization provenance remains **NOT VERIFIED** and is not rewritten.
 - ADR-0018 records the R2 terminal-profile correction instead of silently rewriting older history.
-- PR #128 reconciliation merge is recorded in CASER; organizationally independent R3 was absent and
-  the remaining independence risk was explicitly accepted for that merge.
+- PR #128 reconciliation remains historical provenance; later G7 evidence does not rewrite it.
 
-## CyberCore boundary
-
-CyberCore remains intelligence/context/proposal only and is still blocked from implementation during
-product/release-governance hardening. It cannot issue ExecutionGrant, consume grants, become
-Runner/Verifier, execute provider effects or become proof evidence by inference.
-
-Reconciliation itself is complete and merged. CyberCore may only proceed after the remaining product
-quality gates are deliberately resolved or explicitly accepted without weakening V-One authority.
-
-## Release boundary
+## Current release truth
 
 ```text
 VOODOO_ALLOW_PRODUCTION_EFFECTS=false
-RELEASED=NO
-DEPLOYED=NO
-UNRESTRICTED_PRODUCTION=BLOCKED
-```
-
-## Next governed sequence
-
-```text
-post-merge source-of-truth convergence
-→ GitHub main enforcement G0 evidence/fix
-→ canonical public operation API design + governed implementation
-→ explicit provider runtime pack, READ-first and fail-closed
-→ release-candidate/security/operations gates
-→ deployment authorization only after release readiness
-→ CyberCore integration only after V-One product baseline is stable
+G0_GITHUB_GOVERNANCE=PASS
+G7_CANONICAL_READ_API=MERGED
+G7_RESTART_SAFE_RESUME=MERGED
+G8_DEFAULT_READ_RUNTIME=OFF
+REAL_CANONICAL_READ_E2E=NOT_VERIFIED
+WRITE_RUNTIME_GATE=BLOCKED
+RELEASE=NOT_PERFORMED
+DEPLOYMENT=NOT_PERFORMED
 ```

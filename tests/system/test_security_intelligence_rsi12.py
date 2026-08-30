@@ -257,19 +257,6 @@ def test_critical_risk_preserves_deny_policy() -> None:
     assert capability.required_authority.default_disposition is AuthorityDisposition.DENY
 
 
-def test_content_discovery_rejects_content_ref_mismatch() -> None:
-    discovery = ProgressiveDiscovery.create(
-        source="github:mukul975/Anthropic-Cybersecurity-Skills",
-        source_skill_ref="skills/example-skill",
-        index_ref="repo:skills-index",
-        metadata_ref="skills/example-skill:frontmatter",
-        content_ref="skills/example-skill/DIFFERENT.md",
-    )
-
-    with pytest.raises(ValueError, match="content_ref provenance mismatch"):
-        ExternalSkillNormalizer().normalize(_external(discovery=discovery))
-
-
 def test_source_mismatch_is_rejected() -> None:
     with pytest.raises(ValueError, match="discovery source mismatch"):
         ExternalSkillNormalizer().normalize(

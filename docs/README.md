@@ -1,7 +1,8 @@
 # VOODOO One Documentation
 
 This directory is the entry point for product, architecture, governance, specification, operational
-and release documentation. Live Git/CI/runtime evidence outranks static current-state wording.
+and release documentation. Live Git/GitHub/CI/runtime evidence outranks stale current-state wording;
+normative authority remains governed separately by adopted records and repository policy.
 
 ## Start here
 
@@ -11,6 +12,8 @@ and release documentation. Live Git/CI/runtime evidence outranks static current-
 | What is VOODOO One? | [`../VISION.md`](../VISION.md) |
 | How is it built today? | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
 | What works now? | [`product/CURRENT_CAPABILITIES.md`](product/CURRENT_CAPABILITIES.md) |
+| What is the post-G7 canonical checkpoint? | [`product/POST_G7_CANONICAL_STATE.md`](product/POST_G7_CANONICAL_STATE.md) |
+| What is the next READ runtime gate? | [`product/G8_READ_RUNTIME_GATE.md`](product/G8_READ_RUNTIME_GATE.md) |
 | What should it support later? | [`product/TARGET_CAPABILITIES.md`](product/TARGET_CAPABILITIES.md) |
 | What is the security overview? | [`product/SECURITY_OVERVIEW.md`](product/SECURITY_OVERVIEW.md) |
 | What is the Security Intelligence R-SI1.1 authority ceiling? | [`product/SECURITY_INTELLIGENCE_RSI1_BOUNDARY.md`](product/SECURITY_INTELLIGENCE_RSI1_BOUNDARY.md) |
@@ -21,6 +24,7 @@ and release documentation. Live Git/CI/runtime evidence outranks static current-
 | What are the current trust boundaries? | [`architecture/TRUST_BOUNDARIES.md`](architecture/TRUST_BOUNDARIES.md) |
 | What is the ADR-0008 historical R3 evidence index? | [`governance/ADR0008_R3_EVIDENCE_INDEX.md`](governance/ADR0008_R3_EVIDENCE_INDEX.md) |
 | How must documentation stay truthful? | [`governance/DOCUMENTATION_POLICY.md`](governance/DOCUMENTATION_POLICY.md) |
+| What is the READ-before-WRITE proposal? | [`adr/ADR-0019-read-e2e-before-write.md`](adr/ADR-0019-read-e2e-before-write.md) — PROPOSED |
 | How will organization roles and approval profiles work? | [`adr/ADR-0003-organization-roles-and-configurable-approval-policy.md`](adr/ADR-0003-organization-roles-and-configurable-approval-policy.md) — still PROPOSED |
 | What is the read-only Policy Decision Graph v1 boundary? | [`adr/ADR-0006-read-only-policy-decision-graph-v1.md`](adr/ADR-0006-read-only-policy-decision-graph-v1.md) |
 | What is the historical pure execution-contract v1 boundary? | [`adr/ADR-0007-execution-grant-receipt-contract-v1.md`](adr/ADR-0007-execution-grant-receipt-contract-v1.md) |
@@ -36,7 +40,7 @@ For runtime/technical state use, in order:
 
 ```text
 current repository content
-→ live Git identity
+→ live Git identity / GitHub settings evidence
 → executed tests / GitHub CI
 → runtime/pilot evidence
 → current-state docs
@@ -48,17 +52,21 @@ Normative document authority is separate and follows governance/adoption records
 ## Current architecture distinction
 
 ```text
-TRUST-PLANE COMPONENT CHAIN = deeply implemented/tested
-HISTORICAL COMPLETE F6b BOUNDED-MUTATION ATOM = VERIFIED
-CANONICAL FastAPI ProductComposition RUNTIME SEAM = IMPLEMENTED CANDIDATE
+TRUST-PLANE COMPONENT CHAIN = IMPLEMENTED / deeply tested
+CANONICAL FastAPI ProductComposition RUNTIME SEAM = IMPLEMENTED / MERGED
+CANONICAL PUBLIC READ OPERATION API = IMPLEMENTED / MERGED
+G7 DURABLE RESUME + RUNTIME WIRING = IMPLEMENTED / MERGED
+G0 GITHUB GOVERNANCE = VERIFIED / PASS from retained live verifier evidence
 DEFAULT PROVIDER RUNTIME PACK = DISABLED / FAIL-CLOSED
+REAL CANONICAL HTTP READ E2E WITH DEFAULT PACK = NOT VERIFIED
 READ_ONLY_VERIFIED TERMINAL = VerificationResult/v1
 BOUNDED_MUTATION_VERIFIED TERMINAL = OperationCell/v1 after effect + independent verification
-CANONICAL PUBLIC OPERATION API = NOT YET SURFACED
+PROVIDER WRITE ACTIVATION = BLOCKED
+PRODUCTION RELEASE / DEPLOYMENT = NOT PERFORMED
 ```
 
-Do not collapse component presence, product composition, terminal-profile semantics, live verification
-and release into one status.
+Do not collapse component presence, product composition, terminal-profile semantics, live verification,
+release and deployment into one status.
 
 ## Structure
 

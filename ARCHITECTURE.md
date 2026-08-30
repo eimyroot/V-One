@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Document status | Accepted descriptive architecture / current post-reconciliation baseline |
-| Reconciled | `2026-08-21` after merged PR #128 on canonical `main` |
+| Document status | Accepted descriptive architecture / current post-G7 baseline |
+| Reconciled | `2026-08-24` after merged PR #140 on canonical `main` |
 | VOP semantic revision | `vop-terminology-freeze-r2` / ADR-0018 |
 | Current packaging | Modular monolith + explicit profile-specific runtime packs |
-| Current composition | Canonical trust-plane runtime is ProductComposition-capable; default provider runtime remains fail-closed |
+| Current composition | Canonical READ API + restart-safe runtime are ProductComposition-integrated; default provider runtime remains fail-closed |
+| GitHub governance | G0 VERIFIED / PASS from retained live verifier evidence |
 | Production effects | BLOCKED / disabled by default |
 
 ## Purpose
@@ -22,6 +23,7 @@ V-One owns governance and trust semantics for consequential operations:
 - capability-bound terminal selection;
 - bounded Runner execution;
 - independent post-state verification;
+- restart-safe continuity;
 - profile-correct portable evidence.
 
 It does not turn intelligence, transport, execution success, preflight readiness or evidence integrity
@@ -55,12 +57,14 @@ ExecutionService                        |
                                   /                \
                                  v                  v
                        READ verified terminal    A09 WRITE/rollback
-                                                pre-effect only
+                                 |                pre-effect only
+                                 v
+                     durable restart/resume
 ```
 
-The canonical trust-plane runtime is now a ProductComposition seam. The default application does not
-silently instantiate a provider runtime pack; without explicit runtime dependencies it remains
-fail-closed.
+The canonical READ HTTP surface is merged. The canonical trust-plane runtime is a ProductComposition
+seam and G7 restart-safe resume is integrated. The default application still does not silently
+instantiate a provider runtime pack; without explicit G8 runtime dependencies it remains fail-closed.
 
 ## Canonical authority/execution prefix
 
@@ -97,7 +101,8 @@ immutable terminal allowlist
 READ_ONLY_VERIFIED | BOUNDED_MUTATION_VERIFIED
 ```
 
-The caller cannot pass a stronger `terminal_profile` argument to `prepare()`.
+The public G7 READ route narrows the accepted route to exactly `READ_ONLY_VERIFIED + github.read-ref/v1`.
+Caller-supplied terminal-profile authority is rejected.
 
 ## Product permission authority
 
@@ -116,7 +121,30 @@ schema-13 workspaces. Upgraded legacy workspaces remain fail-closed for canonica
 until membership is explicitly recorded by an authorized administrator/owner.
 
 A canonical runtime factory is rejected if it uses another database or another permission-authority
-instance. This prevents a compatibility/runtime authority fork.
+instance. G7 reconciliation additionally revalidates resume-service ownership of the canonical DB,
+snapshot store, permission authority, terminal-profile registry, envelope revision and current fence.
+This prevents compatibility/runtime/resume authority forks.
+
+## Canonical public READ API
+
+Merged PR #137 exposes:
+
+```text
+GET  /api/v1/operations/status
+POST /api/v1/operations/{request_id}/read
+```
+
+PR #140 reconciles that HTTP surface with durable resume/runtime wiring. The API keeps execution and
+independent verification separate and exposes no canonical CREATE_REF, DELETE_REF or rollback route.
+
+A successful execution may truthfully end with:
+
+```text
+execution.status      = SUCCEEDED
+verification.verdict  = NOT_VERIFIED
+```
+
+and must not be promoted to VERIFIED by transport success, receipts, or digest integrity.
 
 ## READ-only terminal
 
@@ -143,6 +171,16 @@ OperationProof/v2   = NOT_APPLICABLE
 OperationCell/v1    = NOT_APPLICABLE
 ```
 
+## Restart-safe durable resume
+
+Merged PR #140 reconstructs an already-authorized execution from durable evidence after process
+restart. Resume must not re-enter `CanonicalOperationPipeline.prepare()`, issue a second grant, consume
+the grant again, append duplicate outbox/inbox admission, or reacquire a lease.
+
+The resume boundary revalidates current DB permission, persisted snapshot/grant/consumption/supporting
+witnesses, dispatch lineage, terminal profile, envelope revision and current execution fence. Corrupt,
+missing, stale, ambiguous, expired or mismatched durable state fails closed.
+
 ## Bounded mutation terminal
 
 The semantic completed terminal remains:
@@ -163,7 +201,7 @@ bounded provider mutation
 automatic mutation retry. They are specialized mutation-lineage contracts, not universal READ
 contracts.
 
-Merged PR #128 did not execute a new mutation. It established reusable A09 preparation seams.
+Current A09 orchestration is pre-effect only. G7 did not activate provider WRITE.
 
 ## A09 CREATE_REF pre-effect orchestration
 
@@ -215,8 +253,13 @@ execution remains separately authorized.
 
 The canonical runtime factory must use the exact ProductService database and permission authority.
 Without a runtime factory, `canonical_operation_runtime=None` is intentional fail-closed behavior.
-Legacy `ExecutionService` remains an explicit API compatibility surface until canonical public
-operation endpoints are separately introduced and proven.
+Legacy `ExecutionService` remains an explicit API compatibility surface; it is not canonical fallback
+authority for the merged public READ API.
+
+The next G8 target is deliberately a **READ-only composition factory** over the existing
+`GitHubReadTransport`, `CanonicalGitHubReadTerminal`, canonical pipeline and resume contracts. It must
+not introduce a parallel execution framework, ambient credential fallback, generic provider client, or
+mutation transport.
 
 ## VOP machine language
 
@@ -232,7 +275,7 @@ replacement belongs in `schema_supersessions`.
 
 ## Persistence
 
-Released backend remains SQLite schema 14 with immutable/checksum-verified migrations, central
+Current released backend remains SQLite schema 14 with immutable/checksum-verified migrations, central
 statements, audit/receipt ledgers, snapshots, grants, outbox/inbox, execution epoch/lease state and
 explicit workspace membership scope. PostgreSQL remains fail-closed/unreleased.
 
@@ -270,16 +313,36 @@ That historical evidence does not prove or authorize a new A09 provider effect.
 16. Preflight != provider effect.
 17. Prepared rollback != rollback execution.
 18. Evidence-chain integrity != provider verification.
-19. Unreleased backends/provider packs fail closed.
-20. Production effects remain disabled until separate authorization/release.
-21. Documentation cannot upgrade capability state.
+19. Restart/resume cannot mint new authority or duplicate dispatch/lease state.
+20. Unreleased backends/provider packs fail closed.
+21. Provider WRITE remains blocked until the governed READ-before-WRITE evidence gate and a later effect-specific authorization are satisfied.
+22. Production effects remain disabled until separate authorization/release.
+23. Documentation cannot upgrade capability state.
 
 ## GitHub governance boundary
 
-Policy requires PR-only main, latest-head checks, no force push/delete and conversation resolution.
-Available connector evidence cannot prove the complete modern ruleset. Successful Actions runs are not
-ruleset-enforcement evidence, therefore GitHub settings enforcement remains `UNKNOWN / RELEASE
-BLOCKER`.
+G0 is bound to retained live verifier evidence:
+
+```text
+workflow = g0-governance-verify
+run = 32553113424
+source_sha = 76d74d2ed62b6e78f027728c456c22da0b4a95bd
+artifact = g0-governance-evidence-32553113424-1
+artifact_digest = sha256:6e63caee23a57613471df66ef0279c0261ed8d375e4c929accdf50eff7dc4f5f
+verdict = VERIFIED
+```
+
+That evidence established PR-only main, required latest-head `verify` from workflow `ci`, force-push
+and deletion protection, conversation resolution, no ordinary bypass, active rulesets and verifier
+source binding. G0 is PASS. This is repository-governance evidence only; it does not authorize provider
+runtime, release or deployment.
+
+## READ-before-WRITE boundary
+
+ADR-0019 is `PROPOSED` until its governed adoption gate closes. The proposed invariant requires repeated
+real canonical authenticated HTTP READ E2E, independent `VerificationResult/v1`, restart-safe durable
+resume, no duplicate authority/effect, authority continuity and fail-closed failure injection before
+WRITE may become merely `ELIGIBLE`. `ELIGIBLE` is not effect authorization.
 
 ## CyberCore boundary
 
@@ -291,9 +354,8 @@ CyberCore != Runner
 CyberCore != Verifier
 ```
 
-CyberCore remains blocked while product/release-governance hardening is incomplete. Reconciliation is
-merged; CyberCore still cannot be used to bypass GitHub enforcement, public API, runtime-pack, release,
-or deployment gates.
+CyberCore remains blocked while product/release-governance hardening is incomplete. It cannot be used
+to bypass G8, READ E2E, WRITE, release, or deployment gates.
 
 ## Related documents
 
@@ -302,6 +364,9 @@ or deployment gates.
 - [`CURRENT_PRODUCT_STATE.md`](CURRENT_PRODUCT_STATE.md)
 - [`foundation/TERMINOLOGY.md`](foundation/TERMINOLOGY.md)
 - [`docs/product/CURRENT_CAPABILITIES.md`](docs/product/CURRENT_CAPABILITIES.md)
+- [`docs/product/POST_G7_CANONICAL_STATE.md`](docs/product/POST_G7_CANONICAL_STATE.md)
+- [`docs/product/G8_READ_RUNTIME_GATE.md`](docs/product/G8_READ_RUNTIME_GATE.md)
 - [`docs/architecture/TRUST_BOUNDARIES.md`](docs/architecture/TRUST_BOUNDARIES.md)
 - [`docs/architecture/VOP_CANONICAL_VOCABULARY.md`](docs/architecture/VOP_CANONICAL_VOCABULARY.md)
 - [`docs/adr/ADR-0018-vop-terminal-profiles-and-lineage-r2.md`](docs/adr/ADR-0018-vop-terminal-profiles-and-lineage-r2.md)
+- [`docs/adr/ADR-0019-read-e2e-before-write.md`](docs/adr/ADR-0019-read-e2e-before-write.md)

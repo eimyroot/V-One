@@ -1,6 +1,6 @@
 {
   "schema": "vone.github-main-governance/v1",
-  "repository": "nulleimy/V-One",
+  "repository": "eimyroot/V-One",
   "branch": "main",
   "desired": {
     "pull_request_required": true,

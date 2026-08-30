@@ -13,7 +13,7 @@ Skript odmítne pokračovat, pokud:
 - pracovní strom není čistý,
 - `HEAD` neodpovídá explicitnímu úplnému SHA,
 - neprojde SHA-256 kontrola obou kanonických ústav,
-- `origin` fetch URL není přesně `https://github.com/nulleimy/V-One.git`,
+- publication target URL není přesně `https://github.com/eimyroot/V-One.git`, nebo `origin` fetch URL není canonical URL ani explicitně povolený legacy alias `https://github.com/nulleimy/V-One.git`,
 - cílová větev nezačíná `review/`,
 - cílová větev je chráněná nebo má neplatný Git ref,
 - `HEAD` není potomkem zadaného base refu,

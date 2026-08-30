@@ -14,6 +14,7 @@ from .api import create_product_router
 from .audit import AuditLedger
 from .auth_rate_limit import AuthenticationRateLimitService
 from .bootstrap import BootstrapService
+from .canonical_operation_http import create_canonical_operation_router
 from .canonical_operation_runtime import CanonicalOperationRuntime
 from .change_request import ChangeRequestService
 from .config import ProductConfig
@@ -85,6 +86,15 @@ def _validate_canonical_runtime(
         raise ValueError(
             "canonical runtime snapshot creator must use product database permission authority"
         )
+    resume_service = runtime.resume_service
+    if resume_service is not None:
+        runtime._validate_resume_service_binding()
+        if resume_service.db is not service.db:
+            raise ValueError("canonical runtime resume service must use product database")
+        if resume_service.permission_authority is not permission_authority:
+            raise ValueError(
+                "canonical runtime resume service must use product database permission authority"
+            )
 
 
 def install_composed_product_platform(
@@ -190,6 +200,12 @@ def install_composed_product_platform(
             identity_provider=resolved_identity_provider,
             service=service,
             repository_root=root,
+        )
+    )
+    app.include_router(
+        create_canonical_operation_router(
+            identity_provider=resolved_identity_provider,
+            runtime=canonical_operation_runtime,
         )
     )
 
