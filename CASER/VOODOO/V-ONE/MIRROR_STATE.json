@@ -2,10 +2,10 @@
   "mirror_id": "caser-voodoo-v-one-product",
   "status": "BOUND",
   "mode": "LIVE_LOGICAL_MIRROR",
-  "canonical_repository": "nulleimy/V-One",
+  "canonical_repository": "eimyroot/V-One",
   "canonical_branch": "main",
   "canonical_product_path": "docs/product",
-  "baseline_observed_head": "ad34a4499b33909258039c3d545d7b171ed232c9",
+  "baseline_observed_head": "07968fd383685f37925582f3b6e17cf65abbb43b",
   "content_sync": "ON_DEMAND_FROM_GITHUB",
   "caser_is_canonical": false,
   "authority_model": "OPERATION_SCOPED"
