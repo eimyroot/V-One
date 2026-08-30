@@ -20,7 +20,7 @@ BRANCH_SHA = "a" * 40
 def baseline() -> dict[str, object]:
     return {
         "schema": "vone.github-main-governance/v1",
-        "repository": "nulleimy/V-One",
+        "repository": "eimyroot/V-One",
         "branch": "main",
         "desired": {
             "pull_request_required": True,
