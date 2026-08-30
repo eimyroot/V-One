@@ -67,6 +67,7 @@ def test_project_registry_resolves_alias_and_repository() -> None:
 
     assert registry.resolve("v-one") is PROJECT
     assert registry.resolve_repository("eimyroot/V-One") is PROJECT
+    assert registry.resolve_repository("EIMYROOT/v-one") is PROJECT
 
 
 def test_project_registry_rejects_alias_collision() -> None:
