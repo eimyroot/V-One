@@ -18,7 +18,6 @@ from voodoo_product.control_plane_foundation import (
     ControlPlaneReconciler,
 )
 
-
 PROJECT = ProjectDescriptor(
     project_id="voodoo-one",
     canonical_repository="eimyroot/V-One",
