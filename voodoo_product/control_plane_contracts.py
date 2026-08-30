@@ -178,8 +178,8 @@ class ImmutableProjectRegistry:
         by_repository: dict[str, ProjectDescriptor] = {}
 
         for project in projects:
-            if type(project) is not ProjectDescriptor:
-                raise ValueError("project registry accepts exact ProjectDescriptor values only")
+            if not isinstance(project, ProjectDescriptor):
+                raise ValueError("project registry accepts ProjectDescriptor values only")
             identities = (project.project_id, *project.aliases)
             for identity in identities:
                 if identity in by_identity:
@@ -310,12 +310,15 @@ class ControlPlaneEvent:
             raise ValueError(f"unsupported control-plane event status: {status}")
         object.__setattr__(self, "status", status)
 
-        if type(self.correlation) is not CorrelationContext:
-            raise ValueError("correlation must be an exact CorrelationContext")
-        if type(self.project) is not ProjectDescriptor:
-            raise ValueError("project must be an exact ProjectDescriptor")
-        if self.state_transition is not None and type(self.state_transition) is not StateTransition:
-            raise ValueError("state_transition must be an exact StateTransition")
+        if not isinstance(self.correlation, CorrelationContext):
+            raise ValueError("correlation must be a CorrelationContext")
+        if not isinstance(self.project, ProjectDescriptor):
+            raise ValueError("project must be a ProjectDescriptor")
+        if self.state_transition is not None and not isinstance(
+            self.state_transition,
+            StateTransition,
+        ):
+            raise ValueError("state_transition must be a StateTransition")
 
         _decode_canonical_object(self.payload_json, field_name="payload_json")
 
