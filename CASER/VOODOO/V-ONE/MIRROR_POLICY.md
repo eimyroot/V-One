@@ -2,7 +2,11 @@
 
 ## Canonical source
 
-`nulleimy/V-One` → branch `main` → path `docs/product`
+`eimyroot/V-One` → branch `main` → path `docs/product`
+
+Historical references to `nulleimy/V-One` currently resolve to the same GitHub repository identity, but
+new mirror metadata must record the canonical owner/name returned by GitHub: `eimyroot/V-One`.
+Redirect compatibility must not be treated as a second source of truth.
 
 ## Mirror model
 
