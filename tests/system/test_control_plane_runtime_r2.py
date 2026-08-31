@@ -7,7 +7,10 @@ import pytest
 
 from voodoo_product.control_plane_contracts import CorrelationContext, ProjectDescriptor
 from voodoo_product.control_plane_foundation import ControlPlaneEventLog
-from voodoo_product.control_plane_runtime import ControlPlaneReadRuntime
+from voodoo_product.control_plane_runtime import (
+    READ_RESUMED_EVENT,
+    ControlPlaneReadRuntime,
+)
 
 
 class _Database:
@@ -62,6 +65,7 @@ class _Runtime:
     def __init__(self, terminal_result: object) -> None:
         self.terminal_result = terminal_result
         self.correlation_ids: list[str] = []
+        self.resumed_execution_ids: list[str] = []
 
     def run_read_only(
         self,
@@ -77,39 +81,78 @@ class _Runtime:
         self.correlation_ids.append(correlation_id)
         return self.terminal_result
 
+    def run_resumed_read_only(
+        self,
+        *,
+        actor_id: str,
+        execution_id: str,
+    ) -> object:
+        assert actor_id == "actor-1"
+        self.resumed_execution_ids.append(execution_id)
+        return self.terminal_result
+
 
 def _digest(character: str) -> str:
     return character * 64
 
 
-def _terminal_result(*, verification_execution_id: str = "exec-1") -> object:
+def _terminal_result(
+    *,
+    verification_execution_id: str = "exec-1",
+    completion_digest: str | None = None,
+) -> object:
+    snapshot_digest = _digest("1")
+    grant_digest = _digest("2")
+    outbox_digest = _digest("3")
+    envelope_digest = _digest("4")
+    admission_digest = _digest("5")
+    lease_digest = _digest("6")
+    target_digest = _digest("7")
+    lease_id = _digest("8")
+    runner_observation_digest = _digest("9")
+    capsule_digest = _digest("a")
+    verifier_id = _digest("b")
+    verifier_identity_digest = _digest("c")
+    boundary_digest = _digest("d")
+    verifier_decision_id = _digest("e")
+    verifier_decision_digest = _digest("f")
+    verifier_observation_digest = _digest("0")
+    observed_state_digest = _digest("a")
+    strength_digest = _digest("b")
+    result_digest = _digest("c")
+
     snapshot = SimpleNamespace(
         request_id="request-1",
         actor_id="actor-1",
         execution_id="exec-1",
-        snapshot_digest=_digest("1"),
+        snapshot_digest=snapshot_digest,
     )
-    grant = SimpleNamespace(execution_id="exec-1", grant_digest=_digest("2"))
-    outbox = SimpleNamespace(execution_id="exec-1", entry_digest=_digest("3"))
-    envelope = SimpleNamespace(execution_id="exec-1", envelope_digest=_digest("4"))
-    admission = SimpleNamespace(execution_id="exec-1", admission_digest=_digest("5"))
+    grant = SimpleNamespace(execution_id="exec-1", grant_digest=grant_digest)
+    outbox = SimpleNamespace(execution_id="exec-1", entry_digest=outbox_digest)
+    envelope = SimpleNamespace(execution_id="exec-1", envelope_digest=envelope_digest)
+    admission = SimpleNamespace(
+        execution_id="exec-1",
+        admission_digest=admission_digest,
+    )
     lease = SimpleNamespace(
         execution_id="exec-1",
-        lease_digest=_digest("6"),
+        lease_id=lease_id,
+        lease_digest=lease_digest,
         execution_epoch=3,
     )
     prepared = SimpleNamespace(
         request_id="request-1",
         execution_id="exec-1",
         execution_epoch=3,
-        target_digest=_digest("7"),
-        authorization_snapshot_digest=_digest("1"),
-        grant_digest=_digest("2"),
-        outbox_entry_digest=_digest("3"),
-        envelope_digest=_digest("4"),
-        admission_digest=_digest("5"),
-        lease_digest=_digest("6"),
-        execution_capsule_digest=_digest("8"),
+        target_digest=target_digest,
+        authorization_snapshot_digest=snapshot_digest,
+        grant_digest=grant_digest,
+        outbox_entry_digest=outbox_digest,
+        envelope_digest=envelope_digest,
+        admission_digest=admission_digest,
+        lease_id=lease_id,
+        lease_digest=lease_digest,
+        execution_capsule_digest=capsule_digest,
         capability="github.read-ref/v1",
         snapshot=snapshot,
         grant=grant,
@@ -121,39 +164,76 @@ def _terminal_result(*, verification_execution_id: str = "exec-1") -> object:
     runner_observation = SimpleNamespace(
         execution_id="exec-1",
         execution_epoch=3,
-        target_digest=_digest("7"),
-        lease_digest=_digest("6"),
-        observation_digest=_digest("9"),
+        target_digest=target_digest,
+        lease_digest=lease_digest,
+        observation_digest=runner_observation_digest,
+        observed_at="2026-08-31T05:29:58+00:00",
+    )
+    durable_completion = SimpleNamespace(
+        outcome="COMPLETED",
+        lease=lease,
+        completion_digest=completion_digest or runner_observation_digest,
     )
     verifier_identity = SimpleNamespace(
-        verifier_id=_digest("a"),
-        identity_digest=_digest("b"),
+        verifier_id=verifier_id,
+        identity_digest=verifier_identity_digest,
     )
-    verification_boundary = SimpleNamespace(boundary_digest=_digest("c"))
-    verifier_observation = SimpleNamespace(observation_digest=_digest("d"))
-    observed_post_state = SimpleNamespace(state_digest=_digest("e"))
-    verification_strength = SimpleNamespace(strength_digest=_digest("f"))
+    verification_boundary = SimpleNamespace(
+        execution_id="exec-1",
+        execution_epoch=3,
+        target_digest=target_digest,
+        runner_observation_digest=runner_observation_digest,
+        boundary_digest=boundary_digest,
+    )
+    verifier_credential_decision = SimpleNamespace(
+        decision_id=verifier_decision_id,
+        decision_digest=verifier_decision_digest,
+        execution_id="exec-1",
+        execution_epoch=3,
+        target_digest=target_digest,
+        runner_observation_digest=runner_observation_digest,
+        verification_boundary_digest=boundary_digest,
+        verifier_id=verifier_id,
+        verifier_identity_digest=verifier_identity_digest,
+    )
+    verifier_observation = SimpleNamespace(
+        observation_digest=verifier_observation_digest,
+        observed_at="2026-08-31T05:29:59+00:00",
+        execution_id="exec-1",
+        execution_epoch=3,
+        target_digest=target_digest,
+        runner_observation_digest=runner_observation_digest,
+        verification_boundary_digest=boundary_digest,
+        verifier_id=verifier_id,
+        verifier_identity_digest=verifier_identity_digest,
+        verifier_credential_decision_id=verifier_decision_id,
+        verifier_credential_decision_digest=verifier_decision_digest,
+    )
+    observed_post_state = SimpleNamespace(state_digest=observed_state_digest)
+    verification_strength = SimpleNamespace(strength_digest=strength_digest)
     verification_result = SimpleNamespace(
         execution_id=verification_execution_id,
         execution_epoch=3,
-        target_digest=_digest("7"),
-        runner_observation_digest=_digest("9"),
-        verifier_observation_digest=_digest("d"),
-        observed_post_state_digest=_digest("e"),
-        verification_boundary_digest=_digest("c"),
-        verifier_id=_digest("a"),
-        verifier_identity_digest=_digest("b"),
-        verification_strength_digest=_digest("f"),
+        target_digest=target_digest,
+        runner_observation_digest=runner_observation_digest,
+        verifier_observation_digest=verifier_observation_digest,
+        observed_post_state_digest=observed_state_digest,
+        verification_boundary_digest=boundary_digest,
+        verifier_id=verifier_id,
+        verifier_identity_digest=verifier_identity_digest,
+        verification_strength_digest=strength_digest,
         verdict="VERIFIED",
         reason="OBSERVED_STATE_MATCH",
         checked_at="2026-08-31T05:30:00+00:00",
-        result_digest=_digest("0"),
+        result_digest=result_digest,
     )
     return SimpleNamespace(
         prepared=prepared,
         runner_observation=runner_observation,
+        durable_completion=durable_completion,
         verifier_identity=verifier_identity,
         verification_boundary=verification_boundary,
+        verifier_credential_decision=verifier_credential_decision,
         verifier_observation=verifier_observation,
         observed_post_state=observed_post_state,
         verification_strength=verification_strength,
@@ -177,31 +257,40 @@ def _wrapper(terminal_result: object):
     return wrapper, runtime, ledger
 
 
-def test_read_runtime_propagates_correlation_and_records_causal_events() -> None:
+def _correlation(*, run_id: str = "run_r2", correlation_id: str = "corr_r2"):
+    return CorrelationContext(run_id=run_id, correlation_id=correlation_id)
+
+
+def test_read_runtime_propagates_correlation_and_records_full_causal_chain() -> None:
     wrapper, runtime, ledger = _wrapper(_terminal_result())
-    correlation = CorrelationContext(
-        run_id="run_r2",
-        correlation_id="corr_r2",
-    )
 
     result = wrapper.run_read_only(
         actor_id="actor-1",
         request_id="request-1",
         idempotency_key="idem-1",
-        correlation=correlation,
+        correlation=_correlation(),
     )
 
     assert runtime.correlation_ids == ["corr_r2"]
-    assert result.prepared_event.correlation == correlation
-    assert result.verification_event.correlation.run_id == "run_r2"
-    assert result.verification_event.correlation.correlation_id == "corr_r2"
-    assert (
-        result.verification_event.correlation.causation_event_id
-        == result.prepared_event.event_id
+    events = (
+        result.prepared_event,
+        result.runner_observation_event,
+        result.completion_event,
+        result.verifier_observation_event,
+        result.verification_event,
     )
+    assert events[0].correlation == _correlation()
+    for previous, current in zip(events, events[1:], strict=True):
+        assert current.correlation.run_id == "run_r2"
+        assert current.correlation.correlation_id == "corr_r2"
+        assert current.correlation.causation_event_id == previous.event_id
+    assert result.runner_observation_event.status == "OBSERVED"
+    assert result.completion_event.status == "VERIFIED"
+    assert result.verifier_observation_event.status == "OBSERVED"
     assert result.verification_event.status == "VERIFIED"
-    assert len(ledger.events) == 2
-    assert result.audit_event_hashes == (f"{1:064x}", f"{2:064x}")
+    assert result.completion_event.payload()["completion_digest"] == _digest("9")
+    assert len(ledger.events) == 5
+    assert result.audit_event_hashes == tuple(f"{index:064x}" for index in range(1, 6))
 
 
 def test_read_runtime_rejects_tampered_verification_before_audit() -> None:
@@ -217,13 +306,54 @@ def test_read_runtime_rejects_tampered_verification_before_audit() -> None:
             actor_id="actor-1",
             request_id="request-1",
             idempotency_key="idem-1",
-            correlation=CorrelationContext(
-                run_id="run_r2",
-                correlation_id="corr_r2",
-            ),
+            correlation=_correlation(),
         )
 
     assert ledger.events == []
+
+
+def test_read_runtime_rejects_tampered_completion_before_audit() -> None:
+    wrapper, _, ledger = _wrapper(
+        _terminal_result(completion_digest=_digest("f"))
+    )
+
+    with pytest.raises(
+        PermissionError,
+        match="CONTROL_PLANE_RUNTIME_COMPLETION_DIGEST_MISMATCH",
+    ):
+        wrapper.run_read_only(
+            actor_id="actor-1",
+            request_id="request-1",
+            idempotency_key="idem-1",
+            correlation=_correlation(),
+        )
+
+    assert ledger.events == []
+
+
+def test_resumed_read_runtime_uses_new_control_plane_context_and_durable_lineage() -> None:
+    wrapper, runtime, ledger = _wrapper(_terminal_result())
+
+    result = wrapper.run_resumed_read_only(
+        actor_id="actor-1",
+        execution_id="exec-1",
+        correlation=_correlation(
+            run_id="run_resume",
+            correlation_id="corr_resume",
+        ),
+    )
+
+    assert runtime.resumed_execution_ids == ["exec-1"]
+    assert result.prepared_event.event_type == READ_RESUMED_EVENT
+    assert result.prepared_event.payload()["invocation"] == "resume"
+    assert result.prepared_event.payload()["execution_id"] == "exec-1"
+    assert result.prepared_event.correlation.run_id == "run_resume"
+    assert result.prepared_event.correlation.correlation_id == "corr_resume"
+    assert (
+        result.runner_observation_event.correlation.causation_event_id
+        == result.prepared_event.event_id
+    )
+    assert len(ledger.events) == 5
 
 
 def test_control_plane_identity_does_not_mutate_authority_digests() -> None:
@@ -243,10 +373,7 @@ def test_control_plane_identity_does_not_mutate_authority_digests() -> None:
         actor_id="actor-1",
         request_id="request-1",
         idempotency_key="idem-1",
-        correlation=CorrelationContext(
-            run_id="run_r2",
-            correlation_id="corr_r2",
-        ),
+        correlation=_correlation(),
     )
 
     after = (
