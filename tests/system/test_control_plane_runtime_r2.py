@@ -280,7 +280,7 @@ def test_read_runtime_propagates_correlation_and_records_full_causal_chain() -> 
         result.verification_event,
     )
     assert events[0].correlation == _correlation()
-    for previous, current in zip(events, events[1:], strict=True):
+    for previous, current in zip(events[:-1], events[1:], strict=True):
         assert current.correlation.run_id == "run_r2"
         assert current.correlation.correlation_id == "corr_r2"
         assert current.correlation.causation_event_id == previous.event_id
