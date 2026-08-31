@@ -53,14 +53,14 @@ def _capability_registry() -> tuple[ImmutableCapabilityRegistry, CapabilityDefin
         handler_id="github-ref-read/v1",
         effect_class="read-only",
         verification_class="independent-readback",
-        supported_environments=("local", "test"),
+        supported_environments=("development", "local"),
         required_permissions=(REQUIRED_EXECUTION_PERMISSION,),
         production_eligible=False,
     )
     activation = CapabilityActivation.create(
         capability_definition_identity=definition.definition_identity,
         activation_generation=1,
-        enabled_environments=("local", "test"),
+        enabled_environments=("development", "local"),
     )
     return (
         ImmutableCapabilityRegistry(
