@@ -5,7 +5,7 @@
   "canonical_repository": "eimyroot/V-One",
   "canonical_branch": "main",
   "canonical_product_path": "docs/product",
-  "baseline_observed_head": "5a8559b7bd52ab35d07bfc61146bd95920e7d325",
+  "baseline_observed_head": "ccd871bf173dca0aee4d368100df64dd2d2dffda",
   "content_sync": "ON_DEMAND_FROM_GITHUB",
   "caser_is_canonical": false,
   "authority_model": "OPERATION_SCOPED"
