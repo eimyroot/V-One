@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from .control_plane_contracts import CorrelationContext, ControlPlaneEvent, ProjectDescriptor
+from .control_plane_contracts import ControlPlaneEvent, CorrelationContext, ProjectDescriptor
 from .control_plane_foundation import ControlPlaneEventLog
 from .persistence import ProductDatabaseAdapter
 
